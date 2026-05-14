@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="From Jake" />
+  <meta name="theme-color" content="#1a0a0a" />
+  <title>From Jake, With Love</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #1a0a0a;
+      --cream: #faf6f0;
+      --blush: #e8c4b0;
+      --rose: #c4705a;
+      --deep: #6b2d2d;
+      --gold: #c9a96e;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: var(--ink);
+      font-family: 'Lato', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100svh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* Atmospheric background */
+    .bg {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, #3d1a1a 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 90%, #2a0f0f 0%, transparent 60%),
+        radial-gradient(ellipse 100% 100% at 50% 50%, #140606 0%, #0d0303 100%);
+      z-index: 0;
+    }
+
+    /* Grain texture overlay */
+    .grain {
+      position: fixed;
+      inset: -50%;
+      width: 200%;
+      height: 200%;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .app {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 420px;
+      padding: 32px 28px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100svh;
+      justify-content: center;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      opacity: 0;
+      animation: fadeUp 1s ease 0.2s forwards;
+    }
+
+    .from-label {
+      font-family: 'Lato', sans-serif;
+      font-weight: 300;
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+
+    .title {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 13px;
+      color: rgba(250, 246, 240, 0.35);
+      letter-spacing: 0.05em;
+    }
+
+    /* Date pill */
+    .date-pill {
+      background: rgba(201, 169, 110, 0.12);
+      border: 1px solid rgba(201, 169, 110, 0.2);
+      border-radius: 100px;
+      padding: 6px 18px;
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.15em;
+      color: var(--gold);
+      margin-bottom: 36px;
+      opacity: 0;
+      animation: fadeUp 1s ease 0.4s forwards;
+    }
+
+    /* Card */
+    .card {
+      width: 100%;
+      background: linear-gradient(145deg, rgba(250, 246, 240, 0.06) 0%, rgba(250, 246, 240, 0.02) 100%);
+      border: 1px solid rgba(250, 246, 240, 0.08);
+      border-radius: 4px;
+      padding: 44px 36px 48px;
+      position: relative;
+      opacity: 0;
+      animation: fadeUp 1.2s ease 0.6s forwards;
+      backdrop-filter: blur(2px);
+    }
+
+    /* Corner ornaments */
+    .card::before, .card::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: rgba(201, 169, 110, 0.3);
+      border-style: solid;
+    }
+    .card::before { top: 12px; left: 12px; border-width: 1px 0 0 1px; }
+    .card::after  { bottom: 12px; right: 12px; border-width: 0 1px 1px 0; }
+
+    .card-inner::before, .card-inner::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: rgba(201, 169, 110, 0.3);
+      border-style: solid;
+    }
+    .card-inner::before { top: 12px; right: 12px; border-width: 1px 1px 0 0; }
+    .card-inner::after  { bottom: 12px; left: 12px; border-width: 0 0 1px 1px; }
+    .card-inner { position: relative; }
+
+    /* Heart */
+    .heart {
+      text-align: center;
+      font-size: 18px;
+      margin-bottom: 24px;
+      animation: heartbeat 3s ease-in-out infinite;
+    }
+
+    @keyframes heartbeat {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+    }
+
+    /* Day counter */
+    .day-counter {
+      text-align: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 11px;
+      color: rgba(232, 196, 176, 0.5);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* Quote text */
+    .quote {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 22px;
+      line-height: 1.65;
+      color: var(--cream);
+      text-align: center;
+      letter-spacing: 0.01em;
+      transition: opacity 0.6s ease;
+    }
+
+    .quote.fading { opacity: 0; }
+
+    /* Signature */
+    .signature {
+      text-align: right;
+      margin-top: 28px;
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 16px;
+      color: var(--rose);
+      opacity: 0.8;
+    }
+
+    /* Navigation */
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-top: 36px;
+      opacity: 0;
+      animation: fadeUp 1s ease 1s forwards;
+    }
+
+    .nav-btn {
+      background: none;
+      border: 1px solid rgba(201, 169, 110, 0.25);
+      color: rgba(201, 169, 110, 0.6);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .nav-btn:active {
+      background: rgba(201, 169, 110, 0.1);
+      border-color: rgba(201, 169, 110, 0.5);
+      transform: scale(0.95);
+    }
+
+    .nav-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(201, 169, 110, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .dot.active {
+      background: var(--gold);
+      width: 16px;
+      border-radius: 3px;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: rgba(250, 246, 240, 0.12);
+      text-transform: uppercase;
+      opacity: 0;
+      animation: fadeUp 1s ease 1.2s forwards;
+    }
+
+    /* Install banner */
+    .install-banner {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom) + 16px);
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(26, 10, 10, 0.95);
+      border: 1px solid rgba(201, 169, 110, 0.3);
+      border-radius: 12px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--cream);
+      letter-spacing: 0.05em;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      white-space: nowrap;
+    }
+
+    .install-banner.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .install-banner .install-icon {
+      font-size: 18px;
+    }
+
+    .install-btn {
+      background: var(--gold);
+      color: var(--ink);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Sparkle on reveal */
+    .sparkle {
+      position: absolute;
+      pointer-events: none;
+      font-size: 12px;
+      animation: sparkleFloat 1.5s ease forwards;
+    }
+
+    @keyframes sparkleFloat {
+      0%   { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-60px) scale(0.5); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="grain"></div>
+
+<div class="app">
+
+  <div class="header">
+    <div class="from-label">From Jake</div>
+    <div class="title">things I love about you</div>
+  </div>
+
+  <div class="date-pill" id="datePill"></div>
+
+  <div class="card">
+    <div class="card-inner">
+      <div class="heart">♥</div>
+      <div class="day-counter" id="dayCounter"></div>
+      <div class="quote" id="quoteText"></div>
+      <div class="signature">— Jake</div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="nav-btn" id="prevBtn" aria-label="Previous">&#8592;</button>
+    <div class="nav-dots" id="navDots"></div>
+    <button class="nav-btn" id="nextBtn" aria-label="Next">&#8594;</button>
+  </div>
+
+  <div class="footer">A new reason, every day ✦</div>
+
+</div>
+
+<!-- Install prompt -->
+<div class="install-banner" id="installBanner">
+  <span class="install-icon">📲</span>
+  <span>Add to Home Screen</span>
+  <button class="install-btn" id="installBtn">Install</button>
+</div>
+
+<script>
+  // ─── LOVE NOTES ────────────────────────────────────────────────
+  // Edit these to personalise! One per day, cycling every 365 days.
+  const notes = [
+    "The way you laugh at your own jokes before you even finish them — I would never want to change that.",
+    "You make ordinary Tuesday evenings feel like somewhere worth being.",
+    "I love how fiercely you love the people who are lucky enough to be yours.",
+    "You notice the small things — the ones most people walk right past. It makes the world more beautiful.",
+    "The patience you carry, especially on the hardest days, quietly amazes me.",
+    "You make being a mother look like the most natural thing in the world.",
+    "I love how you hold your opinions gently but your values firmly.",
+    "The way you are with our daughter — every single day I watch you and think: she chose right.",
+    "You're funny in a way that catches me off guard, even still.",
+    "I love the care you put into the things no one else would notice. That's all you.",
+    "You made me want to be more than I thought I could be, just by being who you are.",
+    "I love that you're not afraid to feel things deeply. The world needs more of that.",
+    "The way you look when you're concentrating — I hope I never stop noticing it.",
+    "You have a kindness that doesn't ask for anything back. That's rare.",
+    "I love how you've grown into yourself. I've had a front-row seat and it's been something.",
+    "You bring warmth into every room, even when you don't realise you're doing it.",
+    "I love watching you figure something out. The quiet determination in your face.",
+    "The way you talk about things you care about — there's no pretending, just you.",
+    "I love that you make home feel like a choice, not just a place.",
+    "You've changed how I understand love. I didn't know it could be this steady.",
+    "I love your specific way of being in the world. There's no one like you.",
+    "The sound of you singing to our daughter might be the best thing I've ever heard.",
+    "I love that you're honest with me, even when it would be easier not to be.",
+    "You carry so much and make it look so light. I see it. I always see it.",
+    "I love the life we've built — and I know it's that good because of who you are in it.",
+    "You're the first person I want to tell things to. That hasn't changed once.",
+    "I love how you love — with your whole self, without holding back.",
+    "The way you hold our daughter when she's unsettled — I fell in love with you all over again.",
+    "You've made me a better person without ever trying to. That's the most remarkable thing.",
+    "I love you. Not just today. All of it — every version of you, every season, every day."
+  ];
+
+  // ─── UTILS ────────────────────────────────────────────────────
+  function getDayIndex() {
+    // Cycles through notes daily, starting from a fixed epoch
+    const epoch = new Date('2025-01-01');
+    const now = new Date();
+    const diff = Math.floor((now - epoch) / (1000 * 60 * 60 * 24));
+    return Math.abs(diff) % notes.length;
+  }
+
+  function formatDate(d) {
+    return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  // ─── STATE ────────────────────────────────────────────────────
+  const todayIndex = getDayIndex();
+  let currentIndex = todayIndex;
+  const VISIBLE_DOTS = 5;
+
+  // ─── RENDER ───────────────────────────────────────────────────
+  const quoteEl     = document.getElementById('quoteText');
+  const counterEl   = document.getElementById('dayCounter');
+  const datePillEl  = document.getElementById('datePill');
+  const dotsEl      = document.getElementById('navDots');
+
+  datePillEl.textContent = formatDate(new Date());
+
+  function renderDots() {
+    dotsEl.innerHTML = '';
+    for (let i = 0; i < VISIBLE_DOTS; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (i === 2 ? ' active' : '');
+      dotsEl.appendChild(dot);
+    }
+  }
+
+  function showNote(index, direction = 0) {
+    const isToday = index === todayIndex;
+    quoteEl.classList.add('fading');
+
+    setTimeout(() => {
+      quoteEl.textContent = notes[index];
+      counterEl.textContent = isToday
+        ? 'Today\'s reason · #' + (index + 1)
+        : 'Reason #' + (index + 1);
+      quoteEl.classList.remove('fading');
+    }, 300);
+  }
+
+  renderDots();
+  showNote(currentIndex);
+
+  // ─── NAV ──────────────────────────────────────────────────────
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    currentIndex = (currentIndex - 1 + notes.length) % notes.length;
+    showNote(currentIndex, -1);
+  });
+
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    currentIndex = (currentIndex + 1) % notes.length;
+    showNote(currentIndex, 1);
+  });
+
+  // Swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) {
+      if (dx < 0) {
+        currentIndex = (currentIndex + 1) % notes.length;
+        showNote(currentIndex, 1);
+      } else {
+        currentIndex = (currentIndex - 1 + notes.length) % notes.length;
+        showNote(currentIndex, -1);
+      }
+    }
+  }, { passive: true });
+
+  // ─── PWA INSTALL ──────────────────────────────────────────────
+  let deferredPrompt;
+  const banner = document.getElementById('installBanner');
+  const installBtn = document.getElementById('installBtn');
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    setTimeout(() => banner.classList.add('show'), 3000);
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    }
+    banner.classList.remove('show');
+  });
+
+  // iOS hint (Safari doesn't support beforeinstallprompt)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && !isStandalone) {
+    banner.innerHTML = `<span class="install-icon">📲</span><span>Tap <b>Share</b> → <b>Add to Home Screen</b></span>`;
+    setTimeout(() => banner.classList.add('show'), 3000);
+    setTimeout(() => banner.classList.remove('show'), 9000);
+  }
+
+  // Register SW
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
