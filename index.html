@@ -308,7 +308,50 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* Animations */
+    /* Progress label */
+    .progress-label {
+      margin-top: 14px;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(201, 169, 110, 0.4);
+      opacity: 0;
+      animation: fadeUp 1s ease 1s forwards;
+    }
+
+    /* Locked overlay on card */
+    .card.locked .quote { opacity: 0.15; filter: blur(6px); user-select: none; }
+    .card.locked .signature { opacity: 0.1; }
+    .card.locked .heart { opacity: 0.15; }
+    .card.locked .day-counter { opacity: 0.2; }
+
+    .lock-badge {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: rgba(201, 169, 110, 0.6);
+      pointer-events: none;
+    }
+    .card.locked .lock-badge { display: block; }
+
+    .lock-icon { font-size: 28px; margin-bottom: 8px; }
+    .lock-text {
+      font-family: 'Lato', sans-serif;
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(201, 169, 110, 0.5);
+    }
+
+    /* Disabled nav button */
+    .nav-btn:disabled {
+      opacity: 0.2;
+      cursor: default;
+    }
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(20px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -348,6 +391,10 @@
       <div class="day-counter" id="dayCounter"></div>
       <div class="quote" id="quoteText"></div>
       <div class="signature">— Jake</div>
+      <div class="lock-badge">
+        <div class="lock-icon">🔒</div>
+        <div class="lock-text" id="lockText"></div>
+      </div>
     </div>
   </div>
 
@@ -356,6 +403,8 @@
     <div class="nav-dots" id="navDots"></div>
     <button class="nav-btn" id="nextBtn" aria-label="Next">&#8594;</button>
   </div>
+
+  <div class="progress-label" id="progressLabel"></div>
 
   <div class="footer">A new reason, every day ✦</div>
 
@@ -370,7 +419,10 @@
 
 <script>
   // ─── LOVE NOTES ────────────────────────────────────────────────
-  // Edit these to personalise! One per day, cycling every 365 days.
+  // One note unlocks per day from START_DATE onward.
+  // Edit START_DATE to the day you deploy / share this app.
+  const START_DATE = '2025-06-01'; // ← CHANGE THIS to your launch date (YYYY-MM-DD)
+
   const notes = [
     "The way you laugh at your own jokes before you even finish them — I would never want to change that.",
     "You make ordinary Tuesday evenings feel like somewhere worth being.",
@@ -405,65 +457,118 @@
   ];
 
   // ─── UTILS ────────────────────────────────────────────────────
-  function getDayIndex() {
-    // Cycles through notes daily, starting from a fixed epoch
-    const epoch = new Date('2025-01-01');
+  function getDaysElapsed() {
+    const start = new Date(START_DATE);
+    start.setHours(0, 0, 0, 0);
     const now = new Date();
-    const diff = Math.floor((now - epoch) / (1000 * 60 * 60 * 24));
-    return Math.abs(diff) % notes.length;
+    now.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
   }
 
   function formatDate(d) {
     return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
-  // ─── STATE ────────────────────────────────────────────────────
-  const todayIndex = getDayIndex();
-  let currentIndex = todayIndex;
-  const VISIBLE_DOTS = 5;
+  function daysUntilUnlock(noteIndex) {
+    return noteIndex - daysElapsed;
+  }
 
-  // ─── RENDER ───────────────────────────────────────────────────
-  const quoteEl     = document.getElementById('quoteText');
-  const counterEl   = document.getElementById('dayCounter');
-  const datePillEl  = document.getElementById('datePill');
-  const dotsEl      = document.getElementById('navDots');
+  function unlockDate(noteIndex) {
+    const d = new Date(START_DATE);
+    d.setDate(d.getDate() + noteIndex);
+    return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'long' });
+  }
+
+  // ─── STATE ────────────────────────────────────────────────────
+  const daysElapsed = getDaysElapsed();
+  // Clamp so we never go beyond available notes
+  const todayNoteIndex = Math.min(daysElapsed, notes.length - 1);
+  let currentIndex = todayNoteIndex;
+
+  // ─── ELEMENTS ─────────────────────────────────────────────────
+  const quoteEl       = document.getElementById('quoteText');
+  const counterEl     = document.getElementById('dayCounter');
+  const datePillEl    = document.getElementById('datePill');
+  const dotsEl        = document.getElementById('navDots');
+  const cardEl        = document.querySelector('.card');
+  const lockTextEl    = document.getElementById('lockText');
+  const progressEl    = document.getElementById('progressLabel');
+  const prevBtn       = document.getElementById('prevBtn');
+  const nextBtn       = document.getElementById('nextBtn');
 
   datePillEl.textContent = formatDate(new Date());
 
+  // ─── DOTS ─────────────────────────────────────────────────────
+  // Show up to 7 dots representing the window around currentIndex
+  const MAX_DOTS = 7;
+
   function renderDots() {
     dotsEl.innerHTML = '';
-    for (let i = 0; i < VISIBLE_DOTS; i++) {
+    const unlocked = todayNoteIndex + 1; // count of unlocked notes
+    const visible = Math.min(unlocked, MAX_DOTS);
+    if (visible <= 1) return; // no dots needed for a single note
+
+    // Window: last MAX_DOTS unlocked notes
+    const windowStart = Math.max(0, unlocked - MAX_DOTS);
+
+    for (let i = windowStart; i < unlocked; i++) {
       const dot = document.createElement('div');
-      dot.className = 'dot' + (i === 2 ? ' active' : '');
+      const isActive = i === currentIndex;
+      dot.className = 'dot' + (isActive ? ' active' : '');
       dotsEl.appendChild(dot);
     }
   }
 
-  function showNote(index, direction = 0) {
-    const isToday = index === todayIndex;
+  // ─── SHOW NOTE ────────────────────────────────────────────────
+  function showNote(index) {
+    const isLocked = index > daysElapsed || index >= notes.length;
+    const isToday = index === todayNoteIndex;
+
     quoteEl.classList.add('fading');
 
     setTimeout(() => {
-      quoteEl.textContent = notes[index];
-      counterEl.textContent = isToday
-        ? 'Today\'s reason · #' + (index + 1)
-        : 'Reason #' + (index + 1);
+      if (isLocked) {
+        cardEl.classList.add('locked');
+        quoteEl.textContent = notes[index] || '';
+        counterEl.textContent = '';
+        const wait = daysUntilUnlock(index);
+        lockTextEl.textContent = `Unlocks ${unlockDate(index)}`;
+      } else {
+        cardEl.classList.remove('locked');
+        quoteEl.textContent = notes[index];
+        counterEl.textContent = isToday
+          ? 'Today\'s reason · #' + (index + 1)
+          : 'Reason #' + (index + 1);
+        lockTextEl.textContent = '';
+      }
       quoteEl.classList.remove('fading');
-    }, 300);
+    }, 280);
+
+    // Button states
+    prevBtn.disabled = index <= 0;
+    nextBtn.disabled = index >= todayNoteIndex;
+
+    // Progress label
+    progressEl.textContent = `${todayNoteIndex + 1} of ${notes.length} unlocked`;
+
+    renderDots();
   }
 
-  renderDots();
   showNote(currentIndex);
 
   // ─── NAV ──────────────────────────────────────────────────────
-  document.getElementById('prevBtn').addEventListener('click', () => {
-    currentIndex = (currentIndex - 1 + notes.length) % notes.length;
-    showNote(currentIndex, -1);
+  prevBtn.addEventListener('click', () => {
+    if (currentIndex > 0) {
+      currentIndex--;
+      showNote(currentIndex);
+    }
   });
 
-  document.getElementById('nextBtn').addEventListener('click', () => {
-    currentIndex = (currentIndex + 1) % notes.length;
-    showNote(currentIndex, 1);
+  nextBtn.addEventListener('click', () => {
+    if (currentIndex < todayNoteIndex) {
+      currentIndex++;
+      showNote(currentIndex);
+    }
   });
 
   // Swipe support
@@ -472,12 +577,12 @@
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - touchStartX;
     if (Math.abs(dx) > 40) {
-      if (dx < 0) {
-        currentIndex = (currentIndex + 1) % notes.length;
-        showNote(currentIndex, 1);
-      } else {
-        currentIndex = (currentIndex - 1 + notes.length) % notes.length;
-        showNote(currentIndex, -1);
+      if (dx < 0 && currentIndex < todayNoteIndex) {
+        currentIndex++;
+        showNote(currentIndex);
+      } else if (dx > 0 && currentIndex > 0) {
+        currentIndex--;
+        showNote(currentIndex);
       }
     }
   }, { passive: true });
