@@ -4,8 +4,8 @@
   "description": "Daily love notes from Jake",
   "start_url": "/index.html",
   "display": "standalone",
-  "background_color": "#1a0a0a",
-  "theme_color": "#1a0a0a",
+  "background_color": "#f5f2ec",
+  "theme_color": "#f5f2ec",
   "orientation": "portrait",
   "icons": [
     {
