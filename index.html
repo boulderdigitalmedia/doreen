@@ -1025,7 +1025,55 @@
     setTimeout(function() { banner.classList.remove('show'); }, 10000);
   }
 
-  if ('serviceWorker' in navigator) {
+  // ── Push notifications ────────────────────────────────────────
+  // Replace with your Render server URL after deploying
+  var PUSH_SERVER = 'https://YOUR-RENDER-APP.onrender.com';
+
+  // VAPID public key — must match the server
+  var VAPID_PUBLIC_KEY = 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg';
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = window.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  function subscribeToPush(reg) {
+    reg.pushManager.getSubscription().then(function(existing) {
+      if (existing) return; // already subscribed
+      reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      }).then(function(subscription) {
+        fetch(PUSH_SERVER + '/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(subscription)
+        }).then(function(r) {
+          if (r.ok) console.log('Push subscription registered');
+        }).catch(function(e) { console.warn('Could not register push:', e); });
+      }).catch(function(e) { console.warn('Push subscribe failed:', e); });
+    });
+  }
+
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    navigator.serviceWorker.register('sw.js').then(function(reg) {
+      // Ask for notification permission after a short delay
+      // (don't interrupt the first-time experience immediately)
+      setTimeout(function() {
+        if (Notification.permission === 'default') {
+          Notification.requestPermission().then(function(permission) {
+            if (permission === 'granted') subscribeToPush(reg);
+          });
+        } else if (Notification.permission === 'granted') {
+          subscribeToPush(reg);
+        }
+      }, 8000);
+    }).catch(function(){});
+  } else if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(){});
   }
 </script>
