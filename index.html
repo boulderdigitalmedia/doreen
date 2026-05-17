@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="From Jake" />
+  <meta name="apple-mobile-web-app-title" content="From Your Favorite" />
   <meta name="theme-color" content="#f5f2ec" />
-  <title>From Jake, With Love</title>
+  <title>From Your Favorite, With Love</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
@@ -74,6 +74,12 @@
       line-height: 1.1;
     }
 
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
     .date-badge {
       background: var(--sage-pale);
       border: 1px solid var(--border);
@@ -84,6 +90,26 @@
       color: var(--sage);
       letter-spacing: 0.04em;
     }
+
+    /* FAVOURITES OPEN BUTTON */
+    .fav-open-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 13px;
+      color: var(--ink-mid);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      -webkit-tap-highlight-color: transparent;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+    .fav-open-btn:active { background: var(--sage-pale); border-color: var(--sage-light); }
+    #favCount { font-size: 11px; }
+    #favCount:empty { display: none; }
 
     /* CARD VIEWPORT */
     .card-viewport {
@@ -227,15 +253,29 @@
       color: var(--sage);
     }
 
-    .card-heart {
-      font-size: 18px;
-      animation: pulse 3s ease-in-out infinite;
+    /* HEART BUTTON */
+    .heart-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--sage-light);
+      padding: 4px 6px;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.2s ease, transform 0.2s ease;
     }
 
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.18); }
+    .heart-btn.favourited { color: #e05c5c; }
+
+    @keyframes heartPop {
+      0%   { transform: scale(1); }
+      35%  { transform: scale(1.55); }
+      65%  { transform: scale(0.88); }
+      100% { transform: scale(1); }
     }
+
+    .heart-btn.pop { animation: heartPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 
     /* LOCK */
     .lock-overlay {
@@ -397,85 +437,18 @@
       white-space: nowrap;
     }
 
-    /* ANIMATIONS */
-    @keyframes fadeDown {
-      from { opacity: 0; transform: translateY(-12px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes riseIn {
-      from { opacity: 0; transform: translateY(28px) scale(0.97); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    /* ── HEART BUTTON ──────────────────────────────── */
-    .heart-btn {
-      background: none;
-      border: none;
-      font-size: 22px;
-      cursor: pointer;
-      color: var(--sage-light);
-      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-      -webkit-tap-highlight-color: transparent;
-      padding: 4px 8px;
-      line-height: 1;
-    }
-
-    .heart-btn.favourited {
-      color: #e05c5c;
-      transform: scale(1.15);
-    }
-
-    .heart-btn:active { transform: scale(0.88); }
-
-    @keyframes heartPop {
-      0%   { transform: scale(1); }
-      40%  { transform: scale(1.5); }
-      70%  { transform: scale(0.9); }
-      100% { transform: scale(1.15); }
-    }
-
-    .heart-btn.pop { animation: heartPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-
-    /* ── FAV OPEN BUTTON (topbar) ──────────────────── */
-    .fav-open-btn {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 4px 12px;
-      font-size: 13px;
-      color: var(--ink-mid);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      -webkit-tap-highlight-color: transparent;
-      transition: all 0.18s ease;
-    }
-
-    .fav-open-btn:active {
-      background: var(--sage-pale);
-      border-color: var(--sage-light);
-    }
-
-    #favCount:empty { display: none; }
-
-    /* ── DRAWER OVERLAY ────────────────────────────── */
+    /* FAVOURITES DRAWER */
     .fav-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(44, 58, 46, 0.35);
+      background: rgba(44, 58, 46, 0.3);
       z-index: 200;
       backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
     }
-
     .fav-overlay.open { display: block; }
 
-    /* ── DRAWER ────────────────────────────────────── */
     .fav-drawer {
       position: fixed;
       bottom: 0;
@@ -491,7 +464,6 @@
       transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
       padding-bottom: env(safe-area-inset-bottom);
     }
-
     .fav-drawer.open { transform: translateY(0); }
 
     .fav-header {
@@ -517,7 +489,7 @@
       border-radius: 50%;
       width: 32px;
       height: 32px;
-      font-size: 13px;
+      font-size: 14px;
       color: var(--ink-mid);
       cursor: pointer;
       display: flex;
@@ -526,12 +498,7 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* ── FAV LIST ──────────────────────────────────── */
-    .fav-list {
-      overflow-y: auto;
-      flex: 1;
-      padding: 12px 0;
-    }
+    .fav-list { overflow-y: auto; flex: 1; padding: 8px 0; }
 
     .fav-item {
       display: flex;
@@ -539,15 +506,14 @@
       gap: 14px;
       padding: 12px 20px;
       cursor: pointer;
-      transition: background 0.15s ease;
       -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s ease;
     }
-
     .fav-item:active { background: var(--sage-pale); }
 
     .fav-thumb {
-      width: 52px;
-      height: 52px;
+      width: 56px;
+      height: 56px;
       border-radius: 10px;
       object-fit: cover;
       object-position: top;
@@ -555,26 +521,22 @@
       background: var(--sage-pale);
     }
 
-    .fav-thumb-placeholder {
-      width: 52px;
-      height: 52px;
+    .fav-thumb-ph {
+      width: 56px;
+      height: 56px;
       border-radius: 10px;
       background: var(--sage-pale);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 22px;
       flex-shrink: 0;
     }
 
-    .fav-item-text {
-      flex: 1;
-      min-width: 0;
-    }
+    .fav-item-body { flex: 1; min-width: 0; }
 
     .fav-item-day {
       font-size: 10px;
-      font-weight: 400;
       letter-spacing: 0.15em;
       text-transform: uppercase;
       color: var(--sage);
@@ -592,25 +554,40 @@
       text-overflow: ellipsis;
     }
 
-    .fav-item-unfav {
-      font-size: 18px;
+    .fav-item-heart {
+      font-size: 20px;
       color: #e05c5c;
       flex-shrink: 0;
-      padding: 4px;
+      padding: 4px 4px 4px 8px;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* ── EMPTY STATE ───────────────────────────────── */
     .fav-empty {
       display: none;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 48px 24px;
+      padding: 52px 24px;
       color: var(--ink-soft);
       font-size: 13px;
       text-align: center;
-      letter-spacing: 0.02em;
-      line-height: 1.6;
+      line-height: 1.7;
+      gap: 10px;
+    }
+    .fav-empty-icon { font-size: 36px; color: var(--sage-light); }
+
+    /* ANIMATIONS */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(28px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
     }
   </style>
 </head>
@@ -621,10 +598,10 @@
   <div class="topbar">
     <div class="brand">
       <span class="brand-from">A note</span>
-      <span class="brand-name">from Jake</span>
+      <span class="brand-name">from Your Favorite</span>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <button class="fav-open-btn" id="favOpenBtn" aria-label="View favourites">♥ <span id="favCount"></span></button>
+    <div class="topbar-right">
+      <button class="fav-open-btn" id="favOpenBtn">♥ <span id="favCount"></span></button>
       <div class="date-badge" id="dateBadge"></div>
     </div>
   </div>
@@ -651,8 +628,8 @@
       <div class="card-body">
         <div class="card-quote" id="cardQuote"></div>
         <div class="card-footer">
-          <div class="card-sig">— Jake</div>
-          <button class="heart-btn" id="heartBtn" aria-label="Favourite this note">♥</button>
+          <div class="card-sig">— Your Favorite</div>
+          <button class="heart-btn" id="heartBtn" aria-label="Favourite">♥</button>
         </div>
       </div>
 
@@ -673,20 +650,18 @@
 
 </div>
 
-  <!-- Favorites drawer -->
-  <div class="fav-overlay" id="favOverlay"></div>
-  <div class="fav-drawer" id="favDrawer">
-    <div class="fav-header">
-      <span class="fav-title">Your favourites</span>
-      <button class="fav-close" id="favClose">✕</button>
-    </div>
-    <div class="fav-list" id="favList"></div>
-    <div class="fav-empty" id="favEmpty">
-      <div style="font-size:32px;margin-bottom:12px;">♥</div>
-      <div>Tap the heart on any note to save it here</div>
-    </div>
+<!-- Favourites drawer -->
+<div class="fav-overlay" id="favOverlay"></div>
+<div class="fav-drawer" id="favDrawer">
+  <div class="fav-header">
+    <span class="fav-title">Your favourites</span>
+    <button class="fav-close" id="favClose">✕</button>
   </div>
-
+  <div class="fav-list" id="favList"></div>
+  <div class="fav-empty" id="favEmpty">
+    <div class="fav-empty-icon">♥</div>
+    <div>Tap the heart on any note<br>to save it here</div>
+  </div>
 </div>
 
 <div class="install-banner" id="installBanner">
@@ -696,33 +671,15 @@
 </div>
 
 <script>
-  // ═══════════════════════════════════════════════
-  //  CONFIGURATION — edit these before deploying
-  // ═══════════════════════════════════════════════
-
-  // The date the app launches — note 1 unlocks today,
-  // note 2 tomorrow, and so on.
   // ════════════════════════════════════════
   // SET YOUR LAUNCH DATE HERE (YYYY-MM-DD)
-  // This cannot be an env var — it must be
-  // edited directly in this file.
-  const START_DATE = '2025-05-15'; // ← EDIT THIS
+  const START_DATE = '2026-05-15'; // ← EDIT THIS
   // ════════════════════════════════════════
 
-  // One entry per note.
-  //   text  — the love note
-  //   photo — relative path to your image, e.g. 'photos/01.jpg'
-  //           Leave as '' for a placeholder until you add the photo.
-  //
-  // HOW TO ADD PHOTOS:
-  //   1. Create a 'photos/' folder alongside index.html
-  //   2. Add your images named 01.jpg, 02.jpg, etc.
-  //   3. Re-upload the whole folder when you deploy.
-
   const notes = [
-    { photo: 'photos/IMG_0032.jpeg', text: "I can’t imagine the past 11 years without you. You are an amazing, beautiful person, inside and out. You make me want to be better everyday, and push me to be better. I love how you are with our kids and the love and empathy you teach them, and me everyday. I would not be the partner I am without you. I would not be the father I am today without you. I thank you for choosing me everyday. I am lucky to have the opportunity to choose you every day, now and for the next 68 years! So this app is going to deliver a message to you everyday for the next year, telling you how amazing you are, how much I love you and more. One day to celebrate out happiness is not enough. I need more time… lol. I hope you like this. Love, Your Favorite" },
-    { photo: 'photos/IMG_0478.jpeg', text: "You notice the small things, the ones most people walk right past. It makes the world more beautiful." },
-    { photo: 'photos/IMG_0899.jpeg', text: "I love how you hold your opinions gently but your values firmly. Okay, your opinions firmly as well 🤣" },
+    { photo: 'photos/IMG_0032.jpeg', text: "I can't imagine the past 11 years without you. You are an amazing, beautiful person, inside and out. You make me want to be better everyday, and push me to be better. I love how you are with our kids and the love and empathy you teach them, and me everyday. I would not be the partner I am without you. I would not be the father I am today without you. I thank you for choosing me everyday. I am lucky to have the opportunity to choose you every day, now and for the next 68 years! So this app is going to deliver a message to you everyday for the next year, telling you how amazing you are, how much I love you and more. One day to celebrate our happiness is not enough. I need more time… lol. I hope you like this. Love, Your Favorite" },
+    { photo: 'photos/IMG_0478.jpeg', text: "You take me to see Jason Mamoa spinning at his club, then give me a hallpass card with his many names on it... LOL. 'It's laminated!' I love how silly you are and how we are constantly trolling each other. Having fun with you is an amazing gift I will cherish for 68 years." },
+    { photo: 'photos/IMG_0899.jpeg', text: "You just want to be near me. I love how we hold hands and touch, even in those moments where we're just relaxing and doing our own thing." },
     { photo: 'photos/IMG_0055.jpeg', text: "Your laugh is contagious and you are always laughing. I love that about you." },
     { photo: 'photos/IMG_0519.JPG', text: "I love that you're not afraid to feel things deeply. The world needs more of that." },
     { photo: 'photos/IMG_0904.jpeg', text: "The way you look when you're concentrating, I hope I never stop noticing it. Especially when you wear your glasses. 🔥" },
@@ -730,14 +687,14 @@
     { photo: 'photos/IMG_0538.JPG', text: "I love how you've grown into yourself. I've had a front-row seat and it's been amazing to watch you learn about yourself." },
     { photo: 'photos/IMG_0906.jpeg', text: "You bring warmth into every room, even when you don't realise you're doing it." },
     { photo: 'photos/IMG_0059.jpeg', text: "I love arguing with you, because it means we both care." },
-    { photo: 'photos/IMG_0548.JPG', text: "The way you talk about things you care about. Your passion and determination have changed the world in ways we don’t yet know." },
+    { photo: 'photos/IMG_0548.JPG', text: "The way you talk about things you care about. Your passion and determination have changed the world in ways we don't yet know." },
     { photo: 'photos/IMG_0908.jpeg', text: "There's no one like you. I love you!" },
     { photo: 'photos/IMG_0132.JPG', text: "I love that you're honest with me, even when it would be easier not to be." },
     { photo: 'photos/IMG_0625.jpeg', text: "You carry so much and make it look so light. I see it. I always see it. I will continue to try and carry more of it." },
     { photo: 'photos/IMG_0911.jpeg', text: "You're the first person I want to tell things to. Especially gossip. 😆" },
     { photo: 'photos/IMG_0134.jpeg', text: "I love how you love, with your whole self, without holding back." },
     { photo: 'photos/IMG_0630.jpeg', text: "You've made me a better person without ever trying to." },
-    { photo: 'photos/IMG_0912.JPG', text: "I love doing life with you. This adventure, in the many places we’ve lived, with our kids, dogs and cats… I couldn't have imagined happiness like this." },
+    { photo: 'photos/IMG_0912.JPG', text: "I love doing life with you. This adventure, in the many places we've lived, with our kids, dogs and cats… I couldn't have imagined happiness like this." },
     { photo: 'photos/IMG_0146.jpeg', text: "I love that you make home feel like a choice, not just a place." },
     { photo: 'photos/IMG_0631.JPG', text: "You've changed how I understand love. I didn't know it could be this amazing." },
     { photo: 'photos/IMG_0920.jpeg', text: "You make ordinary Tuesday evenings feel like somewhere worth being. Anything can happen Tuesday!" },
@@ -751,7 +708,7 @@
     { photo: 'photos/IMG_0633.jpeg', text: "You are the person I want to be boring with." },
     { photo: 'photos/IMG_0978.jpeg', text: "I love coffees dates with you 😉" },
     { photo: 'photos/IMG_0176.jpeg', text: "You support me and who I am. You love me, for me." },
-    { photo: 'photos/IMG_0635 (1).jpeg', text: "I love that you remember things I've forgotten. Then remind me that I’ve forgotten... at least 2 or 3 times." },
+    { photo: 'photos/IMG_0635 (1).jpeg', text: "I love that you remember things I've forgotten. Then remind me that I've forgotten... at least 2 or 3 times." },
     { photo: 'photos/IMG_0983.jpeg', text: "The way you look at me still makes me feel like the first day we met.." },
     { photo: 'photos/IMG_0207 (1).jpeg', text: "I love how you hold me accountable" },
     { photo: 'photos/IMG_0635.jpeg', text: "You are the steadiest thing in my world." },
@@ -1088,14 +1045,12 @@
     { photo: 'photos/IMG_1002.jpeg', text: "The way you've filled my life with meaning — thank you. Just thank you." },
   ];
 
-  // ═══════════════════════════════════════════════
-  //  APP LOGIC
-  // ═══════════════════════════════════════════════
+  // ── APP LOGIC ────────────────────────────────────────────────
 
   function getDaysElapsed() {
-    const start = new Date(START_DATE);
+    var start = new Date(START_DATE);
     start.setHours(0,0,0,0);
-    const now = new Date();
+    var now = new Date();
     now.setHours(0,0,0,0);
     return Math.max(0, Math.floor((now - start) / 86400000));
   }
@@ -1109,50 +1064,197 @@
   }
 
   function unlockDate(i) {
-    const d = new Date(START_DATE);
+    var d = new Date(START_DATE);
     d.setDate(d.getDate() + i);
     return fmtLong(d);
   }
 
-  const daysElapsed    = getDaysElapsed();
-  const todayNoteIndex = Math.min(daysElapsed, notes.length - 1);
-  let   currentIndex   = todayNoteIndex;
+  var daysElapsed    = getDaysElapsed();
+  var todayNoteIndex = Math.min(daysElapsed, notes.length - 1);
+  var currentIndex   = todayNoteIndex;
 
-  const dateBadgeEl    = document.getElementById('dateBadge');
-  const cardEl         = document.getElementById('card');
-  const placeholderEl  = document.getElementById('photoPlaceholder');
-  const phHintEl       = document.getElementById('phHint');
-  const cardImgEl      = document.getElementById('cardImg');
-  const dayBadgeEl     = document.getElementById('dayBadge');
-  const todayRibbonEl  = document.getElementById('todayRibbon');
-  const lockOverlayEl  = document.getElementById('lockOverlay');
-  const lockDateEl     = document.getElementById('lockDate');
-  const cardQuoteEl    = document.getElementById('cardQuote');
-  const dotsEl         = document.getElementById('navDots');
-  const progressFillEl = document.getElementById('progressFill');
-  const progressLblEl  = document.getElementById('progressLabel');
-  const prevBtn        = document.getElementById('prevBtn');
-  const nextBtn        = document.getElementById('nextBtn');
+  var dateBadgeEl    = document.getElementById('dateBadge');
+  var cardEl         = document.getElementById('card');
+  var placeholderEl  = document.getElementById('photoPlaceholder');
+  var phHintEl       = document.getElementById('phHint');
+  var cardImgEl      = document.getElementById('cardImg');
+  var dayBadgeEl     = document.getElementById('dayBadge');
+  var todayRibbonEl  = document.getElementById('todayRibbon');
+  var lockOverlayEl  = document.getElementById('lockOverlay');
+  var lockDateEl     = document.getElementById('lockDate');
+  var cardQuoteEl    = document.getElementById('cardQuote');
+  var dotsEl         = document.getElementById('navDots');
+  var progressFillEl = document.getElementById('progressFill');
+  var progressLblEl  = document.getElementById('progressLabel');
+  var prevBtn        = document.getElementById('prevBtn');
+  var nextBtn        = document.getElementById('nextBtn');
+  var heartBtn       = document.getElementById('heartBtn');
+  var favOpenBtn     = document.getElementById('favOpenBtn');
+  var favOverlay     = document.getElementById('favOverlay');
+  var favDrawer      = document.getElementById('favDrawer');
+  var favClose       = document.getElementById('favClose');
+  var favList        = document.getElementById('favList');
+  var favEmpty       = document.getElementById('favEmpty');
+  var favCountEl     = document.getElementById('favCount');
 
   dateBadgeEl.textContent = fmtShort(new Date());
 
+  // ── FAVOURITES ───────────────────────────────────────────────
+
+  var FAVS_KEY = 'love-notes-favourites';
+
+  function loadFavs() {
+    try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; }
+  }
+
+  function saveFavs(favs) {
+    try { localStorage.setItem(FAVS_KEY, JSON.stringify(favs)); } catch {}
+  }
+
+  function isFavourited(idx) {
+    return loadFavs().indexOf(idx) !== -1;
+  }
+
+  function toggleFavourite(idx) {
+    var favs = loadFavs();
+    var pos = favs.indexOf(idx);
+    if (pos === -1) { favs.push(idx); } else { favs.splice(pos, 1); }
+    saveFavs(favs);
+    return pos === -1; // true = just added
+  }
+
+  function updateHeartBtn(idx) {
+    if (isFavourited(idx)) { heartBtn.classList.add('favourited'); }
+    else { heartBtn.classList.remove('favourited'); }
+  }
+
+  function updateFavCount() {
+    var n = loadFavs().length;
+    favCountEl.textContent = n > 0 ? n : '';
+  }
+
+  heartBtn.addEventListener('click', function() {
+    var added = toggleFavourite(currentIndex);
+    heartBtn.classList.remove('pop');
+    void heartBtn.offsetWidth; // restart animation
+    heartBtn.classList.add('pop');
+    if (added) { heartBtn.classList.add('favourited'); }
+    else { heartBtn.classList.remove('favourited'); }
+    updateFavCount();
+  });
+
+  function openDrawer() {
+    renderFavDrawer();
+    favOverlay.classList.add('open');
+    favDrawer.classList.add('open');
+  }
+
+  function closeDrawer() {
+    favOverlay.classList.remove('open');
+    favDrawer.classList.remove('open');
+  }
+
+  favOpenBtn.addEventListener('click', openDrawer);
+  favClose.addEventListener('click', closeDrawer);
+  favOverlay.addEventListener('click', closeDrawer);
+
+  function renderFavDrawer() {
+    var favs = loadFavs().slice().sort(function(a,b){ return a - b; });
+    favList.innerHTML = '';
+
+    if (favs.length === 0) {
+      favList.style.display = 'none';
+      favEmpty.style.display = 'flex';
+      return;
+    }
+
+    favList.style.display = 'block';
+    favEmpty.style.display = 'none';
+
+    favs.forEach(function(idx) {
+      var note = notes[idx];
+      if (!note) return;
+
+      var item = document.createElement('div');
+      item.className = 'fav-item';
+
+      // Thumbnail
+      if (note.photo) {
+        var img = document.createElement('img');
+        img.className = 'fav-thumb';
+        img.src = note.photo;
+        img.alt = '';
+        item.appendChild(img);
+      } else {
+        var ph = document.createElement('div');
+        ph.className = 'fav-thumb-ph';
+        ph.textContent = '🌿';
+        item.appendChild(ph);
+      }
+
+      // Text
+      var body = document.createElement('div');
+      body.className = 'fav-item-body';
+
+      var dayEl = document.createElement('div');
+      dayEl.className = 'fav-item-day';
+      dayEl.textContent = 'Day ' + (idx + 1);
+      body.appendChild(dayEl);
+
+      var quoteEl = document.createElement('div');
+      quoteEl.className = 'fav-item-quote';
+      quoteEl.textContent = note.text;
+      body.appendChild(quoteEl);
+
+      item.appendChild(body);
+
+      // Un-favourite button
+      var heart = document.createElement('div');
+      heart.className = 'fav-item-heart';
+      heart.textContent = '♥';
+      heart.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toggleFavourite(idx);
+        updateFavCount();
+        updateHeartBtn(currentIndex);
+        renderFavDrawer();
+      });
+      item.appendChild(heart);
+
+      // Tap row → navigate to note
+      item.addEventListener('click', function() {
+        currentIndex = idx;
+        showNote(currentIndex);
+        closeDrawer();
+      });
+
+      favList.appendChild(item);
+    });
+  }
+
+  updateFavCount();
+
+  // ── DOTS ────────────────────────────────────────────────────
+
   function renderDots() {
     dotsEl.innerHTML = '';
-    const unlocked = todayNoteIndex + 1;
+    var unlocked = todayNoteIndex + 1;
     if (unlocked <= 1) return;
-    const start = Math.max(0, unlocked - 7);
-    for (let i = start; i < unlocked; i++) {
-      const d = document.createElement('div');
+    var start = Math.max(0, unlocked - 7);
+    for (var i = start; i < unlocked; i++) {
+      var d = document.createElement('div');
       d.className = 'dot' + (i === currentIndex ? ' active' : '');
       dotsEl.appendChild(d);
     }
   }
 
+  // ── SHOW NOTE ───────────────────────────────────────────────
+
   function showNote(index, animate) {
     if (animate === undefined) animate = true;
-    const note    = notes[index];
-    const isToday = index === todayNoteIndex;
-    const locked  = index > daysElapsed || index >= notes.length;
+    var note    = notes[index];
+    var isToday = index === todayNoteIndex;
+    var locked  = index > daysElapsed || index >= notes.length;
 
     if (animate) cardQuoteEl.classList.add('fading');
 
@@ -1193,9 +1295,10 @@
         placeholderEl.style.display = 'flex';
         phHintEl.textContent = 'photos/' + String(index+1).padStart(2,'0') + '.jpg';
       }
+
+      updateHeartBtn(index);
     }, animate ? 200 : 0);
 
-    updateHeartBtn(index);
     prevBtn.disabled = index <= 0;
     nextBtn.disabled = index >= todayNoteIndex;
 
@@ -1207,6 +1310,8 @@
   }
 
   showNote(currentIndex, false);
+
+  // ── NAV ─────────────────────────────────────────────────────
 
   prevBtn.addEventListener('click', function() {
     if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
@@ -1225,134 +1330,7 @@
     }
   }, { passive:true });
 
-
-  // ── FAVOURITES ────────────────────────────────────────────────
-  var FAVS_KEY = 'love-notes-favourites';
-
-  function loadFavs() {
-    try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; }
-    catch { return []; }
-  }
-
-  function saveFavs(favs) {
-    try { localStorage.setItem(FAVS_KEY, JSON.stringify(favs)); } catch {}
-  }
-
-  function isFavourited(index) {
-    return loadFavs().indexOf(index) !== -1;
-  }
-
-  function toggleFavourite(index) {
-    var favs = loadFavs();
-    var pos = favs.indexOf(index);
-    if (pos === -1) { favs.push(index); }
-    else { favs.splice(pos, 1); }
-    saveFavs(favs);
-    return pos === -1;
-  }
-
-  var heartBtn   = document.getElementById('heartBtn');
-  var favOpenBtn = document.getElementById('favOpenBtn');
-  var favOverlay = document.getElementById('favOverlay');
-  var favDrawer  = document.getElementById('favDrawer');
-  var favClose   = document.getElementById('favClose');
-  var favList    = document.getElementById('favList');
-  var favEmpty   = document.getElementById('favEmpty');
-  var favCount   = document.getElementById('favCount');
-
-  function updateHeartBtn(index) {
-    if (isFavourited(index)) { heartBtn.classList.add('favourited'); }
-    else { heartBtn.classList.remove('favourited'); }
-  }
-
-  function updateFavCount() {
-    var count = loadFavs().length;
-    favCount.textContent = count > 0 ? count : '';
-  }
-
-  heartBtn.addEventListener('click', function() {
-    var added = toggleFavourite(currentIndex);
-    heartBtn.classList.remove('pop');
-    void heartBtn.offsetWidth;
-    heartBtn.classList.add('pop');
-    if (added) { heartBtn.classList.add('favourited'); }
-    else { heartBtn.classList.remove('favourited'); }
-    updateFavCount();
-  });
-
-  favOpenBtn.addEventListener('click', function() {
-    renderFavDrawer();
-    favOverlay.classList.add('open');
-    favDrawer.classList.add('open');
-  });
-
-  function closeDrawer() {
-    favOverlay.classList.remove('open');
-    favDrawer.classList.remove('open');
-  }
-
-  favClose.addEventListener('click', closeDrawer);
-  favOverlay.addEventListener('click', closeDrawer);
-
-  function renderFavDrawer() {
-    var favs = loadFavs().sort(function(a,b){return a-b;});
-    favList.innerHTML = '';
-    if (favs.length === 0) {
-      favList.style.display = 'none';
-      favEmpty.style.display = 'flex';
-      return;
-    }
-    favList.style.display = 'block';
-    favEmpty.style.display = 'none';
-    favs.forEach(function(idx) {
-      var note = notes[idx];
-      if (!note) return;
-      var item = document.createElement('div');
-      item.className = 'fav-item';
-      if (note.photo) {
-        var img = document.createElement('img');
-        img.className = 'fav-thumb';
-        img.src = note.photo;
-        img.alt = '';
-        item.appendChild(img);
-      } else {
-        var ph = document.createElement('div');
-        ph.className = 'fav-thumb-placeholder';
-        ph.textContent = '\U0001f33f';
-        item.appendChild(ph);
-      }
-      var textWrap = document.createElement('div');
-      textWrap.className = 'fav-item-text';
-      var dayEl = document.createElement('div');
-      dayEl.className = 'fav-item-day';
-      dayEl.textContent = 'Day ' + (idx + 1);
-      textWrap.appendChild(dayEl);
-      var quoteEl = document.createElement('div');
-      quoteEl.className = 'fav-item-quote';
-      quoteEl.textContent = note.text;
-      textWrap.appendChild(quoteEl);
-      item.appendChild(textWrap);
-      var unfav = document.createElement('div');
-      unfav.className = 'fav-item-unfav';
-      unfav.textContent = '\u2665';
-      unfav.addEventListener('click', function(e) {
-        e.stopPropagation();
-        toggleFavourite(idx);
-        updateFavCount();
-        renderFavDrawer();
-        if (currentIndex === idx) updateHeartBtn(idx);
-      });
-      item.appendChild(unfav);
-      item.addEventListener('click', function() {
-        currentIndex = idx;
-        showNote(currentIndex);
-        closeDrawer();
-      });
-      favList.appendChild(item);
-    });
-  }
-
-  updateFavCount();
+  // ── PWA INSTALL ─────────────────────────────────────────────
 
   var deferredPrompt;
   var banner     = document.getElementById('installBanner');
@@ -1382,11 +1360,9 @@
     setTimeout(function() { banner.classList.remove('show'); }, 10000);
   }
 
-  // ── Push notifications ────────────────────────────────────────
-  // Replace with your Render server URL after deploying
-  var PUSH_SERVER = 'https://YOUR-RENDER-APP.onrender.com';
+  // ── PUSH NOTIFICATIONS ───────────────────────────────────────
 
-  // VAPID public key — must match the server
+  var PUSH_SERVER = 'https://YOUR-RENDER-APP.onrender.com';
   var VAPID_PUBLIC_KEY = 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg';
 
   function urlBase64ToUint8Array(base64String) {
@@ -1400,7 +1376,7 @@
 
   function subscribeToPush(reg) {
     reg.pushManager.getSubscription().then(function(existing) {
-      if (existing) return; // already subscribed
+      if (existing) return;
       reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
@@ -1409,21 +1385,17 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(subscription)
-        }).then(function(r) {
-          if (r.ok) console.log('Push subscription registered');
-        }).catch(function(e) { console.warn('Could not register push:', e); });
-      }).catch(function(e) { console.warn('Push subscribe failed:', e); });
+        }).catch(function(){});
+      }).catch(function(){});
     });
   }
 
   if ('serviceWorker' in navigator && 'PushManager' in window) {
     navigator.serviceWorker.register('sw.js').then(function(reg) {
-      // Ask for notification permission after a short delay
-      // (don't interrupt the first-time experience immediately)
       setTimeout(function() {
         if (Notification.permission === 'default') {
-          Notification.requestPermission().then(function(permission) {
-            if (permission === 'granted') subscribeToPush(reg);
+          Notification.requestPermission().then(function(p) {
+            if (p === 'granted') subscribeToPush(reg);
           });
         } else if (Notification.permission === 'granted') {
           subscribeToPush(reg);
