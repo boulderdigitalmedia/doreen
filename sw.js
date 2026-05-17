@@ -1,4 +1,4 @@
-const CACHE = 'love-notes-v3';
+const CACHE = 'love-notes-v4';
 const STATIC = ['manifest.json'];
 
 // On install — only cache static assets, NOT index.html
