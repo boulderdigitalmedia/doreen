@@ -39,24 +39,77 @@ function saveSubs(subs) {
   fs.writeFileSync(SUBS_FILE, JSON.stringify(subs, null, 2));
 }
 
-// ── Start date — must match what's in index.html ─────────────────
-const START_DATE = process.env.START_DATE || '2025-06-01';
+// ── Settings storage ─────────────────────────────────────────────
+const SETTINGS_FILE = path.join(__dirname, 'settings.json');
 
-function getDayIndex() {
-  const start = new Date(START_DATE);
+const DEFAULT_SETTINGS = {
+  startDate:     process.env.START_DATE || '2025-06-01',
+  frequency:     'daily',   // daily | weekly | biweekly | monthly
+  adminPassword: process.env.ADMIN_PASSWORD || 'changeme'
+};
+
+function loadSettings() {
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(s) {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2));
+}
+
+// ── Date helpers ─────────────────────────────────────────────────
+function getNZDate() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Auckland' }));
+}
+
+function getDaysElapsed(startDate) {
+  const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
-  const now = new Date();
-  // Convert now to NZ time for day calculation
-  const nzNow = new Date(now.toLocaleString('en-US', { timeZone: 'Pacific/Auckland' }));
+  const nzNow = getNZDate();
   nzNow.setHours(0, 0, 0, 0);
-  const diff = Math.floor((nzNow - start) / 86400000);
-  return Math.max(0, diff);
+  return Math.max(0, Math.floor((nzNow - start) / 86400000));
+}
+
+// Which note number to show/push today
+function getNoteIndex() {
+  const { startDate, frequency } = loadSettings();
+  const days = getDaysElapsed(startDate);
+  if (frequency === 'weekly')   return Math.floor(days / 7);
+  if (frequency === 'biweekly') return Math.floor(days / 14);
+  if (frequency === 'monthly') {
+    const start = new Date(startDate);
+    const now   = getNZDate();
+    return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
+  }
+  return days; // daily
+}
+
+// Should we send a push today given the current frequency?
+function shouldSendToday() {
+  const { startDate, frequency } = loadSettings();
+  const days = getDaysElapsed(startDate);
+  if (days === 0) return true; // always send on launch day
+  if (frequency === 'daily')    return true;
+  if (frequency === 'weekly')   return days % 7 === 0;
+  if (frequency === 'biweekly') return days % 14 === 0;
+  if (frequency === 'monthly') {
+    const start = new Date(startDate);
+    const now   = getNZDate();
+    return now.getDate() === start.getDate();
+  }
+  return true;
 }
 
 // ── Routes ───────────────────────────────────────────────────────
 
 // Health check
-app.get('/', (req, res) => res.json({ status: 'ok', day: getDayIndex() + 1 }));
+app.get('/', (req, res) => {
+  const { frequency } = loadSettings();
+  res.json({ status: 'ok', noteIndex: getNoteIndex(), frequency });
+});
 
 // Register a push subscription
 app.post('/subscribe', (req, res) => {
@@ -75,27 +128,59 @@ app.post('/subscribe', (req, res) => {
   res.json({ ok: true });
 });
 
-// Manual trigger (for testing)
+// Get current settings (public — needed by frontend)
+app.get('/settings', (req, res) => {
+  const { startDate, frequency } = loadSettings();
+  res.json({ startDate, frequency });
+});
+
+// Update settings (password-protected)
+app.post('/settings', (req, res) => {
+  const current = loadSettings();
+  if (req.body.adminPassword !== current.adminPassword) {
+    return res.status(401).json({ error: 'Wrong password' });
+  }
+  const updated = { ...current };
+  if (req.body.frequency  && ['daily','weekly','biweekly','monthly'].includes(req.body.frequency)) {
+    updated.frequency = req.body.frequency;
+  }
+  if (req.body.startDate)   updated.startDate   = req.body.startDate;
+  if (req.body.newPassword) updated.adminPassword = req.body.newPassword;
+  saveSettings(updated);
+  res.json({ ok: true, frequency: updated.frequency });
+});
+
+// Dashboard stats
+app.get('/stats', (req, res) => {
+  const subs = loadSubs();
+  res.json({ subscribers: subs.length, noteIndex: getNoteIndex(), shouldSendToday: shouldSendToday() });
+});
+
+// Manual trigger (for testing / dashboard)
 app.post('/send-now', (req, res) => {
-  sendDailyPush();
-  res.json({ ok: true, day: getDayIndex() + 1 });
+  sendDailyPush(true);
+  res.json({ ok: true, noteIndex: getNoteIndex() });
 });
 
 // ── Push logic ───────────────────────────────────────────────────
-async function sendDailyPush() {
+async function sendDailyPush(force = false) {
+  if (!force && !shouldSendToday()) {
+    console.log(`Frequency is "${loadSettings().frequency}" — not a send day, skipping`);
+    return;
+  }
+
   const subs = loadSubs();
   if (subs.length === 0) {
     console.log('No subscriptions yet, skipping push');
     return;
   }
 
-  const dayIndex = getDayIndex();
-  const dayNum = dayIndex + 1;
-  console.log(`Sending push for Day ${dayNum} to ${subs.length} subscriber(s)`);
+  const noteNum = getNoteIndex() + 1;
+  console.log(`Sending push for Note ${noteNum} to ${subs.length} subscriber(s)`);
 
   const payload = JSON.stringify({
     title: '💚 A note from Jake',
-    body: `Day ${dayNum} — open the app to read today\'s reason`,
+    body: `Note ${noteNum} — open the app to read today's reason`,
     url: '/'
   });
 
@@ -119,14 +204,10 @@ async function sendDailyPush() {
   }
 }
 
-// ── Cron: 8am NZ time daily ──────────────────────────────────────
-// NZ is UTC+12 (NZST) or UTC+13 (NZDT, daylight saving)
-// "0 20 * * *" = 8pm UTC = 8am NZST (UTC+12)
-// Render servers run UTC, so we schedule for 20:00 UTC
-// During NZ daylight saving (Oct-Apr) NZ is UTC+13, so 8am NZ = 19:00 UTC
-// We use 19:30 UTC as a reasonable middle ground year-round
+// ── Cron: runs daily at 19:30 UTC (≈8am NZT) ────────────────────
+// shouldSendToday() inside sendDailyPush handles frequency skipping
 cron.schedule('30 19 * * *', () => {
-  console.log('Cron fired — sending daily push');
+  console.log('Cron fired — checking frequency before sending');
   sendDailyPush();
 }, {
   timezone: 'UTC'
@@ -135,7 +216,8 @@ cron.schedule('30 19 * * *', () => {
 // ── Start ────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
+  const { frequency, startDate } = loadSettings();
   console.log(`Push server running on port ${PORT}`);
-  console.log(`Subscriptions file: ${SUBS_FILE}`);
-  console.log(`Daily push scheduled for 19:30 UTC (≈8am NZT)`);
+  console.log(`Frequency: ${frequency} | Start date: ${startDate}`);
+  console.log(`Cron runs daily at 19:30 UTC (≈8am NZT) — skips non-send days automatically`);
 });

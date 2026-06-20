@@ -674,6 +674,7 @@
   // ════════════════════════════════════════
   // SET YOUR LAUNCH DATE HERE (YYYY-MM-DD)
   const START_DATE = '2026-05-15'; // ← EDIT THIS
+  const FREQUENCY  = 'daily';      // ← daily | weekly | biweekly | monthly
   // ════════════════════════════════════════
 
   const notes = [
@@ -1055,6 +1056,19 @@
     return Math.max(0, Math.floor((now - start) / 86400000));
   }
 
+  // Returns which note index to show today based on send frequency
+  function getNoteIndex() {
+    var days = getDaysElapsed();
+    if (FREQUENCY === 'weekly')   return Math.floor(days / 7);
+    if (FREQUENCY === 'biweekly') return Math.floor(days / 14);
+    if (FREQUENCY === 'monthly') {
+      var s = new Date(START_DATE);
+      var n = new Date(); n.setHours(0,0,0,0);
+      return Math.max(0, (n.getFullYear() - s.getFullYear()) * 12 + (n.getMonth() - s.getMonth()));
+    }
+    return days; // daily
+  }
+
   function fmtShort(d) {
     return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
   }
@@ -1065,11 +1079,14 @@
 
   function unlockDate(i) {
     var d = new Date(START_DATE);
-    d.setDate(d.getDate() + i);
+    if      (FREQUENCY === 'weekly')   d.setDate(d.getDate() + i * 7);
+    else if (FREQUENCY === 'biweekly') d.setDate(d.getDate() + i * 14);
+    else if (FREQUENCY === 'monthly')  d.setMonth(d.getMonth() + i);
+    else                               d.setDate(d.getDate() + i);
     return fmtLong(d);
   }
 
-  var daysElapsed    = getDaysElapsed();
+  var daysElapsed    = getNoteIndex();
   var todayNoteIndex = Math.min(daysElapsed, notes.length - 1);
   var currentIndex   = todayNoteIndex;
 

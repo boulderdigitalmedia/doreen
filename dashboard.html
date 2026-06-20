@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — From Jake, With Love</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f5f2ec;
+      --surface:   #ffffff;
+      --sage:      #7a9e7e;
+      --sage-light:#c8dbc9;
+      --sage-pale: #e8f0e8;
+      --ink:       #2c3a2e;
+      --ink-mid:   #5a6e5c;
+      --ink-soft:  #8fa391;
+      --border:    #dde8dd;
+      --shadow:    rgba(80,110,85,0.10);
+      --red:       #c0392b;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LOGIN SCREEN ── */
+    #loginScreen {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+    }
+
+    #loginScreen h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 300;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    #loginScreen p {
+      color: var(--ink-soft);
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 4px 24px var(--shadow);
+    }
+
+    /* ── DASHBOARD ── */
+    #dashboard {
+      display: none;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+    }
+
+    .dash-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px;
+      font-weight: 300;
+    }
+
+    .dash-subtitle {
+      font-size: 13px;
+      color: var(--ink-soft);
+      margin-top: 2px;
+    }
+
+    /* ── STAT PILLS ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 32px;
+      font-weight: 300;
+      color: var(--sage);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 12px var(--shadow);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-soft);
+      margin-bottom: 20px;
+    }
+
+    /* ── FREQUENCY SELECTOR ── */
+    .freq-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .freq-opt {
+      position: relative;
+    }
+
+    .freq-opt input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .freq-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 16px 12px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      text-align: center;
+    }
+
+    .freq-opt input:checked + .freq-label {
+      border-color: var(--sage);
+      background: var(--sage-pale);
+    }
+
+    .freq-label-main {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .freq-label-sub {
+      font-size: 11px;
+      color: var(--ink-soft);
+    }
+
+    /* ── FORM ELEMENTS ── */
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--ink-mid);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="date"] {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus {
+      border-color: var(--sage);
+    }
+
+    .field { margin-bottom: 16px; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+
+    .btn-primary {
+      background: var(--sage);
+      color: #fff;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .btn-secondary {
+      background: var(--sage-pale);
+      color: var(--sage);
+      border: 1px solid var(--sage-light);
+      width: 100%;
+    }
+
+    .btn-danger {
+      background: #fdf0ef;
+      color: var(--red);
+      border: 1px solid #f5c6c2;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: transform 0.3s ease;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 999;
+    }
+
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── DIVIDER ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 20px 0;
+    }
+
+    /* ── ERROR ── */
+    .error-msg {
+      color: var(--red);
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    /* ── LOGOUT ── */
+    .logout-btn {
+      background: none;
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      color: var(--ink-soft);
+      cursor: pointer;
+      padding: 4px 0;
+    }
+
+    .logout-btn:hover { color: var(--ink); }
+
+    /* ── NOTE PREVIEW ── */
+    .note-badge {
+      display: inline-block;
+      background: var(--sage-pale);
+      border: 1px solid var(--sage-light);
+      color: var(--sage);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <h1>Dashboard</h1>
+  <p>From Jake, With Love</p>
+  <div class="login-card">
+    <div class="field">
+      <label for="serverUrl">Push server URL</label>
+      <input type="text" id="serverUrl" placeholder="https://your-app.onrender.com" />
+    </div>
+    <div class="field">
+      <label for="loginPassword">Admin password</label>
+      <input type="password" id="loginPassword" placeholder="Enter password" />
+    </div>
+    <p class="error-msg" id="loginError">Wrong password or server unreachable</p>
+    <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="dash-header">
+    <div>
+      <div class="dash-title">From Jake, With Love</div>
+      <div class="dash-subtitle" id="serverLabel"></div>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Sign out</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-value" id="statSubs">—</div>
+      <div class="stat-label">Subscribers</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="statNote">—</div>
+      <div class="stat-label">Current note</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="statSendToday">—</div>
+      <div class="stat-label">Send today</div>
+    </div>
+  </div>
+
+  <!-- Frequency -->
+  <div class="card">
+    <div class="card-title">Send Frequency</div>
+    <div class="freq-grid">
+      <div class="freq-opt">
+        <input type="radio" name="freq" id="fDaily" value="daily" />
+        <label class="freq-label" for="fDaily">
+          <span class="freq-label-main">Daily</span>
+          <span class="freq-label-sub">One note every day</span>
+        </label>
+      </div>
+      <div class="freq-opt">
+        <input type="radio" name="freq" id="fWeekly" value="weekly" />
+        <label class="freq-label" for="fWeekly">
+          <span class="freq-label-main">Weekly</span>
+          <span class="freq-label-sub">One note per week</span>
+        </label>
+      </div>
+      <div class="freq-opt">
+        <input type="radio" name="freq" id="fBiweekly" value="biweekly" />
+        <label class="freq-label" for="fBiweekly">
+          <span class="freq-label-main">Every 2 weeks</span>
+          <span class="freq-label-sub">Bi-weekly sends</span>
+        </label>
+      </div>
+      <div class="freq-opt">
+        <input type="radio" name="freq" id="fMonthly" value="monthly" />
+        <label class="freq-label" for="fMonthly">
+          <span class="freq-label-main">Monthly</span>
+          <span class="freq-label-sub">One note per month</span>
+        </label>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="saveFreqBtn" onclick="saveFrequency()">Save frequency</button>
+    <p style="font-size:12px;color:var(--ink-soft);margin-top:10px;">
+      ⚠️ After saving, also update <code>FREQUENCY</code> in <code>index.html</code> to match so the app shows the right note.
+    </p>
+  </div>
+
+  <!-- Test push -->
+  <div class="card">
+    <div class="card-title">Push Notifications</div>
+    <span class="note-badge" id="nextNoteLabel">Loading…</span>
+    <p style="font-size:14px;color:var(--ink-mid);margin-bottom:16px;">
+      The server sends automatically at your chosen frequency. Use this to send a test push right now.
+    </p>
+    <button class="btn btn-secondary" onclick="sendTestPush()">Send test push now</button>
+  </div>
+
+  <!-- Change password -->
+  <div class="card">
+    <div class="card-title">Admin Password</div>
+    <div class="field">
+      <label for="newPw">New password</label>
+      <input type="password" id="newPw" placeholder="Enter new password" />
+    </div>
+    <button class="btn btn-danger" onclick="changePassword()">Update password</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  var SERVER = '';
+  var PASSWORD = '';
+
+  // ── Persist server URL across reloads
+  (function() {
+    var saved = localStorage.getItem('dash-server');
+    if (saved) document.getElementById('serverUrl').value = saved;
+  })();
+
+  // ── LOGIN ────────────────────────────────────────────────────
+  async function doLogin() {
+    var btn = document.getElementById('loginBtn');
+    var errEl = document.getElementById('loginError');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    errEl.style.display = 'none';
+
+    SERVER   = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+    PASSWORD = document.getElementById('loginPassword').value;
+
+    try {
+      // Verify credentials by attempting a settings update with no-op payload
+      var res = await fetch(SERVER + '/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPassword: PASSWORD })
+      });
+      if (res.status === 401) throw new Error('wrong password');
+      if (!res.ok) throw new Error('server error');
+
+      localStorage.setItem('dash-server', SERVER);
+      showDashboard();
+    } catch (e) {
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  }
+
+  document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  function doLogout() {
+    SERVER = ''; PASSWORD = '';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginPassword').value = '';
+  }
+
+  // ── DASHBOARD ────────────────────────────────────────────────
+  async function showDashboard() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('serverLabel').textContent = SERVER;
+    await loadStats();
+    await loadCurrentSettings();
+  }
+
+  async function loadStats() {
+    try {
+      var res = await fetch(SERVER + '/stats');
+      var data = await res.json();
+      document.getElementById('statSubs').textContent = data.subscribers;
+      document.getElementById('statNote').textContent = '#' + (data.noteIndex + 1);
+      document.getElementById('statSendToday').textContent = data.shouldSendToday ? 'Yes' : 'No';
+      document.getElementById('nextNoteLabel').textContent = 'Next push → Note #' + (data.noteIndex + 1);
+    } catch (e) {
+      console.warn('Stats load failed', e);
+    }
+  }
+
+  async function loadCurrentSettings() {
+    try {
+      var res = await fetch(SERVER + '/settings');
+      var data = await res.json();
+      var radio = document.querySelector('input[name="freq"][value="' + data.frequency + '"]');
+      if (radio) radio.checked = true;
+    } catch (e) {
+      console.warn('Settings load failed', e);
+    }
+  }
+
+  // ── SAVE FREQUENCY ───────────────────────────────────────────
+  async function saveFrequency() {
+    var selected = document.querySelector('input[name="freq"]:checked');
+    if (!selected) { showToast('Select a frequency first'); return; }
+
+    var btn = document.getElementById('saveFreqBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+      var res = await fetch(SERVER + '/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPassword: PASSWORD, frequency: selected.value })
+      });
+      var data = await res.json();
+      if (data.ok) {
+        showToast('Frequency saved — ' + selected.value);
+        await loadStats();
+      } else {
+        showToast('Error: ' + (data.error || 'unknown'));
+      }
+    } catch (e) {
+      showToast('Request failed');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Save frequency';
+  }
+
+  // ── SEND TEST PUSH ───────────────────────────────────────────
+  async function sendTestPush() {
+    try {
+      var res = await fetch(SERVER + '/send-now', { method: 'POST' });
+      var data = await res.json();
+      if (data.ok) showToast('Push sent! 💚');
+      else showToast('Push failed');
+    } catch (e) {
+      showToast('Could not reach server');
+    }
+  }
+
+  // ── CHANGE PASSWORD ──────────────────────────────────────────
+  async function changePassword() {
+    var newPw = document.getElementById('newPw').value.trim();
+    if (!newPw) { showToast('Enter a new password'); return; }
+
+    try {
+      var res = await fetch(SERVER + '/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPassword: PASSWORD, newPassword: newPw })
+      });
+      var data = await res.json();
+      if (data.ok) {
+        PASSWORD = newPw;
+        document.getElementById('newPw').value = '';
+        showToast('Password updated');
+      } else {
+        showToast('Error: ' + (data.error || 'unknown'));
+      }
+    } catch (e) {
+      showToast('Request failed');
+    }
+  }
+
+  // ── TOAST ────────────────────────────────────────────────────
+  var toastTimer;
+  function showToast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
+  }
+</script>
+</body>
+</html>
