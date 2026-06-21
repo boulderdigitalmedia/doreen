@@ -1,10 +1,10 @@
-// ── Shared utilities for all Netlify Functions (Phase 2 — multi-tenant)
+// ── Shared utilities for all Netlify Functions (Phase 5 — with Twilio SMS)
 const { createClient } = require('@supabase/supabase-js');
 const { Resend }       = require('resend');
 const webpush          = require('web-push');
+const twilio           = require('twilio');
 
 // ── Clients ──────────────────────────────────────────────────────
-// Service-role key bypasses RLS — only used server-side, never in the browser
 const sb = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -14,8 +14,13 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 webpush.setVapidDetails(
   `mailto:${process.env.VAPID_EMAIL || 'you@example.com'}`,
-  process.env.VAPID_PUBLIC_KEY  || 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg',
-  process.env.VAPID_PRIVATE_KEY || 'llUTuugY94qON-Sy6BkeOXfgkinKKzNcwB1868QC-Lk'
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
+
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
 );
 
 // ── Date helpers ─────────────────────────────────────────────────
@@ -46,10 +51,10 @@ function getNoteIndex(gift) {
 
 function shouldSendToday(gift) {
   const days = getDaysElapsed(gift.start_date);
-  if (days === 0)                      return true;
-  if (gift.frequency === 'daily')      return true;
-  if (gift.frequency === 'weekly')     return days % 7  === 0;
-  if (gift.frequency === 'biweekly')   return days % 14 === 0;
+  if (days === 0)                    return true;
+  if (gift.frequency === 'daily')    return true;
+  if (gift.frequency === 'weekly')   return days % 7  === 0;
+  if (gift.frequency === 'biweekly') return days % 14 === 0;
   if (gift.frequency === 'monthly') {
     const start = new Date(gift.start_date);
     const now   = getNZDate();
@@ -86,14 +91,12 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f2ec;padding:40px 20px;">
     <tr><td align="center">
       <table width="100%" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #dde8dd;">
-        <!-- Header -->
         <tr>
           <td style="padding:28px 32px 20px;border-bottom:1px solid #dde8dd;">
             <p style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#8fa391;font-family:'DM Sans',sans-serif;">From</p>
             <p style="margin:4px 0 0;font-size:22px;font-weight:300;color:#2c3a2e;">${gift.sender_name || 'Your Favorite'}</p>
           </td>
         </tr>
-        <!-- Note number -->
         <tr>
           <td style="padding:24px 32px 16px;">
             <span style="background:#e8f0e8;color:#7a9e7e;font-size:11px;font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;border:1px solid #c8dbc9;">
@@ -101,9 +104,7 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
             </span>
           </td>
         </tr>
-        <!-- Photo -->
         ${photo ? `<tr><td style="padding:0 32px 24px;">${photo}</td></tr>` : ''}
-        <!-- Quote -->
         <tr>
           <td style="padding:0 32px 32px;">
             <p style="margin:0;font-size:20px;font-weight:300;font-style:italic;line-height:1.6;color:#2c3a2e;">
@@ -111,7 +112,6 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
             </p>
           </td>
         </tr>
-        <!-- CTA -->
         <tr>
           <td style="padding:0 32px 36px;">
             <a href="${giftUrl}"
@@ -120,7 +120,6 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
             </a>
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="padding:20px 32px;border-top:1px solid #dde8dd;">
             <p style="margin:0;font-size:12px;color:#8fa391;font-family:'DM Sans',sans-serif;">
@@ -136,6 +135,24 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
 </html>`;
 }
 
+// ── SMS ──────────────────────────────────────────────────────────
+
+function buildSmsBody(gift, note, noteNum, giftUrl) {
+  // Keep it short — first ~100 chars of note + link
+  const preview = note.text.length > 100
+    ? note.text.substring(0, 97) + '…'
+    : note.text;
+  return `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'}: "${preview}" — ${giftUrl}`;
+}
+
+async function sendSms(phone, body) {
+  await twilioClient.messages.create({
+    body,
+    from: process.env.TWILIO_PHONE_NUMBER,
+    to:   phone,
+  });
+}
+
 // ── Core send function ───────────────────────────────────────────
 
 async function sendGiftNotifications(gift, force = false) {
@@ -143,7 +160,6 @@ async function sendGiftNotifications(gift, force = false) {
     return { skipped: true, reason: `Not a send day (${gift.frequency})` };
   }
 
-  // Fetch recipient
   const { data: recipient } = await sb
     .from('recipients')
     .select('*')
@@ -154,7 +170,6 @@ async function sendGiftNotifications(gift, force = false) {
     return { skipped: true, reason: 'No recipient or no channels set up' };
   }
 
-  // Fetch today's note
   const noteIndex = getNoteIndex(gift);
   const { data: note } = await sb
     .from('notes')
@@ -177,7 +192,6 @@ async function sendGiftNotifications(gift, force = false) {
       await sendPush(recipient.push_subscription, noteNum, gift.sender_name);
       results.push = 'sent';
     } catch (err) {
-      // Expired subscription — clear it
       if (err.statusCode === 410 || err.statusCode === 404) {
         await sb.from('recipients')
           .update({ push_subscription: null, channels: recipient.channels.filter(c => c !== 'push') })
@@ -204,9 +218,17 @@ async function sendGiftNotifications(gift, force = false) {
     }
   }
 
-  // SMS — Phase 5 (Twilio, gated behind sms_addon)
+  // SMS (gated: buyer must have sms_addon enabled, recipient must have chosen SMS + provided phone)
   if (recipient.channels.includes('sms') && gift.sms_addon && recipient.phone) {
-    results.sms = 'skipped — Phase 5';
+    try {
+      const body = buildSmsBody(gift, note, noteNum, giftUrl);
+      await sendSms(recipient.phone, body);
+      results.sms = 'sent';
+    } catch (err) {
+      results.sms = `error: ${err.message}`;
+    }
+  } else if (recipient.channels.includes('sms') && !gift.sms_addon) {
+    results.sms = 'skipped — sms_addon not enabled for this gift';
   }
 
   console.log(`[${gift.slug}] note ${noteNum}:`, results);
