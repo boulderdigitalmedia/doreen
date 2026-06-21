@@ -23,6 +23,21 @@
   to     = "/.netlify/functions/change-password"
   status = 200
 
+[[redirects]]
+  from   = "/api/create-checkout"
+  to     = "/.netlify/functions/create-checkout"
+  status = 200
+
+[[redirects]]
+  from   = "/api/stripe-webhook"
+  to     = "/.netlify/functions/stripe-webhook"
+  status = 200
+
+[[redirects]]
+  from   = "/api/customer-portal"
+  to     = "/.netlify/functions/customer-portal"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
@@ -37,6 +52,11 @@
 [[redirects]]
   from   = "/account"
   to     = "/account.html"
+  status = 200
+
+[[redirects]]
+  from   = "/success"
+  to     = "/success.html"
   status = 200
 
 # ── Vanity slug catch-all (MUST be last) ──────────────────────────────────────

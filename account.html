@@ -13,6 +13,7 @@
       --bg: #f5f2ec; --surface: #fff; --sage: #7a9e7e; --sage-light: #c8dbc9;
       --sage-pale: #e8f0e8; --ink: #2c3a2e; --ink-mid: #5a6e5c; --ink-soft: #8fa391;
       --border: #dde8dd; --shadow: rgba(80,110,85,0.10); --red: #c0392b; --red-pale: #fdf0ef;
+      --gold: #b8860b; --gold-pale: #fdf8e8;
     }
     html, body { min-height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
 
@@ -48,33 +49,53 @@
     .btn-secondary { background: var(--sage-pale); color: var(--sage); border: 1px solid var(--sage-light); }
     .btn-ghost     { background: transparent; color: var(--ink-mid); border: 1px solid var(--border); }
     .btn-danger    { background: var(--red-pale); color: var(--red); border: 1px solid #f5c6c2; }
+    .btn-gold      { background: var(--gold-pale); color: var(--gold); border: 1px solid #e8d070; }
     .btn-sm        { padding: 7px 12px; font-size: 13px; }
-    .btn-full      { width: 100%; }
+
+    /* ── SUBSCRIPTION BANNER ── */
+    .sub-banner { background: var(--gold-pale); border: 1px solid #e8d070; border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .sub-banner-text { font-size: 13px; color: var(--gold); font-weight: 500; }
+    .sub-banner-detail { font-size: 12px; color: #a07830; margin-top: 2px; }
+
+    /* ── PAYWALL ── */
+    #viewPaywall { display: none; }
+    .paywall-wrap { max-width: 680px; margin: 0 auto; padding: 48px 20px 80px; text-align: center; }
+    .paywall-icon { font-size: 44px; margin-bottom: 16px; }
+    .paywall-title { font-family: 'Cormorant Garamond', serif; font-size: 34px; font-weight: 300; margin-bottom: 10px; }
+    .paywall-sub { font-size: 15px; color: var(--ink-soft); max-width: 400px; margin: 0 auto 40px; line-height: 1.6; }
+    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+    .pricing-card { background: var(--surface); border: 2px solid var(--border); border-radius: 18px; padding: 28px 24px; cursor: pointer; transition: border-color 0.15s; position: relative; text-align: left; }
+    .pricing-card:hover, .pricing-card.selected { border-color: var(--sage); }
+    .pricing-card.selected { background: var(--sage-pale); }
+    .pricing-badge { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--sage); color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+    .pricing-name { font-size: 13px; font-weight: 500; color: var(--ink-soft); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .pricing-price { font-family: 'Cormorant Garamond', serif; font-size: 36px; font-weight: 300; color: var(--ink); margin-bottom: 4px; }
+    .pricing-price span { font-size: 16px; font-family: 'DM Sans', sans-serif; color: var(--ink-soft); }
+    .pricing-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-top: 12px; }
+    .feature-list { text-align: left; max-width: 360px; margin: 0 auto 32px; }
+    .feature-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-mid); margin-bottom: 10px; }
+    .feature-check { color: var(--sage); font-size: 16px; }
 
     /* ── GIFT GRID ── */
     .gift-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-
     .gift-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: 0 2px 12px var(--shadow); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
     .gift-card:hover { border-color: var(--sage-light); box-shadow: 0 4px 20px var(--shadow); }
-
     .gift-card-new { border: 2px dashed var(--border); background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 160px; color: var(--ink-soft); font-size: 14px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
     .gift-card-new:hover { border-color: var(--sage); color: var(--sage); }
     .gift-card-new .plus { font-size: 28px; line-height: 1; }
-
     .gift-name { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 300; margin-bottom: 4px; }
     .gift-slug { font-size: 12px; color: var(--ink-soft); background: var(--sage-pale); border: 1px solid var(--sage-light); border-radius: 20px; padding: 2px 8px; display: inline-block; margin-bottom: 14px; }
-    .gift-meta { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .gift-meta { display: flex; flex-direction: column; gap: 6px; }
     .gift-meta-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-mid); }
     .channel-pill { font-size: 11px; padding: 2px 7px; border-radius: 20px; font-weight: 500; }
     .channel-on  { background: var(--sage-pale); color: var(--sage); border: 1px solid var(--sage-light); }
     .channel-off { background: #f0f0f0; color: #aaa; border: 1px solid #e0e0e0; }
-    .gift-note-count { font-size: 12px; color: var(--ink-soft); }
 
     /* ── BACK BUTTON ── */
     .back-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-soft); cursor: pointer; margin-bottom: 24px; background: none; border: none; font-family: 'DM Sans', sans-serif; padding: 0; }
     .back-btn:hover { color: var(--ink); }
 
-    /* ── CARDS / PANELS ── */
+    /* ── PANELS ── */
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 12px var(--shadow); }
     .panel-title { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); margin-bottom: 18px; }
 
@@ -91,13 +112,6 @@
     textarea { resize: vertical; min-height: 90px; }
     .slug-preview { font-size: 12px; color: var(--ink-soft); margin-top: 5px; }
 
-    /* ── FREQUENCY PICKER ── */
-    .freq-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-    .freq-opt { position: relative; }
-    .freq-opt input { position: absolute; opacity: 0; }
-    .freq-lbl { display: block; padding: 10px 8px; border: 2px solid var(--border); border-radius: 10px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink-mid); transition: border-color 0.15s, background 0.15s; }
-    .freq-opt input:checked + .freq-lbl { border-color: var(--sage); background: var(--sage-pale); color: var(--sage); }
-
     /* ── RECIPIENT STATUS ── */
     .channel-status-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
     .channel-status { display: flex; align-items: center; gap: 5px; font-size: 13px; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg); }
@@ -113,7 +127,7 @@
     .note-text-preview { flex: 1; font-size: 14px; color: var(--ink); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .note-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
-    /* ── NOTE EDITOR (inline) ── */
+    /* ── NOTE EDITOR ── */
     .note-editor { background: var(--sage-pale); border: 1px solid var(--sage-light); border-radius: 12px; padding: 16px; }
     .photo-upload-area { border: 2px dashed var(--sage-light); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; margin-bottom: 12px; font-size: 13px; color: var(--ink-soft); transition: border-color 0.15s; }
     .photo-upload-area:hover { border-color: var(--sage); }
@@ -139,6 +153,8 @@
     .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     .empty-state { text-align: center; padding: 48px 20px; color: var(--ink-soft); font-size: 14px; }
     .empty-state-icon { font-size: 32px; margin-bottom: 12px; }
+
+    @media (max-width: 500px) { .pricing-grid { grid-template-columns: 1fr; } .field-row { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -155,8 +171,51 @@
     </div>
   </div>
 
+  <!-- VIEW: PAYWALL (no active subscription) -->
+  <div id="viewPaywall">
+    <div class="paywall-wrap">
+      <div class="paywall-icon">💌</div>
+      <div class="paywall-title">Start sending love</div>
+      <div class="paywall-sub">One subscription. Up to 4 recipients. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
+
+      <div class="pricing-grid">
+        <div class="pricing-card" id="planMonthly" onclick="selectPlan('monthly')">
+          <div class="pricing-name">Monthly</div>
+          <div class="pricing-price">$9<span>/mo</span></div>
+          <div class="pricing-desc">Cancel any time. Billed monthly.</div>
+        </div>
+        <div class="pricing-card selected" id="planAnnual" onclick="selectPlan('annual')">
+          <div class="pricing-badge">Best value — 2 months free</div>
+          <div class="pricing-name">Annual</div>
+          <div class="pricing-price">$90<span>/yr</span></div>
+          <div class="pricing-desc">$7.50/mo. Billed once per year.</div>
+        </div>
+      </div>
+
+      <div class="feature-list">
+        <div class="feature-row"><span class="feature-check">✓</span> Up to 4 gift recipients</div>
+        <div class="feature-row"><span class="feature-check">✓</span> Unlimited notes + photos</div>
+        <div class="feature-row"><span class="feature-check">✓</span> Push notifications &amp; email delivery</div>
+        <div class="feature-row"><span class="feature-check">✓</span> Daily, weekly, or monthly cadence</div>
+        <div class="feature-row"><span class="feature-check">✓</span> Custom vanity URLs</div>
+      </div>
+
+      <button class="btn btn-primary" style="font-size:16px;padding:14px 36px" onclick="startCheckout()" id="checkoutBtn">
+        Get started →
+      </button>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Cancel any time.</p>
+    </div>
+  </div>
+
   <!-- VIEW: GIFT LIST -->
   <div class="page" id="viewGifts" style="display:none">
+    <div id="subBanner" style="display:none" class="sub-banner">
+      <div>
+        <div class="sub-banner-text" id="subBannerText"></div>
+        <div class="sub-banner-detail" id="subBannerDetail"></div>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="openPortal()">Manage billing</button>
+    </div>
     <div class="section-header">
       <div>
         <div class="section-title">Your Gifts</div>
@@ -170,7 +229,6 @@
   <div class="page" id="viewDetail" style="display:none">
     <button class="back-btn" onclick="showGiftList()">← All gifts</button>
 
-    <!-- Settings -->
     <div class="panel">
       <div class="panel-title">Gift settings</div>
       <div class="field-row">
@@ -206,7 +264,6 @@
       <button class="btn btn-primary" onclick="saveGiftSettings()">Save settings</button>
     </div>
 
-    <!-- Recipient status -->
     <div class="panel">
       <div class="panel-title">Recipient</div>
       <div class="channel-status-row" id="recipientChannels">
@@ -216,7 +273,6 @@
       <button class="btn btn-secondary btn-sm" onclick="sendTestNow()">Send test now</button>
     </div>
 
-    <!-- Notes -->
     <div class="panel">
       <div class="panel-title">Notes <span id="noteCountBadge" style="font-weight:400;color:var(--ink-soft)"></span></div>
       <div class="notes-list" id="notesList"></div>
@@ -239,10 +295,9 @@
       </div>
     </div>
 
-    <!-- Danger zone -->
     <div class="danger-zone">
       <div class="danger-title">Delete this gift</div>
-      <div class="danger-desc">This permanently removes the gift, all its notes, and the recipient's access. This cannot be undone.</div>
+      <div class="danger-desc">Permanently removes the gift, all notes, and the recipient's access. Cannot be undone.</div>
       <button class="btn btn-danger btn-sm" onclick="deleteGift()">Delete gift</button>
     </div>
   </div>
@@ -282,7 +337,6 @@
         </select>
       </div>
     </div>
-    <p style="font-size:12px;color:var(--ink-soft);margin-top:-8px;">Recipient URL: <strong id="newSlugFull"></strong></p>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1" onclick="createGift()">Create gift</button>
       <button class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
@@ -317,15 +371,18 @@
 <script>
   const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
   const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-  const SITE_URL          = 'YOUR_SITE_URL'; // e.g. https://yourdomain.com
+  const SITE_URL          = 'YOUR_SITE_URL'; // e.g. https://yourdomain.com — no trailing slash
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  var USER         = null;
-  var GIFTS        = [];
-  var CURRENT_GIFT = null;
-  var NOTES        = [];
-  var RECIPIENT    = null;
-  var ADD_PHOTO_FILE = null;
+  var USER          = null;
+  var SESSION       = null;
+  var PROFILE       = null;
+  var GIFTS         = [];
+  var CURRENT_GIFT  = null;
+  var NOTES         = [];
+  var RECIPIENT     = null;
+  var SELECTED_PLAN = 'annual';
+  var ADD_PHOTO_FILE  = null;
   var EDIT_PHOTO_FILE = null;
 
   // ── BOOT ──────────────────────────────────────────────────────
@@ -334,12 +391,29 @@
     const { data: { session } } = await sb.auth.getSession();
     if (!session) { window.location.href = '/login'; return; }
 
-    USER = session.user;
+    SESSION = session;
+    USER    = session.user;
     document.getElementById('headerEmail').textContent = USER.email;
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
 
-    await showGiftList();
+    // Load subscription profile
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('stripe_status, plan, current_period_end')
+      .eq('id', USER.id)
+      .single();
+
+    PROFILE = profile;
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display     = 'block';
+
+    const isActive = profile && (profile.stripe_status === 'active' || profile.stripe_status === 'trialing');
+
+    if (isActive) {
+      await showGiftList();
+    } else {
+      showPaywall();
+    }
   }
 
   async function signOut() {
@@ -347,16 +421,100 @@
     window.location.href = '/login';
   }
 
+  // ── PAYWALL ───────────────────────────────────────────────────
+
+  function showPaywall() {
+    document.getElementById('viewPaywall').style.display = 'block';
+    document.getElementById('viewGifts').style.display   = 'none';
+    document.getElementById('viewDetail').style.display  = 'none';
+  }
+
+  function selectPlan(plan) {
+    SELECTED_PLAN = plan;
+    document.getElementById('planMonthly').classList.toggle('selected', plan === 'monthly');
+    document.getElementById('planAnnual').classList.toggle('selected',  plan === 'annual');
+  }
+
+  async function startCheckout() {
+    var btn = document.getElementById('checkoutBtn');
+    btn.disabled = true;
+    btn.textContent = 'Redirecting to checkout…';
+
+    try {
+      var res  = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + SESSION.access_token,
+        },
+        body: JSON.stringify({ plan: SELECTED_PLAN }),
+      });
+      var data = await res.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showToast('Error: ' + (data.error || 'Could not start checkout'));
+        btn.disabled = false;
+        btn.textContent = 'Get started →';
+      }
+    } catch (e) {
+      showToast('Could not reach server');
+      btn.disabled = false;
+      btn.textContent = 'Get started →';
+    }
+  }
+
+  // ── CUSTOMER PORTAL ───────────────────────────────────────────
+
+  async function openPortal() {
+    try {
+      var res  = await fetch('/api/customer-portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + SESSION.access_token,
+        },
+      });
+      var data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else showToast('Error: ' + (data.error || 'unknown'));
+    } catch (e) {
+      showToast('Could not open billing portal');
+    }
+  }
+
   // ── GIFT LIST ─────────────────────────────────────────────────
 
   async function showGiftList() {
-    document.getElementById('viewDetail').style.display = 'none';
-    document.getElementById('viewGifts').style.display  = 'block';
+    document.getElementById('viewPaywall').style.display = 'none';
+    document.getElementById('viewDetail').style.display  = 'none';
+    document.getElementById('viewGifts').style.display   = 'block';
     CURRENT_GIFT = null;
+
+    // Show subscription status banner
+    if (PROFILE) {
+      var banner = document.getElementById('subBanner');
+      var bannerText   = document.getElementById('subBannerText');
+      var bannerDetail = document.getElementById('subBannerDetail');
+
+      if (PROFILE.stripe_status === 'past_due') {
+        banner.style.display  = 'flex';
+        bannerText.textContent = '⚠ Payment past due — your gifts may stop sending soon';
+        bannerDetail.textContent = 'Please update your payment method to keep your gifts active.';
+      } else if (PROFILE.stripe_status === 'trialing') {
+        banner.style.display = 'flex';
+        var trialEnd = PROFILE.current_period_end ? new Date(PROFILE.current_period_end).toLocaleDateString() : '';
+        bannerText.textContent   = '🎉 You\'re on a free trial';
+        bannerDetail.textContent = trialEnd ? 'Trial ends ' + trialEnd : '';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
 
     const { data, error } = await sb
       .from('gifts')
-      .select('*, recipients(channels, email, phone)')
+      .select('*, recipients(channels, email)')
       .eq('user_id', USER.id)
       .order('created_at');
 
@@ -393,18 +551,16 @@
       grid.appendChild(card);
     });
 
-    // New gift slot
     if (GIFTS.length < 4) {
-      var add  = document.createElement('div');
+      var add = document.createElement('div');
       add.className = 'gift-card gift-card-new';
       add.onclick   = openCreateModal;
       add.innerHTML = '<div class="plus">+</div><div>New gift</div>';
       grid.appendChild(add);
     }
 
-    // Empty slots (visual)
     var empty = 4 - GIFTS.length - (GIFTS.length < 4 ? 1 : 0);
-    for (var i = 0; i < empty; i++) {
+    for (var i = 0; i < Math.max(0, empty); i++) {
       var slot = document.createElement('div');
       slot.className = 'gift-card gift-card-new';
       slot.style.opacity = '0.35';
@@ -421,7 +577,6 @@
     document.getElementById('viewGifts').style.display  = 'none';
     document.getElementById('viewDetail').style.display = 'block';
 
-    // Populate settings
     document.getElementById('dName').value      = gift.display_name;
     document.getElementById('dSender').value    = gift.sender_name;
     document.getElementById('dSlug').value      = gift.slug;
@@ -429,7 +584,6 @@
     document.getElementById('dFrequency').value = gift.frequency;
     updateSlugPreview();
 
-    // Load recipient + notes in parallel
     const [{ data: rec }, { data: notes }] = await Promise.all([
       sb.from('recipients').select('*').eq('gift_id', gift.id).single(),
       sb.from('notes').select('*').eq('gift_id', gift.id).order('order_index')
@@ -437,31 +591,26 @@
 
     RECIPIENT = rec;
     NOTES     = notes || [];
-
     renderRecipient();
     renderNotes();
   }
 
   function renderRecipient() {
-    var row = document.getElementById('recipientChannels');
+    var row     = document.getElementById('recipientChannels');
     var emailEl = document.getElementById('recipientEmail');
 
-    if (!RECIPIENT || !RECIPIENT.channels || RECIPIENT.channels.length === 0) {
-      row.innerHTML = '<div class="channel-status inactive">Recipient hasn\'t opened the gift yet</div>';
+    if (!RECIPIENT || !RECIPIENT.channels || !RECIPIENT.channels.length) {
+      row.innerHTML     = '<div class="channel-status inactive">Recipient hasn\'t opened the gift yet</div>';
       emailEl.textContent = '';
       return;
     }
 
-    var channels = RECIPIENT.channels;
     row.innerHTML = ['push','email','sms'].map(function(c) {
-      var on = channels.includes(c);
-      return '<div class="channel-status ' + (on ? 'active' : 'inactive') + '">' +
-        (on ? '✓' : '○') + ' ' + c +
-      '</div>';
+      var on = RECIPIENT.channels.includes(c);
+      return '<div class="channel-status ' + (on ? 'active' : 'inactive') + '">' + (on ? '✓' : '○') + ' ' + c + '</div>';
     }).join('');
 
-    if (RECIPIENT.email) emailEl.textContent = '✉ ' + RECIPIENT.email;
-    else emailEl.textContent = '';
+    emailEl.textContent = RECIPIENT.email ? '✉ ' + RECIPIENT.email : '';
   }
 
   function renderNotes() {
@@ -478,7 +627,6 @@
     NOTES.forEach(function(note, i) {
       var row = document.createElement('div');
       row.className = 'note-row';
-      row.id = 'noteRow-' + note.id;
 
       var thumb = note.photo_url
         ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" />'
@@ -497,7 +645,7 @@
     });
   }
 
-  // ── SAVE GIFT SETTINGS ────────────────────────────────────────
+  // ── SAVE SETTINGS ─────────────────────────────────────────────
 
   async function saveGiftSettings() {
     var updates = {
@@ -505,14 +653,11 @@
       sender_name:  document.getElementById('dSender').value.trim(),
       slug:         document.getElementById('dSlug').value.trim().toLowerCase(),
       start_date:   document.getElementById('dStartDate').value,
-      frequency:    document.getElementById('dFrequency').value
+      frequency:    document.getElementById('dFrequency').value,
     };
-
     if (!updates.slug) { showToast('Slug is required'); return; }
-
     var { error } = await sb.from('gifts').update(updates).eq('id', CURRENT_GIFT.id);
     if (error) { showToast('Error: ' + error.message); return; }
-
     Object.assign(CURRENT_GIFT, updates);
     updateSlugPreview();
     showToast('Settings saved ✓');
@@ -525,7 +670,7 @@
       var res  = await fetch('/api/send-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: CURRENT_GIFT.slug, adminPassword: '' })
+        body: JSON.stringify({ slug: CURRENT_GIFT.slug, adminPassword: '' }),
       });
       var data = await res.json();
       showToast(data.ok ? 'Test sent! 💚' : 'Send failed: ' + (data.error || 'unknown'));
@@ -544,7 +689,6 @@
     document.getElementById('addPhotoLabel').style.display   = 'block';
     document.getElementById('addNoteText').value = '';
   }
-
   function cancelAddNote() {
     document.getElementById('addNoteEditor').style.display = 'none';
     ADD_PHOTO_FILE = null;
@@ -560,14 +704,9 @@
       if (!photoUrl) return;
     }
 
-    var nextIndex = NOTES.length;
     var { error } = await sb.from('notes').insert({
-      gift_id:     CURRENT_GIFT.id,
-      order_index: nextIndex,
-      text:        text,
-      photo_url:   photoUrl
+      gift_id: CURRENT_GIFT.id, order_index: NOTES.length, text, photo_url: photoUrl,
     });
-
     if (error) { showToast('Error: ' + error.message); return; }
 
     cancelAddNote();
@@ -582,62 +721,41 @@
   function openEditNote(noteId) {
     var note = NOTES.find(function(n) { return n.id === noteId; });
     if (!note) return;
-
     document.getElementById('editNoteId').value   = note.id;
     document.getElementById('editNoteText').value = note.text;
     document.getElementById('editPhotoUrl').value = note.photo_url || '';
     EDIT_PHOTO_FILE = null;
-
     var preview = document.getElementById('editPhotoPreview');
     var label   = document.getElementById('editPhotoLabel');
-    if (note.photo_url) {
-      preview.src = note.photo_url;
-      preview.style.display = 'block';
-      label.style.display   = 'none';
-    } else {
-      preview.style.display = 'none';
-      label.style.display   = 'block';
-    }
-
+    if (note.photo_url) { preview.src = note.photo_url; preview.style.display = 'block'; label.style.display = 'none'; }
+    else { preview.style.display = 'none'; label.style.display = 'block'; }
     document.getElementById('editNoteModal').classList.add('open');
   }
-
   function closeEditModal() {
     document.getElementById('editNoteModal').classList.remove('open');
     EDIT_PHOTO_FILE = null;
   }
-
   async function saveEditNote() {
     var id   = document.getElementById('editNoteId').value;
     var text = document.getElementById('editNoteText').value.trim();
     if (!text) { showToast('Note text is required'); return; }
-
     var photoUrl = document.getElementById('editPhotoUrl').value || null;
-    if (EDIT_PHOTO_FILE) {
-      photoUrl = await uploadPhoto(EDIT_PHOTO_FILE, CURRENT_GIFT.id);
-      if (!photoUrl) return;
-    }
-
+    if (EDIT_PHOTO_FILE) { photoUrl = await uploadPhoto(EDIT_PHOTO_FILE, CURRENT_GIFT.id); if (!photoUrl) return; }
     var { error } = await sb.from('notes').update({ text, photo_url: photoUrl }).eq('id', id);
     if (error) { showToast('Error: ' + error.message); return; }
-
     closeEditModal();
     const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
     NOTES = notes || [];
     renderNotes();
     showToast('Note saved ✓');
   }
-
   async function deleteNote(noteId) {
     if (!confirm('Delete this note?')) return;
     var { error } = await sb.from('notes').delete().eq('id', noteId);
     if (error) { showToast('Error: ' + error.message); return; }
-
-    // Renumber remaining notes
     NOTES = NOTES.filter(function(n) { return n.id !== noteId; });
     var updates = NOTES.map(function(n, i) { return sb.from('notes').update({ order_index: i }).eq('id', n.id); });
     await Promise.all(updates);
-
     const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
     NOTES = notes || [];
     renderNotes();
@@ -647,31 +765,24 @@
   // ── PHOTO UPLOAD ──────────────────────────────────────────────
 
   function handlePhotoSelect(mode) {
-    var input   = document.getElementById(mode + 'PhotoInput');
-    var file    = input.files[0];
+    var file = document.getElementById(mode + 'PhotoInput').files[0];
     if (!file) return;
-
     if (mode === 'add') ADD_PHOTO_FILE = file;
     else EDIT_PHOTO_FILE = file;
-
     var reader = new FileReader();
     reader.onload = function(e) {
       var preview = document.getElementById(mode + 'PhotoPreview');
-      var label   = document.getElementById(mode + 'PhotoLabel');
-      preview.src           = e.target.result;
+      preview.src = e.target.result;
       preview.style.display = 'block';
-      label.style.display   = 'none';
+      document.getElementById(mode + 'PhotoLabel').style.display = 'none';
     };
     reader.readAsDataURL(file);
   }
-
   async function uploadPhoto(file, giftId) {
     var ext      = file.name.split('.').pop();
     var filename = USER.id + '/' + giftId + '/' + Date.now() + '.' + ext;
-
     var { error } = await sb.storage.from('photos').upload(filename, file, { upsert: true });
     if (error) { showToast('Photo upload failed: ' + error.message); return null; }
-
     var { data } = sb.storage.from('photos').getPublicUrl(filename);
     return data.publicUrl;
   }
@@ -688,56 +799,30 @@
     updateNewSlugPreview();
     document.getElementById('createModal').classList.add('open');
   }
-
-  function closeCreateModal() {
-    document.getElementById('createModal').classList.remove('open');
-  }
-
+  function closeCreateModal() { document.getElementById('createModal').classList.remove('open'); }
   function autoSlug() {
     var name = document.getElementById('newName').value;
-    var slug = name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-');
+    var slug = name.toLowerCase().replace(/[^a-z0-9\s-]/g,'').trim().replace(/\s+/g,'-').replace(/-+/g,'-');
     document.getElementById('newSlug').value = slug;
     updateNewSlugPreview();
   }
-
   function updateNewSlugPreview() {
     var slug = document.getElementById('newSlug').value;
     document.getElementById('newSlugPreview').textContent = slug ? SITE_URL + '/' + slug : '';
-    document.getElementById('newSlugFull').textContent    = slug ? SITE_URL + '/' + slug : '';
   }
-
   async function createGift() {
     var errEl = document.getElementById('createError');
     errEl.style.display = 'none';
-
     var name      = document.getElementById('newName').value.trim();
     var sender    = document.getElementById('newSender').value.trim() || 'Your Favorite';
     var slug      = document.getElementById('newSlug').value.trim().toLowerCase();
     var startDate = document.getElementById('newStartDate').value;
     var frequency = document.getElementById('newFrequency').value;
-
     if (!name || !slug || !startDate) { errEl.textContent = 'All fields are required'; errEl.style.display = 'block'; return; }
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) { errEl.textContent = 'Slug must be lowercase letters, numbers and hyphens'; errEl.style.display = 'block'; return; }
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) { errEl.textContent = 'Slug: lowercase letters, numbers and hyphens only'; errEl.style.display = 'block'; return; }
     if (GIFTS.length >= 4) { errEl.textContent = 'You\'ve reached the 4-gift limit'; errEl.style.display = 'block'; return; }
-
-    var { error } = await sb.from('gifts').insert({
-      user_id:      USER.id,
-      slug,
-      display_name: name,
-      sender_name:  sender,
-      start_date:   startDate,
-      frequency,
-      status:       'active'
-    });
-
-    if (error) {
-      errEl.textContent = error.code === '23505'
-        ? 'That slug is already taken — try another'
-        : error.message;
-      errEl.style.display = 'block';
-      return;
-    }
-
+    var { error } = await sb.from('gifts').insert({ user_id: USER.id, slug, display_name: name, sender_name: sender, start_date: startDate, frequency, status: 'active' });
+    if (error) { errEl.textContent = error.code === '23505' ? 'That slug is already taken' : error.message; errEl.style.display = 'block'; return; }
     closeCreateModal();
     showToast('Gift created! 💚');
     await showGiftList();
@@ -746,14 +831,14 @@
   // ── DELETE GIFT ───────────────────────────────────────────────
 
   async function deleteGift() {
-    if (!confirm('Permanently delete "' + CURRENT_GIFT.display_name + '"? This cannot be undone.')) return;
+    if (!confirm('Permanently delete "' + CURRENT_GIFT.display_name + '"?')) return;
     var { error } = await sb.from('gifts').delete().eq('id', CURRENT_GIFT.id);
     if (error) { showToast('Error: ' + error.message); return; }
     showToast('Gift deleted');
     await showGiftList();
   }
 
-  // ── SLUG PREVIEW ──────────────────────────────────────────────
+  // ── SLUG PREVIEWS ─────────────────────────────────────────────
 
   function updateSlugPreview() {
     var slug = document.getElementById('dSlug') ? document.getElementById('dSlug').value : '';
@@ -767,7 +852,6 @@
     if (!str) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-
   var toastTimer;
   function showToast(msg) {
     var el = document.getElementById('toast');
@@ -776,15 +860,10 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
   }
-
-  // Close modals on overlay click
   document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) overlay.classList.remove('open');
-    });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.classList.remove('open'); });
   });
 
-  // ── RUN ───────────────────────────────────────────────────────
   boot();
 </script>
 </body>
