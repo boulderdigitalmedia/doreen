@@ -2,30 +2,44 @@
   publish = "."
   functions = "netlify/functions"
 
-# Clean API paths → Netlify Functions
+# ── API routes ────────────────────────────────────────────────────────────────
 [[redirects]]
-  from = "/api/subscribe"
-  to   = "/.netlify/functions/subscribe"
+  from   = "/api/subscribe"
+  to     = "/.netlify/functions/subscribe"
   status = 200
 
 [[redirects]]
-  from = "/api/settings"
-  to   = "/.netlify/functions/settings"
+  from   = "/api/settings"
+  to     = "/.netlify/functions/settings"
   status = 200
 
 [[redirects]]
-  from = "/api/stats"
-  to   = "/.netlify/functions/stats"
+  from   = "/api/send-now"
+  to     = "/.netlify/functions/send-now"
   status = 200
 
 [[redirects]]
-  from = "/api/send-now"
-  to   = "/.netlify/functions/send-now"
+  from   = "/api/change-password"
+  to     = "/.netlify/functions/change-password"
   status = 200
 
-# Gift recipient pages — catch-all for vanity slugs.
-# Netlify serves real files first, so /dashboard.html, /index.html, /api/*
-# are all handled before this rule fires.
+# ── Auth / dashboard clean URLs ───────────────────────────────────────────────
+[[redirects]]
+  from   = "/login"
+  to     = "/auth.html"
+  status = 200
+
+[[redirects]]
+  from   = "/signup"
+  to     = "/auth.html"
+  status = 200
+
+[[redirects]]
+  from   = "/account"
+  to     = "/account.html"
+  status = 200
+
+# ── Vanity slug catch-all (MUST be last) ──────────────────────────────────────
 [[redirects]]
   from   = "/:slug"
   to     = "/gift.html"

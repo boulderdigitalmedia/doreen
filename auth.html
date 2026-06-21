@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — From [Name], With Love</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f2ec; --surface: #fff; --sage: #7a9e7e; --sage-light: #c8dbc9;
+      --sage-pale: #e8f0e8; --ink: #2c3a2e; --ink-mid: #5a6e5c; --ink-soft: #8fa391;
+      --border: #dde8dd; --shadow: rgba(80,110,85,0.10); --red: #c0392b;
+    }
+    html, body { min-height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100svh; padding: 32px 20px; }
+    .logo { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 300; color: var(--ink); margin-bottom: 4px; text-align: center; }
+    .logo-sub { font-size: 13px; color: var(--ink-soft); margin-bottom: 36px; text-align: center; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 36px 32px; width: 100%; max-width: 380px; box-shadow: 0 4px 24px var(--shadow); }
+    .tab-row { display: flex; gap: 0; margin-bottom: 28px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .tab { flex: 1; padding: 10px; text-align: center; font-size: 14px; font-weight: 500; cursor: pointer; background: transparent; border: none; font-family: 'DM Sans', sans-serif; color: var(--ink-soft); transition: background 0.15s, color 0.15s; }
+    .tab.active { background: var(--sage-pale); color: var(--sage); }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; color: var(--ink-mid); margin-bottom: 6px; }
+    input[type="email"], input[type="password"] { width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--ink); background: var(--bg); outline: none; transition: border-color 0.15s; }
+    input:focus { border-color: var(--sage); }
+    .btn { width: 100%; padding: 13px; background: var(--sage); color: #fff; border: none; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 8px; transition: opacity 0.15s; }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
+    .success { color: var(--sage); font-size: 13px; margin-top: 10px; display: none; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="logo">From [Name], With Love</div>
+  <div class="logo-sub">Seller dashboard</div>
+
+  <div class="card">
+    <div class="tab-row">
+      <button class="tab active" id="tabLogin"  onclick="switchTab('login')">Sign in</button>
+      <button class="tab"        id="tabSignup" onclick="switchTab('signup')">Create account</button>
+    </div>
+
+    <div id="loginForm">
+      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com" /></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPw" placeholder="Password" /></div>
+      <p class="error" id="loginError"></p>
+      <button class="btn" id="loginBtn" onclick="doLogin()">Sign in</button>
+    </div>
+
+    <div id="signupForm" style="display:none">
+      <div class="field"><label>Email</label><input type="email" id="signupEmail" placeholder="you@example.com" /></div>
+      <div class="field"><label>Password</label><input type="password" id="signupPw" placeholder="At least 8 characters" /></div>
+      <p class="error" id="signupError"></p>
+      <p class="success" id="signupSuccess">Check your email to confirm your account, then sign in.</p>
+      <button class="btn" id="signupBtn" onclick="doSignup()">Create account</button>
+    </div>
+  </div>
+
+<script>
+  const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Redirect if already logged in
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if (session) window.location.href = '/account';
+  });
+
+  function switchTab(tab) {
+    document.getElementById('tabLogin').classList.toggle('active',  tab === 'login');
+    document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+    document.getElementById('loginForm').style.display  = tab === 'login'  ? 'block' : 'none';
+    document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
+  }
+
+  async function doLogin() {
+    var btn = document.getElementById('loginBtn');
+    var err = document.getElementById('loginError');
+    err.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Signing in…';
+
+    const { error } = await sb.auth.signInWithPassword({
+      email:    document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPw').value
+    });
+
+    if (error) {
+      err.textContent = error.message; err.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Sign in';
+    } else {
+      window.location.href = '/account';
+    }
+  }
+
+  async function doSignup() {
+    var btn     = document.getElementById('signupBtn');
+    var errEl   = document.getElementById('signupError');
+    var successEl = document.getElementById('signupSuccess');
+    errEl.style.display = 'none'; successEl.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Creating account…';
+
+    const { error } = await sb.auth.signUp({
+      email:    document.getElementById('signupEmail').value.trim(),
+      password: document.getElementById('signupPw').value
+    });
+
+    if (error) {
+      errEl.textContent = error.message; errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Create account';
+    } else {
+      successEl.style.display = 'block';
+      btn.textContent = 'Email sent!';
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      if (document.getElementById('loginForm').style.display !== 'none') doLogin();
+      else doSignup();
+    }
+  });
+</script>
+</body>
+</html>
