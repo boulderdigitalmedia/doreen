@@ -261,6 +261,15 @@
           </select>
         </div>
       </div>
+      <div class="field" style="margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" id="dSmsAddon" style="width:16px;height:16px;accent-color:var(--sage);" />
+          <span>Enable SMS add-on for this gift</span>
+        </label>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:5px;margin-left:26px;">
+          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding.
+        </p>
+      </div>
       <button class="btn btn-primary" onclick="saveGiftSettings()">Save settings</button>
     </div>
 
@@ -369,9 +378,9 @@
 <div id="toast"></div>
 
 <script>
-  const SUPABASE_URL      = 'https://nbakhtbcjxtqclgdjrqy.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_LgynmLJ_D8spp67rlhOBew_pZORWGmh';
-  const SITE_URL          = 'https://anoteforyou.app'; // e.g. https://yourdomain.com — no trailing slash
+  const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const SITE_URL          = 'YOUR_SITE_URL'; // e.g. https://yourdomain.com — no trailing slash
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   var USER          = null;
@@ -582,6 +591,7 @@
     document.getElementById('dSlug').value      = gift.slug;
     document.getElementById('dStartDate').value = gift.start_date;
     document.getElementById('dFrequency').value = gift.frequency;
+    document.getElementById('dSmsAddon').checked = !!gift.sms_addon;
     updateSlugPreview();
 
     const [{ data: rec }, { data: notes }] = await Promise.all([
@@ -654,6 +664,7 @@
       slug:         document.getElementById('dSlug').value.trim().toLowerCase(),
       start_date:   document.getElementById('dStartDate').value,
       frequency:    document.getElementById('dFrequency').value,
+      sms_addon:    document.getElementById('dSmsAddon').checked,
     };
     if (!updates.slug) { showToast('Slug is required'); return; }
     var { error } = await sb.from('gifts').update(updates).eq('id', CURRENT_GIFT.id);
