@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#f5f2ec" />
+  <title>From Your Favorite, With Love</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f5f2ec;
+      --surface:   #ffffff;
+      --sage:      #7a9e7e;
+      --sage-light:#c8dbc9;
+      --sage-pale: #e8f0e8;
+      --ink:       #2c3a2e;
+      --ink-mid:   #5a6e5c;
+      --ink-soft:  #8fa391;
+      --cream:     #faf8f3;
+      --border:    #dde8dd;
+      --shadow:    rgba(80,110,85,0.10);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LOADING ── */
+    #loading {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid var(--sage-light);
+      border-top-color: var(--sage);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 18px;
+      font-weight: 300;
+      color: var(--ink-soft);
+    }
+
+    /* ── NOT FOUND ── */
+    #notFound {
+      display: none;
+      min-height: 100svh;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      text-align: center;
+    }
+
+    #notFound h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 32px;
+      font-weight: 300;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+
+    #notFound p {
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── ONBOARDING OVERLAY ── */
+    #onboarding {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 100;
+      overflow-y: auto;
+      padding: 40px 20px 60px;
+    }
+
+    .ob-inner {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .ob-heart {
+      font-size: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .ob-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 300;
+      text-align: center;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .ob-sub {
+      text-align: center;
+      font-size: 14px;
+      color: var(--ink-soft);
+      margin-bottom: 36px;
+      line-height: 1.5;
+    }
+
+    .ob-section-label {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-soft);
+      margin-bottom: 12px;
+    }
+
+    .ob-option {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .ob-option.selected {
+      border-color: var(--sage);
+      background: var(--sage-pale);
+    }
+
+    .ob-option-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ob-option-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .ob-option-body { flex: 1; }
+
+    .ob-option-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .ob-option-desc {
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin-top: 2px;
+    }
+
+    .ob-check {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .ob-option.selected .ob-check {
+      border-color: var(--sage);
+      background: var(--sage);
+    }
+
+    .ob-option.selected .ob-check::after {
+      content: '';
+      width: 6px; height: 6px;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .ob-input-wrap {
+      display: none;
+      margin-top: 12px;
+    }
+
+    .ob-option.selected .ob-input-wrap { display: block; }
+
+    .ob-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--bg);
+      outline: none;
+    }
+
+    .ob-input:focus { border-color: var(--sage); }
+
+    .ob-btn {
+      width: 100%;
+      margin-top: 24px;
+      padding: 15px;
+      background: var(--sage);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .ob-btn:disabled { opacity: 0.5; }
+
+    .ob-skip {
+      display: block;
+      text-align: center;
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--ink-soft);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    /* ── MAIN APP ── */
+    #app {
+      display: none;
+      min-height: 100svh;
+      flex-direction: column;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* TOP BAR */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+      opacity: 0;
+      animation: fadeDown 0.7s ease 0.1s forwards;
+    }
+
+    .brand { display: flex; flex-direction: column; }
+    .brand-from  { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); }
+    .brand-name  { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 300; color: var(--ink); line-height: 1.1; }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+    .date-badge {
+      font-size: 12px;
+      color: var(--ink-soft);
+      background: var(--sage-pale);
+      border: 1px solid var(--sage-light);
+      border-radius: 20px;
+      padding: 4px 10px;
+    }
+
+    .fav-btn {
+      position: relative;
+      background: none;
+      border: none;
+      font-size: 18px;
+      color: var(--ink-soft);
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .fav-count {
+      position: absolute;
+      top: -2px; right: -4px;
+      background: var(--sage);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 500;
+      border-radius: 20px;
+      padding: 1px 4px;
+      min-width: 14px;
+      text-align: center;
+    }
+
+    /* PROGRESS */
+    .progress-bar {
+      margin: 16px 24px 0;
+      opacity: 0;
+      animation: fadeIn 0.7s ease 0.3s forwards;
+    }
+
+    .progress-track {
+      height: 3px;
+      background: var(--sage-light);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--sage);
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .progress-label {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-top: 5px;
+      text-align: right;
+      letter-spacing: 0.02em;
+    }
+
+    /* CARD */
+    .card-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 20px 8px;
+    }
+
+    .day-badge {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-soft);
+      margin-bottom: 12px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.4s forwards;
+    }
+
+    .today-ribbon {
+      display: none;
+      background: var(--sage);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 32px var(--shadow);
+      overflow: hidden;
+      position: relative;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.3s forwards;
+    }
+
+    .card.locked { filter: none; }
+
+    .photo-placeholder {
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: var(--sage-pale);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--ink-soft);
+      font-size: 28px;
+    }
+
+    .photo-hint { font-size: 11px; opacity: 0.6; }
+
+    .card-img {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      display: block;
+      transition: opacity 0.3s;
+    }
+
+    .card-img.loading { opacity: 0; }
+
+    .card-body { padding: 20px; }
+
+    .card-quote {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 19px;
+      font-weight: 300;
+      font-style: italic;
+      line-height: 1.55;
+      color: var(--ink);
+      transition: opacity 0.2s;
+    }
+
+    .card-quote.fading { opacity: 0; }
+
+    /* LOCK OVERLAY */
+    .lock-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(245,242,236,0.88);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .lock-icon { font-size: 28px; color: var(--sage-light); }
+
+    .lock-date {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 17px;
+      font-weight: 300;
+      color: var(--ink-mid);
+    }
+
+    /* BOTTOM CONTROLS */
+    .card-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 14px 24px 6px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.5s forwards;
+    }
+
+    .nav-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--ink-mid);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 0.15s, border-color 0.15s;
+    }
+
+    .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+    .heart-btn {
+      font-size: 26px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--sage-light);
+      transition: color 0.2s, transform 0.15s;
+      line-height: 1;
+    }
+
+    .heart-btn.favourited { color: #e05c6f; }
+    .heart-btn.pop { animation: heartPop 0.3s ease; }
+
+    @keyframes heartPop {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.4); }
+      100% { transform: scale(1); }
+    }
+
+    /* DOTS */
+    .nav-dots {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 0 16px;
+    }
+
+    .dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--sage-light);
+      transition: background 0.2s, width 0.2s;
+    }
+
+    .dot.active {
+      background: var(--sage);
+      width: 14px;
+      border-radius: 3px;
+    }
+
+    /* INSTALL BANNER */
+    .install-banner {
+      margin: 0 20px 16px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--ink-mid);
+      box-shadow: 0 2px 8px var(--shadow);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.4s, transform 0.4s;
+      pointer-events: none;
+    }
+
+    .install-banner.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .install-msg { flex: 1; }
+    .install-btn {
+      background: var(--sage);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* FAVOURITES DRAWER */
+    .fav-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(44,58,46,0.35);
+      z-index: 50;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .fav-overlay.open { display: block; opacity: 1; }
+
+    .fav-drawer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      padding: 0 0 env(safe-area-inset-bottom);
+      max-height: 75svh;
+      overflow-y: auto;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+      z-index: 51;
+    }
+
+    .fav-drawer.open { transform: translateY(0); }
+
+    .fav-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0;
+      background: var(--surface);
+      z-index: 1;
+    }
+
+    .fav-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 300;
+    }
+
+    .fav-close {
+      background: none; border: none;
+      font-size: 20px; color: var(--ink-soft);
+      cursor: pointer; padding: 4px;
+    }
+
+    .fav-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 48px 20px;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+
+    .fav-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    .fav-item:last-child { border-bottom: none; }
+    .fav-item:hover { background: var(--sage-pale); }
+
+    .fav-thumb {
+      width: 52px; height: 52px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .fav-thumb-ph {
+      width: 52px; height: 52px;
+      border-radius: 8px;
+      background: var(--sage-pale);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+
+    .fav-item-body { flex: 1; min-width: 0; }
+
+    .fav-item-day {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--ink-soft);
+      margin-bottom: 3px;
+    }
+
+    .fav-item-quote {
+      font-size: 13px; color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .fav-item-heart {
+      color: #e05c6f; font-size: 16px;
+      flex-shrink: 0; padding: 4px;
+    }
+
+    /* ANIMATIONS */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Opening your gift…</div>
+</div>
+
+<!-- NOT FOUND -->
+<div id="notFound">
+  <h1>💚</h1>
+  <h1>Gift not found</h1>
+  <p>This link doesn't match an active gift.<br>Check the URL and try again.</p>
+</div>
+
+<!-- ONBOARDING -->
+<div id="onboarding">
+  <div class="ob-inner">
+    <div class="ob-heart">💚</div>
+    <h1 class="ob-title" id="obTitle">You have a gift</h1>
+    <p class="ob-sub">How would you like to be notified<br>when a new note is ready for you?</p>
+
+    <div class="ob-section-label">Choose your notifications (pick any)</div>
+
+    <!-- Push -->
+    <div class="ob-option" id="obPush" onclick="toggleOption('push')">
+      <div class="ob-option-row">
+        <div class="ob-option-icon">🔔</div>
+        <div class="ob-option-body">
+          <div class="ob-option-title">Push notification</div>
+          <div class="ob-option-desc">A tap on your phone — works even without the app open</div>
+        </div>
+        <div class="ob-check" id="checkPush"></div>
+      </div>
+    </div>
+
+    <!-- Email -->
+    <div class="ob-option" id="obEmail" onclick="toggleOption('email')">
+      <div class="ob-option-row">
+        <div class="ob-option-icon">✉️</div>
+        <div class="ob-option-body">
+          <div class="ob-option-title">Email</div>
+          <div class="ob-option-desc">A gentle reminder in your inbox</div>
+        </div>
+        <div class="ob-check" id="checkEmail"></div>
+      </div>
+      <div class="ob-input-wrap">
+        <input class="ob-input" type="email" id="emailInput" placeholder="your@email.com" onclick="event.stopPropagation()" />
+      </div>
+    </div>
+
+    <!-- SMS (conditionally shown) -->
+    <div class="ob-option" id="obSms" style="display:none" onclick="toggleOption('sms')">
+      <div class="ob-option-row">
+        <div class="ob-option-icon">💬</div>
+        <div class="ob-option-body">
+          <div class="ob-option-title">Text message <span style="font-size:10px;background:var(--sage-pale);color:var(--sage);border-radius:20px;padding:2px 7px;vertical-align:middle">Add-on</span></div>
+          <div class="ob-option-desc">An SMS straight to your phone</div>
+        </div>
+        <div class="ob-check" id="checkSms"></div>
+      </div>
+      <div class="ob-input-wrap">
+        <input class="ob-input" type="tel" id="phoneInput" placeholder="+1 555 000 0000" onclick="event.stopPropagation()" />
+      </div>
+    </div>
+
+    <button class="ob-btn" id="obBtn" onclick="submitOnboarding()">Open my gift</button>
+    <span class="ob-skip" onclick="skipOnboarding()">Skip for now</span>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="brand-from">From</span>
+      <span class="brand-name" id="senderName">Your Favorite</span>
+    </div>
+    <div class="topbar-right">
+      <div class="date-badge" id="dateBadge"></div>
+      <button class="fav-btn" id="favOpenBtn" title="Favourites">
+        ♥ <span class="fav-count" id="favCount"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-label" id="progressLabel"></div>
+  </div>
+
+  <div class="card-wrap">
+    <div class="today-ribbon" id="todayRibbon">✦ Today's note</div>
+    <div class="day-badge" id="dayBadge">Day 1</div>
+
+    <div class="card" id="card">
+      <div class="photo-placeholder" id="photoPlaceholder">
+        🌿 <span class="photo-hint" id="phHint"></span>
+      </div>
+      <img class="card-img" id="cardImg" alt="" style="display:none" />
+      <div class="card-body">
+        <div class="card-quote" id="cardQuote"></div>
+      </div>
+      <div class="lock-overlay" id="lockOverlay">
+        <div class="lock-icon">🔒</div>
+        <div class="lock-date" id="lockDate"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-actions">
+    <button class="nav-btn" id="prevBtn">‹</button>
+    <button class="heart-btn" id="heartBtn">♥</button>
+    <button class="nav-btn" id="nextBtn">›</button>
+  </div>
+
+  <div class="nav-dots" id="navDots"></div>
+
+  <div class="install-banner" id="installBanner">
+    <span class="install-msg" id="installMsg">Add to your home screen for the best experience</span>
+    <button class="install-btn" id="installBtn">Install</button>
+  </div>
+
+</div>
+
+<!-- FAVOURITES DRAWER -->
+<div class="fav-overlay" id="favOverlay"></div>
+<div class="fav-drawer" id="favDrawer">
+  <div class="fav-header">
+    <span class="fav-title">Favourites</span>
+    <button class="fav-close" id="favClose">✕</button>
+  </div>
+  <div id="favList"></div>
+  <div class="fav-empty" id="favEmpty" style="display:none">
+    <div style="font-size:28px">♡</div>
+    <div>Tap the heart on notes you love</div>
+  </div>
+</div>
+
+<script>
+  // ════════════════════════════════════════════════
+  // CONFIG — fill these in from your Supabase project
+  // Settings > API > Project URL and anon public key
+  // ════════════════════════════════════════════════
+  const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const VAPID_PUBLIC_KEY  = 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg';
+  // ════════════════════════════════════════════════
+
+  const sb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const slug = window.location.pathname.replace(/^\//, '').split('/')[0];
+
+  var GIFT  = null;
+  var NOTES = [];
+
+  // ── BOOT ────────────────────────────────────────────────────
+
+  async function boot() {
+    if (!slug) return showNotFound();
+
+    const { data: gift, error } = await sb
+      .from('gifts')
+      .select('*')
+      .eq('slug', slug)
+      .eq('status', 'active')
+      .single();
+
+    if (error || !gift) return showNotFound();
+
+    const { data: notes } = await sb
+      .from('notes')
+      .select('*')
+      .eq('gift_id', gift.id)
+      .order('order_index', { ascending: true });
+
+    GIFT  = gift;
+    NOTES = notes || [];
+
+    document.getElementById('loading').style.display = 'none';
+
+    var setupKey = 'gift-setup-' + slug;
+    if (!localStorage.getItem(setupKey)) {
+      showOnboarding(gift);
+    } else {
+      startApp(gift, NOTES);
+    }
+  }
+
+  function showNotFound() {
+    document.getElementById('loading').style.display    = 'none';
+    document.getElementById('notFound').style.display   = 'flex';
+  }
+
+  // ── ONBOARDING ──────────────────────────────────────────────
+
+  var selectedChannels = new Set();
+
+  function showOnboarding(gift) {
+    document.getElementById('obTitle').textContent = gift.display_name
+      ? 'You have a gift from ' + gift.display_name.split('&')[0].trim()
+      : 'You have a gift';
+
+    if (gift.sms_addon) {
+      document.getElementById('obSms').style.display = 'block';
+    }
+
+    document.getElementById('onboarding').style.display = 'block';
+  }
+
+  function toggleOption(channel) {
+    if (selectedChannels.has(channel)) {
+      selectedChannels.delete(channel);
+      document.getElementById('ob' + channel.charAt(0).toUpperCase() + channel.slice(1)).classList.remove('selected');
+    } else {
+      selectedChannels.add(channel);
+      document.getElementById('ob' + channel.charAt(0).toUpperCase() + channel.slice(1)).classList.add('selected');
+    }
+  }
+
+  async function submitOnboarding() {
+    var btn = document.getElementById('obBtn');
+    btn.disabled = true;
+    btn.textContent = 'Setting up…';
+
+    var email = document.getElementById('emailInput').value.trim();
+    var phone = document.getElementById('phoneInput').value.trim();
+    var channels = Array.from(selectedChannels);
+
+    var recipientData = {
+      gift_id:      GIFT.id,
+      channels:     channels,
+      email:        selectedChannels.has('email') ? email : null,
+      phone:        selectedChannels.has('sms')   ? phone : null,
+      onboarded_at: new Date().toISOString()
+    };
+
+    // If push selected, get push subscription first
+    if (selectedChannels.has('push')) {
+      try {
+        var pushSub = await registerPush();
+        if (pushSub) recipientData.push_subscription = pushSub;
+      } catch (e) {
+        console.warn('Push registration failed:', e);
+        channels = channels.filter(c => c !== 'push');
+        recipientData.channels = channels;
+      }
+    }
+
+    // Save to Supabase
+    if (channels.length > 0) {
+      await sb.from('recipients').upsert(recipientData, { onConflict: 'gift_id' });
+    }
+
+    localStorage.setItem('gift-setup-' + slug, '1');
+    document.getElementById('onboarding').style.display = 'none';
+    startApp(GIFT, NOTES);
+  }
+
+  function skipOnboarding() {
+    localStorage.setItem('gift-setup-' + slug, '1');
+    document.getElementById('onboarding').style.display = 'none';
+    startApp(GIFT, NOTES);
+  }
+
+  // ── PUSH REGISTRATION ────────────────────────────────────────
+
+  function urlBase64ToUint8Array(b64) {
+    var pad = '='.repeat((4 - b64.length % 4) % 4);
+    var base64 = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = window.atob(base64);
+    var arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+
+  async function registerPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+    var permission = await Notification.requestPermission();
+    if (permission !== 'granted') return null;
+    var reg = await navigator.serviceWorker.register('/sw.js');
+    var existing = await reg.pushManager.getSubscription();
+    if (existing) return existing.toJSON();
+    var sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    return sub.toJSON();
+  }
+
+  // ── NOTE INDEX LOGIC ─────────────────────────────────────────
+
+  function getDaysElapsed(startDate) {
+    var start = new Date(startDate);
+    start.setHours(0,0,0,0);
+    var now = new Date();
+    now.setHours(0,0,0,0);
+    return Math.max(0, Math.floor((now - start) / 86400000));
+  }
+
+  function getNoteIndex(gift) {
+    var days = getDaysElapsed(gift.start_date);
+    if (gift.frequency === 'weekly')   return Math.floor(days / 7);
+    if (gift.frequency === 'biweekly') return Math.floor(days / 14);
+    if (gift.frequency === 'monthly') {
+      var s = new Date(gift.start_date);
+      var n = new Date(); n.setHours(0,0,0,0);
+      return Math.max(0, (n.getFullYear() - s.getFullYear()) * 12 + (n.getMonth() - s.getMonth()));
+    }
+    return days;
+  }
+
+  function unlockDate(gift, i) {
+    var d = new Date(gift.start_date);
+    if      (gift.frequency === 'weekly')   d.setDate(d.getDate() + i * 7);
+    else if (gift.frequency === 'biweekly') d.setDate(d.getDate() + i * 14);
+    else if (gift.frequency === 'monthly')  d.setMonth(d.getMonth() + i);
+    else                                    d.setDate(d.getDate() + i);
+    return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  // ── MAIN APP ─────────────────────────────────────────────────
+
+  function startApp(gift, notes) {
+    if (!notes.length) {
+      showNotFound();
+      return;
+    }
+
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('senderName').textContent  = gift.sender_name || 'Your Favorite';
+    document.getElementById('dateBadge').textContent   =
+      new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+
+    var todayNoteIndex = Math.min(getNoteIndex(gift), notes.length - 1);
+    var currentIndex   = todayNoteIndex;
+
+    var cardEl         = document.getElementById('card');
+    var placeholderEl  = document.getElementById('photoPlaceholder');
+    var phHintEl       = document.getElementById('phHint');
+    var cardImgEl      = document.getElementById('cardImg');
+    var dayBadgeEl     = document.getElementById('dayBadge');
+    var todayRibbonEl  = document.getElementById('todayRibbon');
+    var lockOverlayEl  = document.getElementById('lockOverlay');
+    var lockDateEl     = document.getElementById('lockDate');
+    var cardQuoteEl    = document.getElementById('cardQuote');
+    var dotsEl         = document.getElementById('navDots');
+    var progressFillEl = document.getElementById('progressFill');
+    var progressLblEl  = document.getElementById('progressLabel');
+    var prevBtn        = document.getElementById('prevBtn');
+    var nextBtn        = document.getElementById('nextBtn');
+    var heartBtn       = document.getElementById('heartBtn');
+    var favOpenBtn     = document.getElementById('favOpenBtn');
+    var favOverlay     = document.getElementById('favOverlay');
+    var favDrawer      = document.getElementById('favDrawer');
+    var favClose       = document.getElementById('favClose');
+    var favList        = document.getElementById('favList');
+    var favEmpty       = document.getElementById('favEmpty');
+    var favCountEl     = document.getElementById('favCount');
+
+    // ── FAVOURITES ─────────────────────────────────────────────
+
+    var FAVS_KEY = 'gift-favs-' + slug;
+
+    function loadFavs()       { try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; } }
+    function saveFavs(f)      { try { localStorage.setItem(FAVS_KEY, JSON.stringify(f)); } catch {} }
+    function isFavourited(i)  { return loadFavs().indexOf(i) !== -1; }
+
+    function toggleFavourite(i) {
+      var favs = loadFavs(), pos = favs.indexOf(i);
+      if (pos === -1) { favs.push(i); } else { favs.splice(pos, 1); }
+      saveFavs(favs);
+      return pos === -1;
+    }
+
+    function updateHeartBtn(i) {
+      heartBtn.classList.toggle('favourited', isFavourited(i));
+    }
+
+    function updateFavCount() {
+      var n = loadFavs().length;
+      favCountEl.textContent = n > 0 ? n : '';
+    }
+
+    heartBtn.addEventListener('click', function() {
+      var added = toggleFavourite(currentIndex);
+      heartBtn.classList.remove('pop');
+      void heartBtn.offsetWidth;
+      heartBtn.classList.add('pop');
+      heartBtn.classList.toggle('favourited', added);
+      updateFavCount();
+    });
+
+    function openDrawer()  { renderFavDrawer(); favOverlay.classList.add('open'); favDrawer.classList.add('open'); }
+    function closeDrawer() { favOverlay.classList.remove('open'); favDrawer.classList.remove('open'); }
+
+    favOpenBtn.addEventListener('click', openDrawer);
+    favClose.addEventListener('click', closeDrawer);
+    favOverlay.addEventListener('click', closeDrawer);
+
+    function renderFavDrawer() {
+      var favs = loadFavs().slice().sort(function(a,b){ return a-b; });
+      favList.innerHTML = '';
+
+      if (!favs.length) {
+        favList.style.display  = 'none';
+        favEmpty.style.display = 'flex';
+        return;
+      }
+
+      favList.style.display  = 'block';
+      favEmpty.style.display = 'none';
+
+      favs.forEach(function(idx) {
+        var note = notes[idx];
+        if (!note) return;
+
+        var item = document.createElement('div');
+        item.className = 'fav-item';
+
+        if (note.photo_url) {
+          var img = document.createElement('img');
+          img.className = 'fav-thumb';
+          img.src = note.photo_url;
+          img.alt = '';
+          item.appendChild(img);
+        } else {
+          var ph = document.createElement('div');
+          ph.className = 'fav-thumb-ph';
+          ph.textContent = '🌿';
+          item.appendChild(ph);
+        }
+
+        var body    = document.createElement('div'); body.className = 'fav-item-body';
+        var dayEl   = document.createElement('div'); dayEl.className = 'fav-item-day'; dayEl.textContent = 'Note ' + (idx+1);
+        var quoteEl = document.createElement('div'); quoteEl.className = 'fav-item-quote'; quoteEl.textContent = note.text;
+        body.appendChild(dayEl); body.appendChild(quoteEl);
+        item.appendChild(body);
+
+        var h = document.createElement('div'); h.className = 'fav-item-heart'; h.textContent = '♥';
+        h.addEventListener('click', function(e) {
+          e.stopPropagation();
+          toggleFavourite(idx);
+          updateFavCount();
+          updateHeartBtn(currentIndex);
+          renderFavDrawer();
+        });
+        item.appendChild(h);
+
+        item.addEventListener('click', function() { currentIndex = idx; showNote(currentIndex); closeDrawer(); });
+        favList.appendChild(item);
+      });
+    }
+
+    updateFavCount();
+
+    // ── DOTS ───────────────────────────────────────────────────
+
+    function renderDots() {
+      dotsEl.innerHTML = '';
+      var unlocked = todayNoteIndex + 1;
+      if (unlocked <= 1) return;
+      var start = Math.max(0, unlocked - 7);
+      for (var i = start; i < unlocked; i++) {
+        var d = document.createElement('div');
+        d.className = 'dot' + (i === currentIndex ? ' active' : '');
+        dotsEl.appendChild(d);
+      }
+    }
+
+    // ── SHOW NOTE ──────────────────────────────────────────────
+
+    function showNote(index, animate) {
+      if (animate === undefined) animate = true;
+      var note    = notes[index];
+      var isToday = index === todayNoteIndex;
+      var locked  = index > todayNoteIndex;
+
+      if (animate) cardQuoteEl.classList.add('fading');
+
+      setTimeout(function() {
+        cardQuoteEl.textContent = note.text;
+        if (animate) cardQuoteEl.classList.remove('fading');
+
+        dayBadgeEl.textContent      = isToday ? 'Today · Note ' + (index+1) : 'Note ' + (index+1);
+        todayRibbonEl.style.display = isToday ? 'block' : 'none';
+
+        if (locked) {
+          cardEl.classList.add('locked');
+          lockDateEl.textContent         = unlockDate(gift, index);
+          lockOverlayEl.style.display    = 'flex';
+        } else {
+          cardEl.classList.remove('locked');
+          lockOverlayEl.style.display    = 'none';
+        }
+
+        var src = note.photo_url || '';
+        if (src) {
+          placeholderEl.style.display = 'none';
+          cardImgEl.style.display     = 'block';
+          cardImgEl.classList.add('loading');
+          var tmp = new Image();
+          tmp.onload = function() {
+            cardImgEl.src = src;
+            requestAnimationFrame(function() { cardImgEl.classList.remove('loading'); });
+          };
+          tmp.onerror = function() {
+            cardImgEl.style.display     = 'none';
+            placeholderEl.style.display = 'flex';
+            phHintEl.textContent        = 'photo unavailable';
+          };
+          tmp.src = src;
+        } else {
+          cardImgEl.style.display     = 'none';
+          placeholderEl.style.display = 'flex';
+          phHintEl.textContent        = '';
+        }
+
+        updateHeartBtn(index);
+      }, animate ? 200 : 0);
+
+      prevBtn.disabled = index <= 0;
+      nextBtn.disabled = index >= todayNoteIndex;
+
+      var pct = notes.length > 1 ? ((todayNoteIndex+1) / notes.length) * 100 : 100;
+      progressFillEl.style.width = pct + '%';
+      progressLblEl.textContent  = (todayNoteIndex+1) + ' of ' + notes.length + ' unlocked';
+
+      renderDots();
+    }
+
+    showNote(currentIndex, false);
+
+    // ── NAVIGATION ─────────────────────────────────────────────
+
+    prevBtn.addEventListener('click', function() {
+      if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
+    });
+    nextBtn.addEventListener('click', function() {
+      if (currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
+    });
+
+    var tx = 0;
+    document.addEventListener('touchstart', function(e) { tx = e.touches[0].clientX; }, { passive:true });
+    document.addEventListener('touchend',   function(e) {
+      var dx = e.changedTouches[0].clientX - tx;
+      if (Math.abs(dx) > 44) {
+        if (dx < 0 && currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
+        else if (dx > 0 && currentIndex > 0)          { currentIndex--; showNote(currentIndex); }
+      }
+    }, { passive:true });
+
+    // ── PWA INSTALL ────────────────────────────────────────────
+
+    var deferredPrompt;
+    var banner     = document.getElementById('installBanner');
+    var installBtn = document.getElementById('installBtn');
+    var installMsg = document.getElementById('installMsg');
+
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      setTimeout(function() { banner.classList.add('show'); }, 5000);
+    });
+
+    installBtn.addEventListener('click', function() {
+      if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then(function() { deferredPrompt = null; }); }
+      banner.classList.remove('show');
+    });
+
+    var isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    var isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    if (isIOS && !isStandalone) {
+      installMsg.textContent        = 'Tap Share → Add to Home Screen';
+      installBtn.style.display      = 'none';
+      setTimeout(function() { banner.classList.add('show'); },   5000);
+      setTimeout(function() { banner.classList.remove('show'); }, 11000);
+    }
+
+    // Register SW for offline support even if push not requested
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    }
+  }
+
+  // ── RUN ─────────────────────────────────────────────────────
+
+  boot();
+</script>
+</body>
+</html>

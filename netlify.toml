@@ -1,0 +1,32 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Clean API paths → Netlify Functions
+[[redirects]]
+  from = "/api/subscribe"
+  to   = "/.netlify/functions/subscribe"
+  status = 200
+
+[[redirects]]
+  from = "/api/settings"
+  to   = "/.netlify/functions/settings"
+  status = 200
+
+[[redirects]]
+  from = "/api/stats"
+  to   = "/.netlify/functions/stats"
+  status = 200
+
+[[redirects]]
+  from = "/api/send-now"
+  to   = "/.netlify/functions/send-now"
+  status = 200
+
+# Gift recipient pages — catch-all for vanity slugs.
+# Netlify serves real files first, so /dashboard.html, /index.html, /api/*
+# are all handled before this rule fires.
+[[redirects]]
+  from   = "/:slug"
+  to     = "/gift.html"
+  status = 200
