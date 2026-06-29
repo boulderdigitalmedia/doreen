@@ -3,50 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>You're in — From [Name], With Love</title>
+  <title>You're all set — Dearly</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --bg: #f5f2ec; --surface: #fff; --sage: #7a9e7e; --sage-light: #c8dbc9; --sage-pale: #e8f0e8; --ink: #2c3a2e; --ink-soft: #8fa391; --border: #dde8dd; --shadow: rgba(80,110,85,0.10); }
-    html, body { min-height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
-    body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100svh; padding: 32px 20px; text-align: center; }
-    .icon { font-size: 52px; margin-bottom: 20px; animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    @keyframes pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-    .title { font-family: 'Cormorant Garamond', serif; font-size: 36px; font-weight: 300; margin-bottom: 12px; }
-    .subtitle { font-size: 16px; color: var(--ink-soft); max-width: 340px; line-height: 1.6; margin-bottom: 36px; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px 32px; width: 100%; max-width: 380px; box-shadow: 0 4px 24px var(--shadow); margin-bottom: 24px; }
-    .step { display: flex; align-items: flex-start; gap: 14px; text-align: left; margin-bottom: 18px; }
+    :root {
+      --bg: #f5f2ec; --surface: #fff; --sage: #7a9e7e; --sage-light: #c8dbc9;
+      --sage-pale: #e8f0e8; --ink: #2c3a2e; --ink-mid: #5a6e5c; --ink-soft: #8fa391;
+      --border: #dde8dd;
+    }
+    html, body { min-height: 100svh; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+    .wrap { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; text-align: center; }
+    .icon { width: 72px; height: 72px; background: var(--sage-pale); border: 2px solid var(--sage-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 28px; }
+    h1 { font-family: 'Cormorant Garamond', serif; font-size: 36px; font-weight: 300; color: var(--ink); margin-bottom: 12px; line-height: 1.2; }
+    p { font-size: 16px; color: var(--ink-soft); max-width: 400px; margin: 0 auto 36px; line-height: 1.6; }
+    .steps { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px 32px; max-width: 420px; width: 100%; margin: 0 auto 32px; text-align: left; }
+    .step { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 20px; }
     .step:last-child { margin-bottom: 0; }
-    .step-num { background: var(--sage-pale); color: var(--sage); border: 1px solid var(--sage-light); border-radius: 50%; width: 28px; height: 28px; min-width: 28px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
-    .step-text { font-size: 14px; color: var(--ink); line-height: 1.5; padding-top: 4px; }
-    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 13px 28px; background: var(--sage); color: #fff; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; transition: opacity 0.15s; }
-    .btn:hover { opacity: 0.88; }
-    .loading { color: var(--ink-soft); font-size: 14px; margin-bottom: 24px; display: none; }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--sage); color: #fff; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .step-title { font-size: 14px; font-weight: 500; margin-bottom: 3px; }
+    .step-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 14px 32px; border-radius: 12px; border: none; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; background: var(--sage); color: #fff; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
   </style>
 </head>
 <body>
-  <div class="icon">💚</div>
-  <div class="title">You're all set!</div>
-  <div class="subtitle">Your subscription is active. Time to create your first gift.</div>
-
-  <div class="card">
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-text">Click <strong>New gift</strong> and give it a name and vanity URL</div>
+  <div class="wrap">
+    <div class="icon">💚</div>
+    <h1>You're all set</h1>
+    <p>Your subscription is active. Now create your first gift and start sending love notes.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <div class="step-title">Create a gift</div>
+          <div class="step-desc">Give it a name and choose how often notes will be delivered.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <div class="step-title">Write your notes</div>
+          <div class="step-desc">Add as many as you like — one will be sent each day, week, or month.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <div class="step-title">Share the link</div>
+          <div class="step-desc">Send your recipient their personal URL — they'll choose how they want to receive notes.</div>
+        </div>
+      </div>
     </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-text">Add your notes — photos optional, love required</div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-text">Share the link with your recipient — they'll set their notification preferences</div>
-    </div>
+    <a class="btn" href="/account">Go to my dashboard →</a>
   </div>
-
-  <div class="loading" id="loading">Confirming your subscription…</div>
-  <a href="/account" class="btn" id="dashBtn">Go to my dashboard →</a>
-
 </body>
 </html>

@@ -19,6 +19,11 @@
   status = 200
 
 [[redirects]]
+  from   = "/dashboard"
+  to     = "/account.html"
+  status = 200
+
+[[redirects]]
   from   = "/api/change-password"
   to     = "/.netlify/functions/change-password"
   status = 200

@@ -378,9 +378,9 @@
 <div id="toast"></div>
 
 <script>
-  const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
-  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-  const SITE_URL          = 'YOUR_SITE_URL'; // e.g. https://yourdomain.com — no trailing slash
+  const SUPABASE_URL      = 'https://nbakhtbcjxtqclgdjrqy.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iYWtodGJjanh0cWNsZ2RqcnF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTM3MjMsImV4cCI6MjA5NzU2OTcyM30.S3eUIJetWWMGZCqZ2X4nMsZeZcr5zbdbfc7LWs55yHw';
+  const SITE_URL          = window.location.origin; // automatically uses current domain
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   var USER          = null;
@@ -680,8 +680,11 @@
     try {
       var res  = await fetch('/api/send-now', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: CURRENT_GIFT.slug, adminPassword: '' }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SESSION.access_token,
+        },
+        body: JSON.stringify({ slug: CURRENT_GIFT.slug }),
       });
       var data = await res.json();
       showToast(data.ok ? 'Test sent! 💚' : 'Send failed: ' + (data.error || 'unknown'));

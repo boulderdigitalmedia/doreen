@@ -2,1426 +2,368 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="From Your Favorite" />
-  <meta name="theme-color" content="#f5f2ec" />
-  <title>From Your Favorite, With Love</title>
-  <link rel="manifest" href="manifest.json" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dearly — Daily love notes, delivered</title>
+  <meta name="description" content="Send someone you love a new reason why, every single day. Beautiful notes with photos, delivered by push notification, email, or text." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #f5f2ec;
-      --surface:   #ffffff;
-      --sage:      #7a9e7e;
-      --sage-light:#c8dbc9;
-      --sage-pale: #e8f0e8;
-      --ink:       #2c3a2e;
-      --ink-mid:   #5a6e5c;
-      --ink-soft:  #8fa391;
-      --cream:     #faf8f3;
-      --border:    #dde8dd;
-      --shadow:    rgba(80, 110, 85, 0.10);
+      --bg:         #f5f2ec;
+      --surface:    #ffffff;
+      --sage:       #7a9e7e;
+      --sage-light: #c8dbc9;
+      --sage-pale:  #e8f0e8;
+      --ink:        #2c3a2e;
+      --ink-mid:    #5a6e5c;
+      --ink-soft:   #8fa391;
+      --border:     #dde8dd;
+      --shadow:     rgba(80,110,85,0.10);
+      --gold:       #b8860b;
     }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      font-family: 'DM Sans', sans-serif;
-      color: var(--ink);
-      -webkit-font-smoothing: antialiased;
-    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
 
-    .app {
-      min-height: 100svh;
-      display: flex;
-      flex-direction: column;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-
-    /* TOP BAR */
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 24px 0;
-      opacity: 0;
-      animation: fadeDown 0.7s ease 0.1s forwards;
-    }
-
-    .brand { display: flex; flex-direction: column; }
-
-    .brand-from {
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--ink-soft);
-    }
-
-    .brand-name {
-      font-family: 'Cormorant Garamond', serif;
-      font-style: italic;
-      font-size: 22px;
-      font-weight: 300;
-      color: var(--ink);
-      line-height: 1.1;
-    }
-
-    .topbar-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .date-badge {
-      background: var(--sage-pale);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 5px 13px;
-      font-size: 11px;
-      font-weight: 400;
-      color: var(--sage);
-      letter-spacing: 0.04em;
-    }
-
-    /* FAVOURITES OPEN BUTTON */
-    .fav-open-btn {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 5px 12px;
-      font-size: 13px;
-      color: var(--ink-mid);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      -webkit-tap-highlight-color: transparent;
-      transition: all 0.18s ease;
-      white-space: nowrap;
-    }
-    .fav-open-btn:active { background: var(--sage-pale); border-color: var(--sage-light); }
-    #favCount { font-size: 11px; }
-    #favCount:empty { display: none; }
-
-    /* CARD VIEWPORT */
-    .card-viewport {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px 20px 0;
-      overflow: hidden;
-    }
-
-    /* CARD */
-    .card {
-      width: 100%;
-      max-width: 390px;
-      background: var(--surface);
-      border-radius: 24px;
-      box-shadow: 0 2px 8px var(--shadow), 0 12px 40px var(--shadow);
-      overflow: hidden;
-      opacity: 0;
-      animation: riseIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
-    }
-
-    /* PHOTO */
-    .card-photo {
-      width: 100%;
-      aspect-ratio: 4 / 3;
-      background: var(--sage-pale);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card-photo img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: top;
-      display: block;
-      transition: opacity 0.5s ease;
-    }
-
-    .card-photo img.loading { opacity: 0; }
-
-    .photo-placeholder {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      color: var(--ink-soft);
-    }
-
-    .photo-placeholder .ph-icon {
-      width: 52px;
-      height: 52px;
-      border: 1.5px dashed var(--sage-light);
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-    }
-
-    .photo-placeholder .ph-label {
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--sage);
-      opacity: 0.8;
-    }
-
-    .photo-placeholder .ph-hint {
-      font-size: 10px;
-      color: var(--ink-soft);
-      opacity: 0.45;
-      font-family: monospace;
-    }
-
-    .photo-day-badge {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      background: rgba(255,255,255,0.88);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      border-radius: 10px;
-      padding: 5px 11px;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--ink-mid);
-    }
-
-    .today-ribbon {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      background: var(--sage);
-      border-radius: 10px;
-      padding: 5px 11px;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #fff;
-    }
-
-    /* CARD BODY */
-    .card-body { padding: 26px 28px 30px; }
-
-    .card-quote {
-      font-family: 'Cormorant Garamond', serif;
-      font-style: italic;
-      font-size: 21px;
-      font-weight: 300;
-      line-height: 1.62;
-      color: var(--ink);
-      transition: opacity 0.3s ease, transform 0.3s ease;
-    }
-
-    .card-quote.fading { opacity: 0; transform: translateY(6px); }
-
-    .card-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 20px;
-      padding-top: 18px;
-      border-top: 1px solid var(--border);
-    }
-
-    .card-sig {
-      font-family: 'Cormorant Garamond', serif;
-      font-style: italic;
-      font-size: 17px;
-      font-weight: 300;
-      color: var(--sage);
-    }
-
-    /* HEART BUTTON */
-    .heart-btn {
-      background: none;
-      border: none;
-      font-size: 24px;
-      line-height: 1;
-      cursor: pointer;
-      color: var(--sage-light);
-      padding: 4px 6px;
-      -webkit-tap-highlight-color: transparent;
-      transition: color 0.2s ease, transform 0.2s ease;
-    }
-
-    .heart-btn.favourited { color: #e05c5c; }
-
-    @keyframes heartPop {
-      0%   { transform: scale(1); }
-      35%  { transform: scale(1.55); }
-      65%  { transform: scale(0.88); }
-      100% { transform: scale(1); }
-    }
-
-    .heart-btn.pop { animation: heartPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-
-    /* LOCK */
-    .lock-overlay {
-      display: none;
-      position: absolute;
-      inset: 0;
-      background: rgba(245, 242, 236, 0.72);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .card.locked .lock-overlay { display: flex; }
-
-    .lock-icon-wrap {
-      width: 52px;
-      height: 52px;
-      background: white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 16px var(--shadow);
-      font-size: 22px;
-    }
-
-    .lock-msg {
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--ink-mid);
-    }
-
-    .lock-date {
-      font-family: 'Cormorant Garamond', serif;
-      font-style: italic;
-      font-size: 17px;
-      color: var(--sage);
-    }
-
-    /* BOTTOM NAV */
-    .bottom-bar {
-      padding: 18px 24px calc(env(safe-area-inset-bottom) + 16px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      opacity: 0;
-      animation: fadeUp 0.7s ease 0.7s forwards;
-    }
-
-    .nav-row {
-      display: flex;
-      align-items: center;
-      gap: 18px;
-    }
-
-    .nav-btn {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      border: 1.5px solid var(--border);
-      background: var(--surface);
-      color: var(--ink-mid);
-      font-size: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 2px 8px var(--shadow);
-      transition: all 0.18s ease;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    .nav-btn:not(:disabled):active {
-      background: var(--sage-pale);
-      border-color: var(--sage-light);
-      transform: scale(0.93);
-    }
-
-    .nav-btn:disabled { opacity: 0.22; cursor: default; box-shadow: none; }
-
-    .nav-dots {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      min-width: 60px;
-      justify-content: center;
-    }
-
-    .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 3px;
-      background: var(--sage-light);
-      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    .dot.active { width: 20px; background: var(--sage); }
-
-    .progress-track {
-      width: 100%;
-      max-width: 260px;
-      height: 3px;
-      background: var(--sage-pale);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(to right, var(--sage-light), var(--sage));
-      border-radius: 2px;
-      transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-    }
-
-    .progress-label {
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--ink-soft);
-    }
-
-    /* INSTALL BANNER */
-    .install-banner {
-      position: fixed;
-      bottom: calc(env(safe-area-inset-bottom) + 12px);
-      left: 16px;
-      right: 16px;
-      background: var(--ink);
-      border-radius: 16px;
-      padding: 14px 18px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      z-index: 100;
-      transform: translateY(120px);
-      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    .install-banner.show { transform: translateY(0); }
-    .install-banner span { flex: 1; font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 300; }
-
-    .install-btn {
-      background: var(--sage);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 7px 14px;
-      font-size: 12px;
-      font-weight: 400;
-      letter-spacing: 0.04em;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    /* FAVOURITES DRAWER */
-    .fav-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(44, 58, 46, 0.3);
-      z-index: 200;
-      backdrop-filter: blur(2px);
-      -webkit-backdrop-filter: blur(2px);
-    }
-    .fav-overlay.open { display: block; }
-
-    .fav-drawer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      max-height: 80svh;
-      background: var(--surface);
-      border-radius: 24px 24px 0 0;
-      z-index: 201;
-      display: flex;
-      flex-direction: column;
-      transform: translateY(100%);
-      transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-    .fav-drawer.open { transform: translateY(0); }
-
-    .fav-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 24px 16px;
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px; height: 64px;
+      background: rgba(245,242,236,0.88); backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
     }
+    .nav-brand { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 300; color: var(--ink); text-decoration: none; }
+    .nav-right { display: flex; align-items: center; gap: 20px; }
+    .nav-link { font-size: 14px; color: var(--ink-mid); text-decoration: none; }
+    .nav-link:hover { color: var(--ink); }
+    .btn-nav { background: var(--sage); color: #fff; padding: 9px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; text-decoration: none; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s; }
+    .btn-nav:hover { opacity: 0.85; }
 
-    .fav-title {
+    /* ── HERO ── */
+    .hero {
+      min-height: 100svh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 100px 24px 80px;
+    }
+    .hero-eyebrow {
+      display: inline-block;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--sage); background: var(--sage-pale);
+      border: 1px solid var(--sage-light); border-radius: 20px;
+      padding: 5px 14px; margin-bottom: 28px;
+    }
+    .hero-title {
       font-family: 'Cormorant Garamond', serif;
-      font-style: italic;
-      font-size: 22px;
-      font-weight: 300;
-      color: var(--ink);
+      font-size: clamp(42px, 8vw, 80px);
+      font-weight: 300; line-height: 1.1;
+      color: var(--ink); margin-bottom: 24px;
+      max-width: 720px;
     }
-
-    .fav-close {
-      background: var(--sage-pale);
-      border: none;
-      border-radius: 50%;
-      width: 32px;
-      height: 32px;
-      font-size: 14px;
-      color: var(--ink-mid);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      -webkit-tap-highlight-color: transparent;
+    .hero-title em { font-style: italic; color: var(--sage); }
+    .hero-sub {
+      font-size: 18px; color: var(--ink-soft); max-width: 480px;
+      margin: 0 auto 44px; line-height: 1.7; font-weight: 300;
     }
-
-    .fav-list { overflow-y: auto; flex: 1; padding: 8px 0; }
-
-    .fav-item {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 12px 20px;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-      transition: background 0.15s ease;
+    .hero-cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .btn-primary {
+      background: var(--sage); color: #fff;
+      padding: 15px 32px; border-radius: 12px;
+      font-size: 15px; font-weight: 500; text-decoration: none;
+      font-family: 'DM Sans', sans-serif; transition: opacity 0.15s;
+      display: inline-block;
     }
-    .fav-item:active { background: var(--sage-pale); }
-
-    .fav-thumb {
-      width: 56px;
-      height: 56px;
-      border-radius: 10px;
-      object-fit: cover;
-      object-position: top;
-      flex-shrink: 0;
-      background: var(--sage-pale);
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-ghost {
+      background: transparent; color: var(--ink-mid);
+      border: 1px solid var(--border); padding: 15px 32px; border-radius: 12px;
+      font-size: 15px; font-weight: 400; text-decoration: none;
+      font-family: 'DM Sans', sans-serif; transition: border-color 0.15s, color 0.15s;
+      display: inline-block;
     }
+    .btn-ghost:hover { border-color: var(--sage); color: var(--sage); }
 
-    .fav-thumb-ph {
-      width: 56px;
-      height: 56px;
-      border-radius: 10px;
-      background: var(--sage-pale);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      flex-shrink: 0;
+    /* ── NOTE PREVIEW (floating card) ── */
+    .hero-card {
+      margin: 60px auto 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 24px; padding: 32px 36px;
+      max-width: 420px; width: 100%;
+      box-shadow: 0 8px 48px var(--shadow);
+      position: relative;
     }
-
-    .fav-item-body { flex: 1; min-width: 0; }
-
-    .fav-item-day {
-      font-size: 10px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: var(--sage);
-      margin-bottom: 4px;
+    .card-from {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--ink-soft); margin-bottom: 4px;
     }
-
-    .fav-item-quote {
+    .card-sender { font-size: 20px; font-weight: 300; color: var(--ink); margin-bottom: 20px; }
+    .card-badge {
+      display: inline-block; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; padding: 3px 10px; border-radius: 20px;
+      background: var(--sage-pale); color: var(--sage); border: 1px solid var(--sage-light);
+      margin-bottom: 18px;
+    }
+    .card-note {
       font-family: 'Cormorant Garamond', serif;
-      font-style: italic;
-      font-size: 15px;
-      color: var(--ink);
-      line-height: 1.4;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 22px; font-weight: 300; font-style: italic;
+      line-height: 1.55; color: var(--ink);
     }
+    .card-dots { display: flex; gap: 6px; margin-top: 24px; justify-content: center; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage-light); }
+    .dot.active { background: var(--sage); }
 
-    .fav-item-heart {
-      font-size: 20px;
-      color: #e05c5c;
-      flex-shrink: 0;
-      padding: 4px 4px 4px 8px;
-      -webkit-tap-highlight-color: transparent;
+    /* ── HOW IT WORKS ── */
+    .section { padding: 100px 24px; max-width: 1000px; margin: 0 auto; }
+    .section-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--sage); margin-bottom: 14px; text-align: center;
     }
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(32px, 5vw, 52px); font-weight: 300;
+      text-align: center; margin-bottom: 64px; color: var(--ink);
+    }
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+    .how-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 28px 24px;
+      box-shadow: 0 2px 16px var(--shadow);
+    }
+    .how-step { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); margin-bottom: 14px; }
+    .how-icon { font-size: 28px; margin-bottom: 14px; }
+    .how-title { font-size: 17px; font-weight: 500; margin-bottom: 10px; color: var(--ink); }
+    .how-desc { font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
 
-    .fav-empty {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 52px 24px;
-      color: var(--ink-soft);
-      font-size: 13px;
-      text-align: center;
-      line-height: 1.7;
-      gap: 10px;
+    /* ── FEATURES ── */
+    .features-section { background: var(--surface); padding: 100px 24px; }
+    .features-inner { max-width: 1000px; margin: 0 auto; }
+    .features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .feature-item {
+      display: flex; gap: 16px; align-items: flex-start;
+      padding: 20px; border-radius: 14px;
+      background: var(--bg); border: 1px solid var(--border);
     }
-    .fav-empty-icon { font-size: 36px; color: var(--sage-light); }
+    .feature-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+    .feature-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+    .feature-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
 
-    /* ANIMATIONS */
-    @keyframes fadeDown {
-      from { opacity: 0; transform: translateY(-12px); }
-      to   { opacity: 1; transform: translateY(0); }
+    /* ── PRICING ── */
+    .pricing-section { padding: 100px 24px; max-width: 760px; margin: 0 auto; text-align: center; }
+    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 48px 0 36px; }
+    .pricing-card {
+      background: var(--surface); border: 2px solid var(--border);
+      border-radius: 20px; padding: 32px 28px; text-align: left;
+      position: relative; transition: border-color 0.15s;
     }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .pricing-card.featured { border-color: var(--sage); }
+    .pricing-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: var(--sage); color: #fff;
+      font-size: 11px; font-weight: 600; padding: 4px 12px;
+      border-radius: 20px; white-space: nowrap;
     }
-    @keyframes riseIn {
-      from { opacity: 0; transform: translateY(28px) scale(0.97); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
+    .pricing-plan { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); margin-bottom: 12px; }
+    .pricing-amount { font-family: 'Cormorant Garamond', serif; font-size: 48px; font-weight: 300; color: var(--ink); line-height: 1; }
+    .pricing-period { font-size: 14px; color: var(--ink-soft); margin-top: 4px; margin-bottom: 20px; }
+    .pricing-features { list-style: none; }
+    .pricing-features li { font-size: 14px; color: var(--ink-mid); padding: 5px 0; display: flex; gap: 8px; }
+    .pricing-features li::before { content: '✓'; color: var(--sage); font-weight: 600; }
+    .pricing-note { font-size: 13px; color: var(--ink-soft); }
+
+    /* ── TESTIMONIAL ── */
+    .testimonial-section { padding: 80px 24px; text-align: center; }
+    .testimonial-quote {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(22px, 4vw, 36px); font-weight: 300; font-style: italic;
+      color: var(--ink); max-width: 620px; margin: 0 auto 20px; line-height: 1.5;
+    }
+    .testimonial-attr { font-size: 13px; color: var(--ink-soft); }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 24px;
+      text-align: center; font-size: 13px; color: var(--ink-soft);
+      display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap;
+    }
+    footer a { color: var(--ink-soft); text-decoration: none; }
+    footer a:hover { color: var(--ink); }
+
+    @media (max-width: 680px) {
+      nav { padding: 0 20px; }
+      .how-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .hero-card { padding: 24px 20px; }
     }
   </style>
 </head>
 <body>
 
-<div class="app">
+<!-- NAV -->
+<nav>
+  <a class="nav-brand" href="/">Dearly</a>
+  <div class="nav-right">
+    <a class="nav-link" href="/login">Sign in</a>
+    <a class="btn-nav" href="/signup">Get started</a>
+  </div>
+</nav>
 
-  <div class="topbar">
-    <div class="brand">
-      <span class="brand-from">A note</span>
-      <span class="brand-name">from Your Favorite</span>
-    </div>
-    <div class="topbar-right">
-      <button class="fav-open-btn" id="favOpenBtn">♥ <span id="favCount"></span></button>
-      <div class="date-badge" id="dateBadge"></div>
-    </div>
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Daily love notes</div>
+  <h1 class="hero-title">
+    Tell them why you love them,<br><em>one note at a time</em>
+  </h1>
+  <p class="hero-sub">
+    Write a collection of notes for someone you love. Dearly delivers one each day — with a photo, by push notification, email, or text.
+  </p>
+  <div class="hero-cta">
+    <a class="btn-primary" href="/signup">Start your gift →</a>
+    <a class="btn-ghost" href="#how">See how it works</a>
   </div>
 
-  <div class="card-viewport">
-    <div class="card" id="card">
+  <div class="hero-card">
+    <div class="card-from">From</div>
+    <div class="card-sender">Jake</div>
+    <div class="card-badge">Note 47</div>
+    <div class="card-note">
+      "The way you still reach for my hand in the middle of the night, without waking up."
+    </div>
+    <div class="card-dots">
+      <div class="dot"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+</section>
 
-      <div class="card-photo" id="cardPhoto">
-        <div class="photo-placeholder" id="photoPlaceholder">
-          <div class="ph-icon">🌿</div>
-          <div class="ph-label">Your photo here</div>
-          <div class="ph-hint" id="phHint"></div>
-        </div>
-        <img id="cardImg" src="" alt="" style="display:none;" />
-        <div class="photo-day-badge" id="dayBadge"></div>
-        <div class="today-ribbon" id="todayRibbon" style="display:none;">Today ✦</div>
-        <div class="lock-overlay" id="lockOverlay">
-          <div class="lock-icon-wrap">🔒</div>
-          <div class="lock-msg">Unlocks on</div>
-          <div class="lock-date" id="lockDate"></div>
+<!-- HOW IT WORKS -->
+<section class="section" id="how">
+  <div class="section-label">How it works</div>
+  <h2 class="section-title">Three steps to something they'll never forget</h2>
+  <div class="how-grid">
+    <div class="how-card">
+      <div class="how-step">Step 1</div>
+      <div class="how-icon">✍️</div>
+      <div class="how-title">Write your notes</div>
+      <div class="how-desc">Add as many reasons as you like. Pair each one with a photo. They'll get one delivered each day, week, or month.</div>
+    </div>
+    <div class="how-card">
+      <div class="how-step">Step 2</div>
+      <div class="how-icon">🔗</div>
+      <div class="how-title">Share their link</div>
+      <div class="how-desc">Every gift gets a personal URL. Send it to your recipient — they open it once and choose how they want to be notified.</div>
+    </div>
+    <div class="how-card">
+      <div class="how-step">Step 3</div>
+      <div class="how-icon">💌</div>
+      <div class="how-title">Let it run</div>
+      <div class="how-desc">Dearly handles the rest. A new note lands for them every send day, automatically. You can add more notes anytime.</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<div class="features-section" id="features">
+  <div class="features-inner">
+    <div class="section-label" style="text-align:center">Everything included</div>
+    <h2 class="section-title">Built for the long game</h2>
+    <div class="features-grid">
+      <div class="feature-item">
+        <div class="feature-icon">📱</div>
+        <div>
+          <div class="feature-title">Push notifications</div>
+          <div class="feature-desc">Recipients install the app to their home screen and get a notification each send day — no App Store required.</div>
         </div>
       </div>
-
-      <div class="card-body">
-        <div class="card-quote" id="cardQuote"></div>
-        <div class="card-footer">
-          <div class="card-sig">— Your Favorite</div>
-          <button class="heart-btn" id="heartBtn" aria-label="Favourite">♥</button>
+      <div class="feature-item">
+        <div class="feature-icon">✉️</div>
+        <div>
+          <div class="feature-title">Email delivery</div>
+          <div class="feature-desc">Beautiful HTML emails with the note and photo, linking back to the full app.</div>
         </div>
       </div>
-
+      <div class="feature-item">
+        <div class="feature-icon">💬</div>
+        <div>
+          <div class="feature-title">SMS add-on</div>
+          <div class="feature-desc">Enable text message delivery for recipients who prefer it. Their number stays private — collected during setup.</div>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🖼️</div>
+        <div>
+          <div class="feature-title">Photos with every note</div>
+          <div class="feature-desc">Attach a photo to any note. A memory, a candid, a screenshot of something that made you think of them.</div>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">⟳</div>
+        <div>
+          <div class="feature-title">Your cadence, your call</div>
+          <div class="feature-desc">Send daily, weekly, every two weeks, or monthly. Change it any time from your dashboard.</div>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🎁</div>
+        <div>
+          <div class="feature-title">Up to 4 gifts</div>
+          <div class="feature-desc">One subscription covers gifts for up to four different people — a partner, a parent, a friend, a child.</div>
+        </div>
+      </div>
     </div>
   </div>
+</div>
 
-  <div class="bottom-bar">
-    <div class="nav-row">
-      <button class="nav-btn" id="prevBtn" aria-label="Previous">&#8592;</button>
-      <div class="nav-dots" id="navDots"></div>
-      <button class="nav-btn" id="nextBtn" aria-label="Next">&#8594;</button>
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <div class="section-label">Pricing</div>
+  <h2 class="section-title">Simple, honest pricing</h2>
+  <div class="pricing-grid">
+    <div class="pricing-card">
+      <div class="pricing-plan">Monthly</div>
+      <div class="pricing-amount">$9</div>
+      <div class="pricing-period">per month</div>
+      <ul class="pricing-features">
+        <li>Up to 4 gift recipients</li>
+        <li>Unlimited notes + photos</li>
+        <li>Push, email &amp; SMS delivery</li>
+        <li>Cancel any time</li>
+      </ul>
     </div>
-    <div class="progress-track">
-      <div class="progress-fill" id="progressFill"></div>
+    <div class="pricing-card featured">
+      <div class="pricing-badge">Best value — 2 months free</div>
+      <div class="pricing-plan">Annual</div>
+      <div class="pricing-amount">$90</div>
+      <div class="pricing-period">per year · $7.50/mo</div>
+      <ul class="pricing-features">
+        <li>Up to 4 gift recipients</li>
+        <li>Unlimited notes + photos</li>
+        <li>Push, email &amp; SMS delivery</li>
+        <li>Cancel any time</li>
+      </ul>
     </div>
-    <div class="progress-label" id="progressLabel"></div>
   </div>
+  <p class="pricing-note">Secure payment via Stripe. Cancel any time — your notes keep sending until the period ends.</p>
+  <br><br>
+  <a class="btn-primary" href="/signup" style="font-size:16px;padding:16px 40px;">Start your gift →</a>
+</section>
 
-</div>
-
-<!-- Favourites drawer -->
-<div class="fav-overlay" id="favOverlay"></div>
-<div class="fav-drawer" id="favDrawer">
-  <div class="fav-header">
-    <span class="fav-title">Your favourites</span>
-    <button class="fav-close" id="favClose">✕</button>
+<!-- TESTIMONIAL -->
+<section class="testimonial-section">
+  <div class="testimonial-quote">
+    "I opened my phone at 7am and there was a note from him. I cried before I'd had coffee. That was note 12."
   </div>
-  <div class="fav-list" id="favList"></div>
-  <div class="fav-empty" id="favEmpty">
-    <div class="fav-empty-icon">♥</div>
-    <div>Tap the heart on any note<br>to save it here</div>
-  </div>
-</div>
+  <div class="testimonial-attr">— A Dearly recipient</div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span>© 2026 Dearly</span>
+  <a href="/login">Sign in</a>
+  <a href="/signup">Get started</a>
+  <a href="mailto:hello@dearly.app">hello@dearly.app</a>
+</footer>
 
-<div class="install-banner" id="installBanner">
-  <span>📲</span>
-  <span id="installMsg">Add to Home Screen</span>
-  <button class="install-btn" id="installBtn">Install</button>
-</div>
-
-<script>
-  // ════════════════════════════════════════
-  // SET YOUR LAUNCH DATE HERE (YYYY-MM-DD)
-  const START_DATE = '2026-05-15'; // ← EDIT THIS
-  const FREQUENCY  = 'daily';      // ← daily | weekly | biweekly | monthly
-  // ════════════════════════════════════════
-
-  const notes = [
-    { photo: 'photos/IMG_0032.jpeg', text: "I can't imagine the past 11 years without you. You are an amazing, beautiful person, inside and out. You make me want to be better everyday, and push me to be better. I love how you are with our kids and the love and empathy you teach them, and me everyday. I would not be the partner I am without you. I would not be the father I am today without you. I thank you for choosing me everyday. I am lucky to have the opportunity to choose you every day, now and for the next 68 years! So this app is going to deliver a message to you everyday for the next year, telling you how amazing you are, how much I love you and more. One day to celebrate our happiness is not enough. I need more time… lol. I hope you like this. Love, Your Favorite" },
-    { photo: 'photos/IMG_0478.jpeg', text: "You take me to see Jason Mamoa spinning at his club, then give me a hallpass card with his many names on it... LOL. 'It's laminated!' I love how silly you are and how we are constantly trolling each other. Having fun with you is an amazing gift I will cherish for 68 years." },
-    { photo: 'photos/IMG_0899.jpeg', text: "You just want to be near me. I love how we hold hands and touch, even in those moments where we're just relaxing and doing our own thing." },
-    { photo: 'photos/IMG_0055.jpeg', text: "You're so damn sexy! especially in that shirt you were wearing yesterday. 🔥" },
-    { photo: 'photos/IMG_0519.JPG', text: "I love that you're not afraid to feel things deeply. The world needs more of that." },
-    { photo: 'photos/IMG_0904.jpeg', text: "When life is hard, I'm glad we're going through it together. I'm happy I get to choose you, and us, everyday." },
-    { photo: 'photos/IMG_0056.jpeg', text: "Fuck off!" },
-    { photo: 'photos/IMG_0538.JPG', text: "I love how you've grown into yourself. I've had a front-row seat and it's been amazing to watch you learn about yourself. Understanding how your brain works, and helping our family understand themselves as a result. You're brain is amazing and I love your silliness, cause you know I love the silliness." },
-    { photo: 'photos/IMG_0906.jpeg', text: "I love looking back on our life together. My favorite screen savers are of you, especially tha one of you in the purple bra!!! It's amazing to continue to see where we've come from, and where we are now." },
-    { photo: 'photos/IMG_0059.jpeg', text: "I love arguing with you, because it means we both care." },
-    { photo: 'photos/IMG_0548.JPG', text: "I love sharing our childhood with our kids through movies, music and the stories we tell. We have many stories, lots of adventures and tons of knowledge. I am so happy with our journey as individuals, a couple and a family. We are raising amazing kids and living an amazing life!" },
-    { photo: 'photos/IMG_0908.jpeg', text: "You make every event in our lives special. I love that you love celebrating your family and friends. Thank you for making my birthday special." },
-    { photo: 'photos/IMG_0132.JPG', text: "I love that you're honest with me, even when it would be easier not to be." },
-    { photo: 'photos/IMG_0625.jpeg', text: "You carry so much and make it look so light. I see it. I always see it. I will continue to try and carry more of it." },
-    { photo: 'photos/IMG_0911.jpeg', text: "You're the first person I want to tell things to. Especially gossip. 😆" },
-    { photo: 'photos/IMG_0134.jpeg', text: "I love how you love, with your whole self, without holding back." },
-    { photo: 'photos/IMG_0630.jpeg', text: "You've made me a better person. Your continuous drive for self improvement extends way beyond yourself. I am in awe of who you were, who you are and what you've learned about yourself; and taught me about myself. I look forward to growing in knowledge and continuing to share this life with you." },
-    { photo: 'photos/IMG_0912.JPG', text: "I love doing life with you. This adventure, in the many places we've lived, with our kids, dogs and cats… I couldn't have imagined happiness like this." },
-    { photo: 'photos/IMG_0146.jpeg', text: "I love that you make home feel like a choice, not just a place." },
-    { photo: 'photos/IMG_0631.JPG', text: "You've changed how I understand love. I didn't know it could be this amazing." },
-    { photo: 'photos/IMG_0920.jpeg', text: "You make ordinary Tuesday evenings feel like somewhere worth being. Anything can happen Tuesday!" },
-    { photo: 'photos/IMG_0168.jpeg', text: "I love the life we've built and continue to build together." },
-    { photo: 'photos/IMG_0631.jpeg', text: "Asking you to marry me is the best decision I've ever made, and I make a lot of decisions :)" },
-    { photo: 'photos/IMG_0964.JPG', text: "I love that we can sit in silence together and it doesn't feel like silence at all." },
-    { photo: 'photos/IMG_0173.jpeg', text: "The way you reach for my hand without thinking. I hope you never stop doing that." },
-    { photo: 'photos/IMG_0632.jpeg', text: "Happy Birthday! My life is better because you were born. The world is a better place because you were born. Today (everyday) we celebrate you because you give so much love and deserve to be celebrated. I love you. We love you. Thank you for being you!" },
-    { photo: 'photos/IMG_0968.jpeg', text: "You make the hard things easier just by being nearby." },
-    { photo: 'photos/IMG_0174.jpeg', text: "I love that we've built a language only we understand, the looks, the shorthand, the jokes (mainly from friends)." },
-    { photo: 'photos/IMG_0633.jpeg', text: "You want to talk about the things we want in life and make a point to talk about it. I want our daughter to be okay. That's my short term and long term desire right now. I also want to build apps that allow us to make residual income so we can do what we want, when we want. Focus on the important things. Travel, visit friend & family, buy a house, craavan through Europe... I want to talk about our dreams. Sometimes its hard for me to get into that mindset. I love this life. I am so excited for our life ahead." },
-    { photo: 'photos/IMG_0978.jpeg', text: "I love coffees dates with you 😉" },
-    { photo: 'photos/IMG_0176.jpeg', text: "You are the person I want to be boring with." },
-    { photo: 'photos/IMG_0635 (1).jpeg', text: "I love that you remember things I've forgotten. Then remind me that I've forgotten... at least 2 or 3 times." },
-    { photo: 'photos/IMG_0983.jpeg', text: "The way you look at me still makes me feel like the first day we met.." },
-    { photo: 'photos/IMG_0207 (1).jpeg', text: "I love how you hold me accountable" },
-    { photo: 'photos/IMG_0635.jpeg', text: "You are the steadiest thing in my world." },
-    { photo: 'photos/IMG_0984.jpeg', text: "I love that you still choose me, every single day." },
-    { photo: 'photos/IMG_0207.jpeg', text: "I love the version of myself I am when I'm with you." },
-    { photo: 'photos/IMG_0637.jpeg', text: "You make the ordinary feel extraordinary." },
-    { photo: 'photos/IMG_0986.jpeg', text: "I love that you are my home. Whatever city, whatever house — home is where you are." },
-    { photo: 'photos/IMG_0208.jpeg', text: "You've taught me more about love than any book or film ever did." },
-    { photo: 'photos/IMG_0638.jpeg', text: "You make being a mother look like the most natural thing in the world." },
-    { photo: 'photos/IMG_0987.jpeg', text: "The way you are with our daughter — every single day I watch you and think: she chose right." },
-    { photo: 'photos/IMG_0209.jpeg', text: "The sound of you singing to our daughter might be the best thing I've ever heard." },
-    { photo: 'photos/IMG_0640.jpeg', text: "The way you hold our daughter when she's unsettled — I fell in love with you all over again." },
-    { photo: 'photos/IMG_0988.jpeg', text: "Watching you become a mother has been the most beautiful thing I've ever witnessed." },
-    { photo: 'photos/IMG_0249.jpeg', text: "You are the mother I always hoped our children would have." },
-    { photo: 'photos/IMG_0642 (1).jpeg', text: "The way you talk to her — like she already understands everything — it's perfect." },
-    { photo: 'photos/IMG_0989.jpeg', text: "I love how you worry about the right things and let go of the rest." },
-    { photo: 'photos/IMG_0254.jpeg', text: "You are so present with her. In a world full of distractions, that is a gift." },
-    { photo: 'photos/IMG_0642.jpeg', text: "I love watching you figure out motherhood with such grace. You make it look effortless." },
-    { photo: 'photos/IMG_0990.jpeg', text: "The love you have for our daughter — it rewired something in me the first time I saw it." },
-    { photo: 'photos/IMG_0260.jpeg', text: "You are patient with her in a way I aspire to every day." },
-    { photo: 'photos/IMG_0645.jpeg', text: "I love how she already looks to you. She knows exactly who her person is." },
-    { photo: 'photos/IMG_0992.jpeg', text: "The way you celebrate every small thing she does — she will grow up knowing she is seen." },
-    { photo: 'photos/IMG_0275.JPG', text: "You are raising her to be brave. I see it in every little choice you make." },
-    { photo: 'photos/IMG_0646.jpeg', text: "I love you for the parent you are today and the parent you're becoming." },
-    { photo: 'photos/IMG_0994.jpeg', text: "You take being her mother seriously without losing yourself. That's a hard balance and you hold it beautifully." },
-    { photo: 'photos/IMG_0281.jpeg', text: "I love that she is going to look back and know, without question, that she was loved." },
-    { photo: 'photos/IMG_0652.jpeg', text: "The tenderness you show her — I hope she carries it with her forever." },
-    { photo: 'photos/IMG_1002.jpeg', text: "I love us as parents. I didn't know a partnership could feel like this." },
-    { photo: 'photos/IMG_0311.jpeg', text: "The way you make a cup of tea like it's an act of care — it is." },
-    { photo: 'photos/IMG_0662.jpeg', text: "I love the face you make when you're trying not to laugh." },
-    { photo: 'photos/IMG_1010.JPG', text: "The way you overthink decisions about small things and under-think the big ones — it makes you you." },
-    { photo: 'photos/IMG_0321.jpeg', text: "I love how you always know where everything is in our house. You are the memory of this place." },
-    { photo: 'photos/IMG_0686.jpeg', text: "The way you read — completely lost to the world — I could watch it for hours." },
-    { photo: 'photos/IMG_1035.JPG', text: "I love that you apologise when you're wrong and mean it." },
-    { photo: 'photos/IMG_0343.jpeg', text: "The way you get excited about things and don't try to play it cool — I love that about you." },
-    { photo: 'photos/IMG_0687.jpeg', text: "I love how much you care about doing things well. Not perfectly. Well." },
-    { photo: 'photos/IMG_1051.jpeg', text: "The way you make people feel seen in conversation — it's a real gift." },
-    { photo: 'photos/IMG_0385.jpeg', text: "I love how you dress. The way you put yourself together. It's always so you." },
-    { photo: 'photos/IMG_0732.jpeg', text: "The face you make when a meal turns out exactly as you wanted. Pure satisfaction." },
-    { photo: 'photos/IMG_1066.jpeg', text: "I love how you take up exactly as much space as you need and never more." },
-    { photo: 'photos/IMG_0392.jpeg', text: "The way you say goodbye — like you mean it every time." },
-    { photo: 'photos/IMG_0738.jpeg', text: "I love how you can make strangers feel like old friends within minutes." },
-    { photo: 'photos/IMG_1093.jpeg', text: "The specific way you laugh when something catches you completely off guard." },
-    { photo: 'photos/IMG_0395.jpeg', text: "I love that you always have a book on the go. That you never stop learning." },
-    { photo: 'photos/IMG_0741.jpeg', text: "The way you ask questions when you're curious instead of pretending to know." },
-    { photo: 'photos/IMG_1095.jpeg', text: "I love how you remember people's names and details. It's not small — it's who you are." },
-    { photo: 'photos/IMG_0396.jpeg', text: "The way you move through a kitchen when you know what you're doing." },
-    { photo: 'photos/IMG_0790.jpeg', text: "I love that you still get nervous about things and do them anyway." },
-    { photo: 'photos/IMG_1101.jpeg', text: "I love how fiercely you love the people who are lucky enough to be yours." },
-    { photo: 'photos/IMG_0407.jpeg', text: "The patience you carry, especially on the hardest days, quietly amazes me." },
-    { photo: 'photos/IMG_0792.jpeg', text: "I love that you make space for other people's hard things without making it about you." },
-    { photo: 'photos/IMG_1102.jpeg', text: "You understand nuance. That's rarer than people think." },
-    { photo: 'photos/IMG_0408.jpeg', text: "I love how you sit with difficult things instead of rushing past them." },
-    { photo: 'photos/IMG_0804.jpeg', text: "The way you forgive — not naively, but fully. That takes courage." },
-    { photo: 'photos/IMG_1106.jpeg', text: "I love that you know the difference between being kind and being a pushover." },
-    { photo: 'photos/IMG_0409.jpeg', text: "You see people generously. You assume the best until proven otherwise." },
-    { photo: 'photos/IMG_0846.jpeg', text: "I love how you hold both humour and seriousness — you know when each is needed." },
-    { photo: 'photos/IMG_1107.jpeg', text: "The care you take with your words when things matter. I notice it every time." },
-    { photo: 'photos/IMG_0416.jpeg', text: "I love how you've turned hard seasons into wisdom. You carry it quietly." },
-    { photo: 'photos/IMG_0887.jpeg', text: "You know who you are. Not many people do. It's one of your best things." },
-    { photo: 'photos/IMG_1131.jpeg', text: "I love how you're open to being wrong. That's a sign of real confidence." },
-    { photo: 'photos/IMG_0420.jpeg', text: "The way you grow — not loudly, not for show — just steadily, quietly, genuinely." },
-    { photo: 'photos/IMG_0888.jpeg', text: "I love that you care about things beyond yourself. You make the world a little better." },
-    { photo: 'photos/IMG_1132.jpeg', text: "You hold grief well. That's not nothing. A lot of people can't." },
-    { photo: 'photos/IMG_0476.JPG', text: "I love how you find meaning in ordinary moments. It's a kind of poetry." },
-    { photo: 'photos/IMG_0891.jpeg', text: "The way you give people the benefit of the doubt without being naive." },
-    { photo: 'photos/IMG_1162.jpeg', text: "I love that you don't pretend to have it all figured out. It makes me trust you more." },
-    { photo: 'photos/IMG_0478.jpeg', text: "You are one of the most genuinely good people I have ever known." },
-    { photo: 'photos/IMG_0899.jpeg', text: "I love that you will always try a food at least once, even when you're suspicious of it." },
-    { photo: 'photos/IMG_0032.jpeg', text: "The way you commit to a bad joke — fully, without shame — is one of your finest qualities." },
-    { photo: 'photos/IMG_0519.JPG', text: "I love that you have very strong opinions about very specific things and no opinions about others." },
-    { photo: 'photos/IMG_0904.jpeg', text: "You are funnier than you think you are. And you already think you're pretty funny." },
-    { photo: 'photos/IMG_0055.jpeg', text: "I love how you do accents badly and confidently. Never change." },
-    { photo: 'photos/IMG_0538.JPG', text: "The way you get weirdly competitive about things that don't matter. It's very endearing." },
-    { photo: 'photos/IMG_0906.jpeg', text: "I love that you have a favourite mug and it's not negotiable." },
-    { photo: 'photos/IMG_0056.jpeg', text: "You're irrationally early to things and I pretend to find it annoying. I don't." },
-    { photo: 'photos/IMG_0548.JPG', text: "I love how you always know the lyrics to the chorus but never the verses." },
-    { photo: 'photos/IMG_0908.jpeg', text: "The specific sound you make when something is better than expected." },
-    { photo: 'photos/IMG_0059.jpeg', text: "I love that you have a blanket hierarchy and you know exactly where each one ranks." },
-    { photo: 'photos/IMG_0625.jpeg', text: "You make up words and then use them again later as if they were real. I've started using them too." },
-    { photo: 'photos/IMG_0911.jpeg', text: "I love how you narrate what you're doing when you're home alone. It's a gift I get to witness." },
-    { photo: 'photos/IMG_0132.JPG', text: "The way you get a second wind late at night when everyone else is done." },
-    { photo: 'photos/IMG_0630.jpeg', text: "I love that you will rewatch things you love and feel them just as much the second time." },
-    { photo: 'photos/IMG_0912.JPG', text: "You have a very specific walk when you know you look good. It's amazing." },
-    { photo: 'photos/IMG_0134.jpeg', text: "I love how you always have an opinion on the best route, even in places you've never been." },
-    { photo: 'photos/IMG_0631.JPG', text: "The way you celebrate small wins like they're major achievements. They are." },
-    { photo: 'photos/IMG_0920.jpeg', text: "I love that you argue with the TV. It means you're paying attention." },
-    { photo: 'photos/IMG_0146.jpeg', text: "You take photos of food before you eat it and I will always pretend to find it embarrassing." },
-    { photo: 'photos/IMG_0631.jpeg', text: "Thank you for choosing this life with me." },
-    { photo: 'photos/IMG_0964.JPG', text: "Thank you for loving me on the days I'm hard to love." },
-    { photo: 'photos/IMG_0168.jpeg', text: "I'm grateful every day that you said yes to us." },
-    { photo: 'photos/IMG_0632.jpeg', text: "Thank you for making home feel safe." },
-    { photo: 'photos/IMG_0968.jpeg', text: "I don't say it enough: you make everything better." },
-    { photo: 'photos/IMG_0173.jpeg', text: "Thank you for being patient when I'm not." },
-    { photo: 'photos/IMG_0633.jpeg', text: "I'm grateful for the way you've made me think about things differently." },
-    { photo: 'photos/IMG_0978.jpeg', text: "Thank you for the ordinary days. They're my favourite." },
-    { photo: 'photos/IMG_0174.jpeg', text: "I'm grateful for every argument we've worked through. We're stronger for all of them." },
-    { photo: 'photos/IMG_0635 (1).jpeg', text: "Thank you for staying. On the easy days and the hard ones." },
-    { photo: 'photos/IMG_0983.jpeg', text: "I'm grateful that our daughter is going to know you as her mother." },
-    { photo: 'photos/IMG_0176.jpeg', text: "Thank you for seeing me clearly and choosing me anyway." },
-    { photo: 'photos/IMG_0635.jpeg', text: "I'm grateful for the mornings. Especially the slow ones." },
-    { photo: 'photos/IMG_0984.jpeg', text: "Thank you for being the kind of person our daughter can look up to." },
-    { photo: 'photos/IMG_0207 (1).jpeg', text: "I'm grateful for your laugh. It still gets me every time." },
-    { photo: 'photos/IMG_0637.jpeg', text: "Thank you for making me feel like enough, even when I didn't feel like it." },
-    { photo: 'photos/IMG_0986.jpeg', text: "I'm grateful for every version of you I've known." },
-    { photo: 'photos/IMG_0207.jpeg', text: "Thank you for growing with me instead of away from me." },
-    { photo: 'photos/IMG_0638.jpeg', text: "I'm grateful we found each other when we did." },
-    { photo: 'photos/IMG_0987.jpeg', text: "Thank you for loving our daughter the way you do. It's everything." },
-    { photo: 'photos/IMG_0208.jpeg', text: "I can't wait to keep growing old with you." },
-    { photo: 'photos/IMG_0640.jpeg', text: "I love thinking about all the things we haven't done yet." },
-    { photo: 'photos/IMG_0988.jpeg', text: "I want to show you more of the world. I want to see it through your eyes." },
-    { photo: 'photos/IMG_0209.jpeg', text: "I love imagining who our daughter will become — because you're her mother." },
-    { photo: 'photos/IMG_0642 (1).jpeg', text: "There's no one I'd rather figure out the future with." },
-    { photo: 'photos/IMG_0989.jpeg', text: "I love that we still have so much ahead of us." },
-    { photo: 'photos/IMG_0249.jpeg', text: "I want to make you proud. Every day, I want to make you proud." },
-    { photo: 'photos/IMG_0642.jpeg', text: "I love that we're building something — not just a life, but a legacy." },
-    { photo: 'photos/IMG_0990.jpeg', text: "I can't wait for the slow mornings when the kids are grown and it's just us again." },
-    { photo: 'photos/IMG_0254.jpeg', text: "I love that we have things to look forward to. You are one of them." },
-    { photo: 'photos/IMG_0645.jpeg', text: "I want to keep surprising you. I hope I always can." },
-    { photo: 'photos/IMG_0992.jpeg', text: "I love that we've survived hard things. We'll survive whatever comes next too." },
-    { photo: 'photos/IMG_0260.jpeg', text: "I want to keep choosing you. Every year, every season, every version of you." },
-    { photo: 'photos/IMG_0646.jpeg', text: "I love the future we're building, even when it's messy and uncertain." },
-    { photo: 'photos/IMG_0994.jpeg', text: "I can't wait to watch you become every version of yourself that's still to come." },
-    { photo: 'photos/IMG_0275.JPG', text: "I love that our story isn't finished. It's barely started." },
-    { photo: 'photos/IMG_0652.jpeg', text: "I want to be the person you're still glad you chose, thirty years from now." },
-    { photo: 'photos/IMG_1002.jpeg', text: "I love that our best days probably haven't happened yet." },
-    { photo: 'photos/IMG_0281.jpeg', text: "I want to keep making memories with you. Every kind. Even the boring ones." },
-    { photo: 'photos/IMG_0662.jpeg', text: "I love you. Not just today. All of it — every version of you, every season, every day." },
-    { photo: 'photos/IMG_1010.JPG', text: "You are the reason our home has a heartbeat." },
-    { photo: 'photos/IMG_0311.jpeg', text: "I love the sound of you moving around the house in the morning. It means everything is right." },
-    { photo: 'photos/IMG_0686.jpeg', text: "The way you hold space for people who are struggling — that's a gift not everyone has." },
-    { photo: 'photos/IMG_1035.JPG', text: "I love how you make decisions with your heart and check them with your head. It's a good order." },
-    { photo: 'photos/IMG_0321.jpeg', text: "You are more resilient than you give yourself credit for." },
-    { photo: 'photos/IMG_0687.jpeg', text: "I love the way you smell. Always. That's a forever thing." },
-    { photo: 'photos/IMG_1051.jpeg', text: "The way you say my name when something has genuinely delighted you." },
-    { photo: 'photos/IMG_0343.jpeg', text: "I love how you prioritise the things that actually matter and quietly drop the things that don't." },
-    { photo: 'photos/IMG_0732.jpeg', text: "You have excellent taste and the confidence to trust it." },
-    { photo: 'photos/IMG_1066.jpeg', text: "I love that you let people in. Some people never do." },
-    { photo: 'photos/IMG_0385.jpeg', text: "The way you handle uncertainty — not with denial, but with steadiness." },
-    { photo: 'photos/IMG_0738.jpeg', text: "I love how you know when to talk and when to just be present." },
-    { photo: 'photos/IMG_1093.jpeg', text: "You notice when I'm off before I've said a word. That kind of attention is love." },
-    { photo: 'photos/IMG_0392.jpeg', text: "I love how you've shaped the person I'm becoming." },
-    { photo: 'photos/IMG_0741.jpeg', text: "The way you give compliments — specifically, like you've been paying attention." },
-    { photo: 'photos/IMG_1095.jpeg', text: "I love that you're honest about what you need. It makes everything easier." },
-    { photo: 'photos/IMG_0395.jpeg', text: "You have a way of making the complicated feel manageable. I lean on that more than you know." },
-    { photo: 'photos/IMG_0790.jpeg', text: "I love your taste in music. Even when I pretend otherwise." },
-    { photo: 'photos/IMG_1101.jpeg', text: "The way you stand up for people who aren't in the room." },
-    { photo: 'photos/IMG_0396.jpeg', text: "I love how you've never tried to change me. Only encouraged me." },
-    { photo: 'photos/IMG_0792.jpeg', text: "The way you make the bed on the days I forgot to — that's love in action." },
-    { photo: 'photos/IMG_1102.jpeg', text: "I love that you always text back. It sounds small. It isn't." },
-    { photo: 'photos/IMG_0407.jpeg', text: "The way you make sure we eat properly, even when life is busy." },
-    { photo: 'photos/IMG_0804.jpeg', text: "I love that you remember what I like, without me having to repeat it." },
-    { photo: 'photos/IMG_1106.jpeg', text: "The way you check in on people you love — quietly, consistently." },
-    { photo: 'photos/IMG_0408.jpeg', text: "I love how you keep showing up, even when showing up is hard." },
-    { photo: 'photos/IMG_0846.jpeg', text: "The way you make someone feel welcome in our home." },
-    { photo: 'photos/IMG_1107.jpeg', text: "I love that you make plans and also that you're flexible when they fall apart." },
-    { photo: 'photos/IMG_0409.jpeg', text: "The way you celebrate other people's good news like it's your own." },
-    { photo: 'photos/IMG_0887.jpeg', text: "I love that you're willing to try things just because I'm excited about them." },
-    { photo: 'photos/IMG_1131.jpeg', text: "The way you carry grocery bags in one trip. Respect." },
-    { photo: 'photos/IMG_0416.jpeg', text: "I love how you always offer the last of something before taking it yourself." },
-    { photo: 'photos/IMG_0888.jpeg', text: "The way you tuck things in and tidy up even when no one's watching." },
-    { photo: 'photos/IMG_1132.jpeg', text: "I love how you make difficult conversations feel less difficult." },
-    { photo: 'photos/IMG_0420.jpeg', text: "The way you always, always check that I'm okay before you go to sleep." },
-    { photo: 'photos/IMG_0891.jpeg', text: "I love that you show up for the people you love, even when it costs you." },
-    { photo: 'photos/IMG_1162.jpeg', text: "The way you light up when you talk about something you're passionate about." },
-    { photo: 'photos/IMG_0476.JPG', text: "I love how you take care of yourself — it means you take care of us." },
-    { photo: 'photos/IMG_0899.jpeg', text: "The way you carry yourself — not with arrogance, just with quiet confidence." },
-    { photo: 'photos/IMG_0032.jpeg', text: "I love that you chose a hard, beautiful, real life over an easier, smaller one." },
-    { photo: 'photos/IMG_0478.jpeg', text: "You have no idea how often I think about how lucky I am." },
-    { photo: 'photos/IMG_0904.jpeg', text: "I don't tell you enough, but you're the thing I'm most proud of in my life." },
-    { photo: 'photos/IMG_0055.jpeg', text: "You don't realise how much lighter you make everything." },
-    { photo: 'photos/IMG_0519.JPG', text: "I think about the moment I knew, sometimes. It still gives me the same feeling." },
-    { photo: 'photos/IMG_0906.jpeg', text: "You have no idea how much the small things you do mean to me." },
-    { photo: 'photos/IMG_0056.jpeg', text: "I brag about you more than you know. People always say 'she sounds wonderful.' They're right." },
-    { photo: 'photos/IMG_0538.JPG', text: "You don't realise how often you say exactly the right thing." },
-    { photo: 'photos/IMG_0908.jpeg', text: "I think about how different my life would look without you. It's a quieter, greyer place." },
-    { photo: 'photos/IMG_0059.jpeg', text: "You have no idea how beautiful you are. I hope one day you see what I see." },
-    { photo: 'photos/IMG_0548.JPG', text: "I watch you sometimes when you don't know I'm watching. You're remarkable." },
-    { photo: 'photos/IMG_0911.jpeg', text: "You don't know how many times you've talked me down from the edge of a spiral." },
-    { photo: 'photos/IMG_0132.JPG', text: "I've told the story of how we met so many times. I never get tired of it." },
-    { photo: 'photos/IMG_0625.jpeg', text: "You have no idea how much I admire you." },
-    { photo: 'photos/IMG_0912.JPG', text: "I think about growing old with you and it makes everything feel easier." },
-    { photo: 'photos/IMG_0134.jpeg', text: "You don't realise that you're the first thing I'm grateful for, every single day." },
-    { photo: 'photos/IMG_0630.jpeg', text: "I've loved you in so many seasons now. Every one has been different. Every one has been good." },
-    { photo: 'photos/IMG_0920.jpeg', text: "You have no idea how much our daughter already looks like you. And how glad I am." },
-    { photo: 'photos/IMG_0146.jpeg', text: "I think about the life we're building and I feel proud of us." },
-    { photo: 'photos/IMG_0631.JPG', text: "You don't see yourself the way I see you. I wish I could loan you my perspective for a day." },
-    { photo: 'photos/IMG_0964.JPG', text: "I love you more than I know how to say. So I try to show it. Every day. I hope it lands." },
-    { photo: 'photos/IMG_0168.jpeg', text: "I love a cold morning when we're both still warm." },
-    { photo: 'photos/IMG_0631.jpeg', text: "The way a good meal becomes a great one because we're eating it together." },
-    { photo: 'photos/IMG_0968.jpeg', text: "I love how summer feels different with you in it." },
-    { photo: 'photos/IMG_0173.jpeg', text: "The way we debrief after something hard — it always helps." },
-    { photo: 'photos/IMG_0632.jpeg', text: "I love our Sunday rhythms. They feel like ours." },
-    { photo: 'photos/IMG_0978.jpeg', text: "The way you make something stressful feel survivable." },
-    { photo: 'photos/IMG_0174.jpeg', text: "I love watching you rest. You don't do it enough, and when you do, it's peaceful." },
-    { photo: 'photos/IMG_0633.jpeg', text: "The way the house feels on a night when everything is calm and the baby is down." },
-    { photo: 'photos/IMG_0983.jpeg', text: "I love how seasons change and you stay constant." },
-    { photo: 'photos/IMG_0176.jpeg', text: "The way you mark occasions — not with grand gestures, just with presence." },
-    { photo: 'photos/IMG_0635 (1).jpeg', text: "I love our ordinary evenings more than any fancy occasion." },
-    { photo: 'photos/IMG_0984.jpeg', text: "The way the day resets when I come home to you." },
-    { photo: 'photos/IMG_0207 (1).jpeg', text: "I love that there is no version of the holidays that I want without you." },
-    { photo: 'photos/IMG_0635.jpeg', text: "The way we've marked each year together — I look back and feel only warmth." },
-    { photo: 'photos/IMG_0986.jpeg', text: "I love how the small moments stack up into something enormous." },
-    { photo: 'photos/IMG_0207.jpeg', text: "The way a hard week can end on Friday and you make it feel okay." },
-    { photo: 'photos/IMG_0637.jpeg', text: "I love the life that happens in the in-between moments. That's where we live." },
-    { photo: 'photos/IMG_0987.jpeg', text: "The way a quiet afternoon with you is worth more than a hundred busy days." },
-    { photo: 'photos/IMG_0208.jpeg', text: "I love that 'home' and 'you' mean the same thing to me." },
-    { photo: 'photos/IMG_0638.jpeg', text: "The way everything is better when you're in it — even the hard things." },
-    { photo: 'photos/IMG_0988.jpeg', text: "You are my favourite person. I've said it before. I'll say it a thousand more times." },
-    { photo: 'photos/IMG_0209.jpeg', text: "I love you for who you are, not just what you do. Though what you do is extraordinary." },
-    { photo: 'photos/IMG_0640.jpeg', text: "You have given me the best years of my life, and we're just getting started." },
-    { photo: 'photos/IMG_0989.jpeg', text: "I love that we get to do this — all of this — together." },
-    { photo: 'photos/IMG_0249.jpeg', text: "You make love feel like a verb. You do it. Every day." },
-    { photo: 'photos/IMG_0642 (1).jpeg', text: "I love you on your good days. I love you more on your hard ones." },
-    { photo: 'photos/IMG_0990.jpeg', text: "You are everything I didn't know I needed and everything I can't imagine being without." },
-    { photo: 'photos/IMG_0254.jpeg', text: "I love you in the way that gets quieter over time, not smaller. It's just deeper now." },
-    { photo: 'photos/IMG_0642.jpeg', text: "You are the great love of my life. I hope you already know that." },
-    { photo: 'photos/IMG_0992.jpeg', text: "I love you. Completely. Without condition. Without end." },
-    { photo: 'photos/IMG_0260.jpeg', text: "I love you for the mother you are. The partner you are. The person you are." },
-    { photo: 'photos/IMG_0645.jpeg', text: "You are my person. In every sense of that word." },
-    { photo: 'photos/IMG_0994.jpeg', text: "I love you on the days this note feels like a lot. It's still true." },
-    { photo: 'photos/IMG_0275.JPG', text: "I love you for showing me what it looks like to love someone well." },
-    { photo: 'photos/IMG_0646.jpeg', text: "You make being loved feel safe. That's not given. That's built. You built it." },
-    { photo: 'photos/IMG_1002.jpeg', text: "I love you for the ordinary moments more than the extraordinary ones." },
-    { photo: 'photos/IMG_0281.jpeg', text: "You are remarkable. Not in a headline way. In a quiet, real, lasting way." },
-    { photo: 'photos/IMG_0652.jpeg', text: "I love you because of who you are, and I love who I am because of you." },
-    { photo: 'photos/IMG_1010.JPG', text: "There are not enough notes in the world to say what I mean. But I'll keep trying." },
-    { photo: 'photos/IMG_0311.jpeg', text: "I love you. Full stop. Always. That's it. That's the whole note." },
-    { photo: 'photos/IMG_0662.jpeg', text: "The way you face a hard day — not by pretending it's fine, but by getting through it." },
-    { photo: 'photos/IMG_1035.JPG', text: "I love how you take joy seriously. It's not frivolous to you. It's necessary." },
-    { photo: 'photos/IMG_0321.jpeg', text: "The way you give people your full attention when they need it." },
-    { photo: 'photos/IMG_0686.jpeg', text: "I love that you're brave in the ways that count — even when you don't feel brave." },
-    { photo: 'photos/IMG_1051.jpeg', text: "The way you make space for imperfection — in yourself and in others." },
-    { photo: 'photos/IMG_0343.jpeg', text: "I love how you handle disappointment with dignity." },
-    { photo: 'photos/IMG_0687.jpeg', text: "The way you stay curious — about people, about ideas, about the world." },
-    { photo: 'photos/IMG_1066.jpeg', text: "I love that you haven't stopped growing. You never will." },
-    { photo: 'photos/IMG_0385.jpeg', text: "The way you care for the people in your orbit — quietly, consistently, fully." },
-    { photo: 'photos/IMG_0732.jpeg', text: "I love that you know how to receive love as well as give it." },
-    { photo: 'photos/IMG_1093.jpeg', text: "The way you hold a grudge less than almost anyone I know." },
-    { photo: 'photos/IMG_0392.jpeg', text: "I love how you make the effort even when you're tired. Especially then." },
-    { photo: 'photos/IMG_0738.jpeg', text: "The way you've softened me, without making me less myself." },
-    { photo: 'photos/IMG_1095.jpeg', text: "I love that you are exactly who you seem to be. No performance, no pretending." },
-    { photo: 'photos/IMG_0395.jpeg', text: "The way you love this family. It's the centrepiece of everything." },
-    { photo: 'photos/IMG_0741.jpeg', text: "I love that we still have things to learn about each other." },
-    { photo: 'photos/IMG_1101.jpeg', text: "The way you take up for yourself when you need to — I am proud of that." },
-    { photo: 'photos/IMG_0396.jpeg', text: "I love how you've leaned into the life we're building, even when it's been hard." },
-    { photo: 'photos/IMG_0790.jpeg', text: "The way you make other people feel good about themselves." },
-    { photo: 'photos/IMG_1102.jpeg', text: "I love you not just for who you are but for who you've helped me become." },
-    { photo: 'photos/IMG_0407.jpeg', text: "The way you carry yourself — through hard things, good things, ordinary things." },
-    { photo: 'photos/IMG_0792.jpeg', text: "I love how you make even tired evenings feel like enough." },
-    { photo: 'photos/IMG_1106.jpeg', text: "The way you notice beauty in things other people overlook." },
-    { photo: 'photos/IMG_0408.jpeg', text: "I love that you are my partner in every sense — in life, in this family, in the day-to-day." },
-    { photo: 'photos/IMG_0804.jpeg', text: "The way you walk back into a room and everything feels a little more settled." },
-    { photo: 'photos/IMG_1107.jpeg', text: "I love how you've changed, and how you've stayed exactly the same." },
-    { photo: 'photos/IMG_0409.jpeg', text: "The way you make love feel like a practice, not just a feeling." },
-    { photo: 'photos/IMG_0846.jpeg', text: "I love that you chose to build something real over something easy." },
-    { photo: 'photos/IMG_1131.jpeg', text: "The way you look at our daughter — I will never get tired of that look." },
-    { photo: 'photos/IMG_0416.jpeg', text: "I love you. Not just on the good days. Every day. All the days." },
-    { photo: 'photos/IMG_0887.jpeg', text: "The way you are in the morning — slow and honest and real." },
-    { photo: 'photos/IMG_1132.jpeg', text: "I love how you make our life feel like it was chosen, not just happened into." },
-    { photo: 'photos/IMG_0420.jpeg', text: "The way you carry the weight of things without letting it weigh you down." },
-    { photo: 'photos/IMG_0888.jpeg', text: "I love that this is us. All of it. The mess and the beauty and the ordinary." },
-    { photo: 'photos/IMG_1162.jpeg', text: "The way you show up — not perfectly, but fully." },
-    { photo: 'photos/IMG_0476.JPG', text: "I love how you make the love between us feel earned and safe." },
-    { photo: 'photos/IMG_0891.jpeg', text: "The way you are my anchor without being my ceiling." },
-    { photo: 'photos/IMG_0260.jpeg', text: "I love you for a thousand reasons I could never list. These are just the beginning." },
-    { photo: 'photos/IMG_0275.JPG', text: "The way you've made my world bigger just by being in it." },
-    { photo: 'photos/IMG_0281.jpeg', text: "I love that we are still becoming — together." },
-    { photo: 'photos/IMG_0311.jpeg', text: "The way you have loved me through every version of myself." },
-    { photo: 'photos/IMG_0321.jpeg', text: "I love how this life we have feels like the one I was always meant for." },
-    { photo: 'photos/IMG_0343.jpeg', text: "The way you love fiercely and gently at the same time." },
-    { photo: 'photos/IMG_0385.jpeg', text: "I love you. Yesterday, today, tomorrow. Every day between. Every day after." },
-    { photo: 'photos/IMG_0392.jpeg', text: "You are the love of my life. I hope every one of these notes has made you feel it." },
-    { photo: 'photos/IMG_0395.jpeg', text: "I love how you know when to push and when to let something go." },
-    { photo: 'photos/IMG_0396.jpeg', text: "The way you light candles at the end of a hard day — small rituals matter." },
-    { photo: 'photos/IMG_0407.jpeg', text: "I love that you still get butterflies about things. It means you care." },
-    { photo: 'photos/IMG_0408.jpeg', text: "The way you hold yourself together in public and let yourself fall apart safely at home." },
-    { photo: 'photos/IMG_0409.jpeg', text: "I love how you invest in friendships. You take them seriously, and they last." },
-    { photo: 'photos/IMG_0416.jpeg', text: "The way you smell after a shower — this is romantic and I stand by it." },
-    { photo: 'photos/IMG_0420.jpeg', text: "I love that you can laugh at yourself. It makes you very easy to be around." },
-    { photo: 'photos/IMG_0476.JPG', text: "The way you advocate for the people you love. Quietly, but firmly." },
-    { photo: 'photos/IMG_0478.jpeg', text: "I love how you've made peace with things that used to bother you. That's growth." },
-    { photo: 'photos/IMG_0519.JPG', text: "The way you make space in your life for things that bring you joy — not just duty." },
-    { photo: 'photos/IMG_0538.JPG', text: "I love that you're generous — with your time, your attention, your energy." },
-    { photo: 'photos/IMG_0548.JPG', text: "The way you follow through. You say you'll do something, and you do it." },
-    { photo: 'photos/IMG_0625.jpeg', text: "I love how you've shaped this family with your values, without being heavy-handed." },
-    { photo: 'photos/IMG_0630.jpeg', text: "The way you stay soft in a world that tries to harden people." },
-    { photo: 'photos/IMG_0631.JPG', text: "I love that you remember birthdays. And anniversaries. And the dates that matter to others." },
-    { photo: 'photos/IMG_0631.jpeg', text: "The way you make peace feel like the default in our home." },
-    { photo: 'photos/IMG_0632.jpeg', text: "I love how you make the most of where you are, even when you'd rather be somewhere else." },
-    { photo: 'photos/IMG_0633.jpeg', text: "The way you speak kindly about people even when they haven't deserved it." },
-    { photo: 'photos/IMG_0635 (1).jpeg', text: "I love that you ask for help when you need it. That takes real courage." },
-    { photo: 'photos/IMG_0635.jpeg', text: "The way you trust your instincts — about people, about situations. They're usually right." },
-    { photo: 'photos/IMG_0637.jpeg', text: "I love that you have a life outside of us. It makes you richer and us better." },
-    { photo: 'photos/IMG_0638.jpeg', text: "The way you make ordinary errands feel like an adventure when we do them together." },
-    { photo: 'photos/IMG_0640.jpeg', text: "I love how you handle the moments when things go wrong — with frustration, then grace." },
-    { photo: 'photos/IMG_0642 (1).jpeg', text: "The way you encourage me to do things that scare me, while standing close enough to catch me." },
-    { photo: 'photos/IMG_0642.jpeg', text: "I love that you know when to let me figure something out on my own." },
-    { photo: 'photos/IMG_0645.jpeg', text: "The way you're present at the end of a long day even when you'd rather switch off." },
-    { photo: 'photos/IMG_0646.jpeg', text: "I love how you notice when someone needs something before they ask." },
-    { photo: 'photos/IMG_0652.jpeg', text: "The way you make our daughter feel like the most important person in any room." },
-    { photo: 'photos/IMG_0662.jpeg', text: "I love that you protect your energy. It means the people who get it, really get it." },
-    { photo: 'photos/IMG_0686.jpeg', text: "The way you carry warmth into places that need it." },
-    { photo: 'photos/IMG_0687.jpeg', text: "I love how you've held on to who you are through every season of change." },
-    { photo: 'photos/IMG_0732.jpeg', text: "The way you make hard conversations feel like connection, not conflict." },
-    { photo: 'photos/IMG_0738.jpeg', text: "I love that you are equal parts soft and strong. That's rare." },
-    { photo: 'photos/IMG_0741.jpeg', text: "The way you keep choosing joy, even when easier emotions are available." },
-    { photo: 'photos/IMG_0790.jpeg', text: "I love how you make our home a place people want to come back to." },
-    { photo: 'photos/IMG_0792.jpeg', text: "The way you hold my hand like it still means something. Because it does." },
-    { photo: 'photos/IMG_0804.jpeg', text: "I love that you take the long view — on us, on life, on the things that matter." },
-    { photo: 'photos/IMG_0846.jpeg', text: "The way you rest without guilt when you need to. I'm still learning that from you." },
-    { photo: 'photos/IMG_0887.jpeg', text: "I love how you make this ordinary life feel like the one worth having." },
-    { photo: 'photos/IMG_0888.jpeg', text: "The way you love me — patiently, consistently, completely. I don't take it for granted." },
-    { photo: 'photos/IMG_0891.jpeg', text: "I love that we are in this together. Today, tomorrow, always — together." },
-    { photo: 'photos/IMG_0899.jpeg', text: "The way you exist in the world — with kindness, with purpose, with grace." },
-    { photo: 'photos/IMG_0904.jpeg', text: "I love how you make even difficult things feel possible when we face them side by side." },
-    { photo: 'photos/IMG_0906.jpeg', text: "The way you are someone our daughter will aspire to. I see it already." },
-    { photo: 'photos/IMG_0908.jpeg', text: "I love that you are mine and I am yours. What a thing to get to say." },
-    { photo: 'photos/IMG_0911.jpeg', text: "The way you've made every year better than the last. I can't imagine what's still ahead." },
-    { photo: 'photos/IMG_0912.JPG', text: "I love you not just for who you are today, but for who you've always been becoming." },
-    { photo: 'photos/IMG_0920.jpeg', text: "The way you show love — through action, through presence, through staying." },
-    { photo: 'photos/IMG_0964.JPG', text: "I love that on the very last day of this year of notes, this is still true: I love you." },
-    { photo: 'photos/IMG_0968.jpeg', text: "You are the love of my life. Every single day. But especially today." },
-    { photo: 'photos/IMG_0978.jpeg', text: "The way you have made loving someone feel like the best thing I've ever done." },
-    { photo: 'photos/IMG_0983.jpeg', text: "I love you more today than yesterday. That's been true every day we've been together." },
-    { photo: 'photos/IMG_0984.jpeg', text: "The way you've grown into the woman, the partner, the mother I get to stand beside." },
-    { photo: 'photos/IMG_0986.jpeg', text: "I love you not because you're perfect but because you're real. Completely, beautifully real." },
-    { photo: 'photos/IMG_0987.jpeg', text: "The way this year of notes has felt — like saying out loud what I've always known." },
-    { photo: 'photos/IMG_0988.jpeg', text: "I love you. That's the beginning and the end of it. Always." },
-    { photo: 'photos/IMG_0989.jpeg', text: "The way you make love feel like coming home — every single time." },
-    { photo: 'photos/IMG_0990.jpeg', text: "I love that there will be more years, more notes, more reasons. The list never ends." },
-    { photo: 'photos/IMG_0992.jpeg', text: "The way you are — all of it — is the thing I am most grateful for." },
-    { photo: 'photos/IMG_0994.jpeg', text: "I love you. I will love you. I have always loved you. That's the whole story." },
-    { photo: 'photos/IMG_1002.jpeg', text: "The way you've filled my life with meaning — thank you. Just thank you." },
-  ];
-
-  // ── APP LOGIC ────────────────────────────────────────────────
-
-  function getDaysElapsed() {
-    var start = new Date(START_DATE);
-    start.setHours(0,0,0,0);
-    var now = new Date();
-    now.setHours(0,0,0,0);
-    return Math.max(0, Math.floor((now - start) / 86400000));
-  }
-
-  // Returns which note index to show today based on send frequency
-  function getNoteIndex() {
-    var days = getDaysElapsed();
-    if (FREQUENCY === 'weekly')   return Math.floor(days / 7);
-    if (FREQUENCY === 'biweekly') return Math.floor(days / 14);
-    if (FREQUENCY === 'monthly') {
-      var s = new Date(START_DATE);
-      var n = new Date(); n.setHours(0,0,0,0);
-      return Math.max(0, (n.getFullYear() - s.getFullYear()) * 12 + (n.getMonth() - s.getMonth()));
-    }
-    return days; // daily
-  }
-
-  function fmtShort(d) {
-    return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
-  }
-
-  function fmtLong(d) {
-    return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
-  }
-
-  function unlockDate(i) {
-    var d = new Date(START_DATE);
-    if      (FREQUENCY === 'weekly')   d.setDate(d.getDate() + i * 7);
-    else if (FREQUENCY === 'biweekly') d.setDate(d.getDate() + i * 14);
-    else if (FREQUENCY === 'monthly')  d.setMonth(d.getMonth() + i);
-    else                               d.setDate(d.getDate() + i);
-    return fmtLong(d);
-  }
-
-  var daysElapsed    = getNoteIndex();
-  var todayNoteIndex = Math.min(daysElapsed, notes.length - 1);
-  var currentIndex   = todayNoteIndex;
-
-  var dateBadgeEl    = document.getElementById('dateBadge');
-  var cardEl         = document.getElementById('card');
-  var placeholderEl  = document.getElementById('photoPlaceholder');
-  var phHintEl       = document.getElementById('phHint');
-  var cardImgEl      = document.getElementById('cardImg');
-  var dayBadgeEl     = document.getElementById('dayBadge');
-  var todayRibbonEl  = document.getElementById('todayRibbon');
-  var lockOverlayEl  = document.getElementById('lockOverlay');
-  var lockDateEl     = document.getElementById('lockDate');
-  var cardQuoteEl    = document.getElementById('cardQuote');
-  var dotsEl         = document.getElementById('navDots');
-  var progressFillEl = document.getElementById('progressFill');
-  var progressLblEl  = document.getElementById('progressLabel');
-  var prevBtn        = document.getElementById('prevBtn');
-  var nextBtn        = document.getElementById('nextBtn');
-  var heartBtn       = document.getElementById('heartBtn');
-  var favOpenBtn     = document.getElementById('favOpenBtn');
-  var favOverlay     = document.getElementById('favOverlay');
-  var favDrawer      = document.getElementById('favDrawer');
-  var favClose       = document.getElementById('favClose');
-  var favList        = document.getElementById('favList');
-  var favEmpty       = document.getElementById('favEmpty');
-  var favCountEl     = document.getElementById('favCount');
-
-  dateBadgeEl.textContent = fmtShort(new Date());
-
-  // ── FAVOURITES ───────────────────────────────────────────────
-
-  var FAVS_KEY = 'love-notes-favourites';
-
-  function loadFavs() {
-    try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; }
-  }
-
-  function saveFavs(favs) {
-    try { localStorage.setItem(FAVS_KEY, JSON.stringify(favs)); } catch {}
-  }
-
-  function isFavourited(idx) {
-    return loadFavs().indexOf(idx) !== -1;
-  }
-
-  function toggleFavourite(idx) {
-    var favs = loadFavs();
-    var pos = favs.indexOf(idx);
-    if (pos === -1) { favs.push(idx); } else { favs.splice(pos, 1); }
-    saveFavs(favs);
-    return pos === -1; // true = just added
-  }
-
-  function updateHeartBtn(idx) {
-    if (isFavourited(idx)) { heartBtn.classList.add('favourited'); }
-    else { heartBtn.classList.remove('favourited'); }
-  }
-
-  function updateFavCount() {
-    var n = loadFavs().length;
-    favCountEl.textContent = n > 0 ? n : '';
-  }
-
-  heartBtn.addEventListener('click', function() {
-    var added = toggleFavourite(currentIndex);
-    heartBtn.classList.remove('pop');
-    void heartBtn.offsetWidth; // restart animation
-    heartBtn.classList.add('pop');
-    if (added) { heartBtn.classList.add('favourited'); }
-    else { heartBtn.classList.remove('favourited'); }
-    updateFavCount();
-  });
-
-  function openDrawer() {
-    renderFavDrawer();
-    favOverlay.classList.add('open');
-    favDrawer.classList.add('open');
-  }
-
-  function closeDrawer() {
-    favOverlay.classList.remove('open');
-    favDrawer.classList.remove('open');
-  }
-
-  favOpenBtn.addEventListener('click', openDrawer);
-  favClose.addEventListener('click', closeDrawer);
-  favOverlay.addEventListener('click', closeDrawer);
-
-  function renderFavDrawer() {
-    var favs = loadFavs().slice().sort(function(a,b){ return a - b; });
-    favList.innerHTML = '';
-
-    if (favs.length === 0) {
-      favList.style.display = 'none';
-      favEmpty.style.display = 'flex';
-      return;
-    }
-
-    favList.style.display = 'block';
-    favEmpty.style.display = 'none';
-
-    favs.forEach(function(idx) {
-      var note = notes[idx];
-      if (!note) return;
-
-      var item = document.createElement('div');
-      item.className = 'fav-item';
-
-      // Thumbnail
-      if (note.photo) {
-        var img = document.createElement('img');
-        img.className = 'fav-thumb';
-        img.src = note.photo;
-        img.alt = '';
-        item.appendChild(img);
-      } else {
-        var ph = document.createElement('div');
-        ph.className = 'fav-thumb-ph';
-        ph.textContent = '🌿';
-        item.appendChild(ph);
-      }
-
-      // Text
-      var body = document.createElement('div');
-      body.className = 'fav-item-body';
-
-      var dayEl = document.createElement('div');
-      dayEl.className = 'fav-item-day';
-      dayEl.textContent = 'Day ' + (idx + 1);
-      body.appendChild(dayEl);
-
-      var quoteEl = document.createElement('div');
-      quoteEl.className = 'fav-item-quote';
-      quoteEl.textContent = note.text;
-      body.appendChild(quoteEl);
-
-      item.appendChild(body);
-
-      // Un-favourite button
-      var heart = document.createElement('div');
-      heart.className = 'fav-item-heart';
-      heart.textContent = '♥';
-      heart.addEventListener('click', function(e) {
-        e.stopPropagation();
-        toggleFavourite(idx);
-        updateFavCount();
-        updateHeartBtn(currentIndex);
-        renderFavDrawer();
-      });
-      item.appendChild(heart);
-
-      // Tap row → navigate to note
-      item.addEventListener('click', function() {
-        currentIndex = idx;
-        showNote(currentIndex);
-        closeDrawer();
-      });
-
-      favList.appendChild(item);
-    });
-  }
-
-  updateFavCount();
-
-  // ── DOTS ────────────────────────────────────────────────────
-
-  function renderDots() {
-    dotsEl.innerHTML = '';
-    var unlocked = todayNoteIndex + 1;
-    if (unlocked <= 1) return;
-    var start = Math.max(0, unlocked - 7);
-    for (var i = start; i < unlocked; i++) {
-      var d = document.createElement('div');
-      d.className = 'dot' + (i === currentIndex ? ' active' : '');
-      dotsEl.appendChild(d);
-    }
-  }
-
-  // ── SHOW NOTE ───────────────────────────────────────────────
-
-  function showNote(index, animate) {
-    if (animate === undefined) animate = true;
-    var note    = notes[index];
-    var isToday = index === todayNoteIndex;
-    var locked  = index > daysElapsed || index >= notes.length;
-
-    if (animate) cardQuoteEl.classList.add('fading');
-
-    setTimeout(function() {
-      cardQuoteEl.textContent = note.text;
-      if (animate) cardQuoteEl.classList.remove('fading');
-
-      dayBadgeEl.textContent = isToday ? 'Today · Day ' + (index+1) : 'Day ' + (index+1);
-      todayRibbonEl.style.display = isToday ? 'block' : 'none';
-
-      if (locked) {
-        cardEl.classList.add('locked');
-        lockDateEl.textContent = unlockDate(index);
-        lockOverlayEl.style.display = 'flex';
-      } else {
-        cardEl.classList.remove('locked');
-        lockOverlayEl.style.display = 'none';
-      }
-
-      var src = note.photo || '';
-      if (src) {
-        placeholderEl.style.display = 'none';
-        cardImgEl.style.display = 'block';
-        cardImgEl.classList.add('loading');
-        var tmp = new Image();
-        tmp.onload = function() {
-          cardImgEl.src = src;
-          requestAnimationFrame(function() { cardImgEl.classList.remove('loading'); });
-        };
-        tmp.onerror = function() {
-          cardImgEl.style.display = 'none';
-          placeholderEl.style.display = 'flex';
-          phHintEl.textContent = src;
-        };
-        tmp.src = src;
-      } else {
-        cardImgEl.style.display = 'none';
-        placeholderEl.style.display = 'flex';
-        phHintEl.textContent = 'photos/' + String(index+1).padStart(2,'0') + '.jpg';
-      }
-
-      updateHeartBtn(index);
-    }, animate ? 200 : 0);
-
-    prevBtn.disabled = index <= 0;
-    nextBtn.disabled = index >= todayNoteIndex;
-
-    var pct = notes.length > 1 ? ((todayNoteIndex+1)/notes.length)*100 : 100;
-    progressFillEl.style.width = pct + '%';
-    progressLblEl.textContent  = (todayNoteIndex+1) + ' of ' + notes.length + ' unlocked';
-
-    renderDots();
-  }
-
-  showNote(currentIndex, false);
-
-  // ── NAV ─────────────────────────────────────────────────────
-
-  prevBtn.addEventListener('click', function() {
-    if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
-  });
-  nextBtn.addEventListener('click', function() {
-    if (currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
-  });
-
-  var tx = 0;
-  document.addEventListener('touchstart', function(e) { tx = e.touches[0].clientX; }, { passive:true });
-  document.addEventListener('touchend', function(e) {
-    var dx = e.changedTouches[0].clientX - tx;
-    if (Math.abs(dx) > 44) {
-      if (dx < 0 && currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
-      else if (dx > 0 && currentIndex > 0)          { currentIndex--; showNote(currentIndex); }
-    }
-  }, { passive:true });
-
-  // ── PWA INSTALL ─────────────────────────────────────────────
-
-  var deferredPrompt;
-  var banner     = document.getElementById('installBanner');
-  var installBtn = document.getElementById('installBtn');
-  var installMsg = document.getElementById('installMsg');
-
-  window.addEventListener('beforeinstallprompt', function(e) {
-    e.preventDefault();
-    deferredPrompt = e;
-    setTimeout(function() { banner.classList.add('show'); }, 4000);
-  });
-
-  installBtn.addEventListener('click', function() {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(function() { deferredPrompt = null; });
-    }
-    banner.classList.remove('show');
-  });
-
-  var isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  var isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-  if (isIOS && !isStandalone) {
-    installMsg.textContent = 'Tap Share → Add to Home Screen';
-    installBtn.style.display = 'none';
-    setTimeout(function() { banner.classList.add('show'); }, 4000);
-    setTimeout(function() { banner.classList.remove('show'); }, 10000);
-  }
-
-  // ── PUSH NOTIFICATIONS ───────────────────────────────────────
-
-  var PUSH_SERVER = 'https://YOUR-RENDER-APP.onrender.com';
-  var VAPID_PUBLIC_KEY = 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg';
-
-  function urlBase64ToUint8Array(base64String) {
-    var padding = '='.repeat((4 - base64String.length % 4) % 4);
-    var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    var rawData = window.atob(base64);
-    var outputArray = new Uint8Array(rawData.length);
-    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-    return outputArray;
-  }
-
-  function subscribeToPush(reg) {
-    reg.pushManager.getSubscription().then(function(existing) {
-      if (existing) return;
-      reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      }).then(function(subscription) {
-        fetch(PUSH_SERVER + '/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(subscription)
-        }).catch(function(){});
-      }).catch(function(){});
-    });
-  }
-
-  if ('serviceWorker' in navigator && 'PushManager' in window) {
-    navigator.serviceWorker.register('sw.js').then(function(reg) {
-      setTimeout(function() {
-        if (Notification.permission === 'default') {
-          Notification.requestPermission().then(function(p) {
-            if (p === 'granted') subscribeToPush(reg);
-          });
-        } else if (Notification.permission === 'granted') {
-          subscribeToPush(reg);
-        }
-      }, 8000);
-    }).catch(function(){});
-  } else if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(function(){});
-  }
-</script>
 </body>
 </html>
