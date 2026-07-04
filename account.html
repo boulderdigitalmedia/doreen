@@ -292,8 +292,9 @@
     <div class="panel">
       <div class="panel-title">Notes <span id="noteCountBadge" style="font-weight:400;color:var(--ink-soft)"></span></div>
       <div class="notes-list" id="notesList"></div>
-      <div style="margin-top:14px;">
+      <div style="margin-top:14px;display:flex;gap:8px;">
         <button class="btn btn-secondary btn-sm" onclick="showAddNote()">+ Add note</button>
+        <button class="btn btn-secondary btn-sm" onclick="showBulkAdd()">+ Bulk add</button>
       </div>
       <div id="addNoteEditor" style="display:none;margin-top:16px;">
         <div class="note-editor">
@@ -306,6 +307,18 @@
           <div class="editor-actions">
             <button class="btn btn-primary btn-sm" onclick="saveNewNote()">Save note</button>
             <button class="btn btn-ghost btn-sm" onclick="cancelAddNote()">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div id="bulkAddEditor" style="display:none;margin-top:16px;">
+        <div class="note-editor">
+          <p style="font-size:13px;color:var(--ink-mid);margin-bottom:10px;">
+            One note per line. Blank lines are skipped. Notes added this way don't have photos — attach one afterward with Edit if you want.
+          </p>
+          <textarea id="bulkNoteText" placeholder="The way you laugh at your own jokes...&#10;You make ordinary Tuesday evenings feel special...&#10;(one reason per line)" style="min-height:160px;"></textarea>
+          <div class="editor-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveBulkNotes()">Add notes</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelBulkAdd()">Cancel</button>
           </div>
         </div>
       </div>
@@ -751,6 +764,7 @@
   // ── ADD NOTE ──────────────────────────────────────────────────
 
   function showAddNote() {
+    document.getElementById('bulkAddEditor').style.display = 'none';
     document.getElementById('addNoteEditor').style.display = 'block';
     document.getElementById('addNoteText').focus();
     ADD_PHOTO_FILE = null;
@@ -761,6 +775,39 @@
   function cancelAddNote() {
     document.getElementById('addNoteEditor').style.display = 'none';
     ADD_PHOTO_FILE = null;
+  }
+
+  // ── BULK ADD NOTES ────────────────────────────────────────────
+
+  function showBulkAdd() {
+    document.getElementById('addNoteEditor').style.display = 'none';
+    ADD_PHOTO_FILE = null;
+    document.getElementById('bulkAddEditor').style.display = 'block';
+    document.getElementById('bulkNoteText').value = '';
+    document.getElementById('bulkNoteText').focus();
+  }
+  function cancelBulkAdd() {
+    document.getElementById('bulkAddEditor').style.display = 'none';
+  }
+
+  async function saveBulkNotes() {
+    var raw = document.getElementById('bulkNoteText').value;
+    var lines = raw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+
+    if (!lines.length) { showToast('Paste at least one note first'); return; }
+
+    var rows = lines.map(function(text, i) {
+      return { gift_id: CURRENT_GIFT.id, order_index: NOTES.length + i, text: text, photo_url: null };
+    });
+
+    var { error } = await sb.from('notes').insert(rows);
+    if (error) { showToast('Error: ' + error.message); return; }
+
+    cancelBulkAdd();
+    const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
+    NOTES = notes || [];
+    renderNotes();
+    showToast(lines.length + ' note' + (lines.length === 1 ? '' : 's') + ' added ✓');
   }
 
   async function saveNewNote() {
