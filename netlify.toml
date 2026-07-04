@@ -43,6 +43,11 @@
   to     = "/.netlify/functions/customer-portal"
   status = 200
 
+[[redirects]]
+  from   = "/api/update-sms-addon"
+  to     = "/.netlify/functions/update-sms-addon"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
