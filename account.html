@@ -278,7 +278,14 @@
       <div class="channel-status-row" id="recipientChannels">
         <div class="channel-status inactive">No preferences set yet</div>
       </div>
-      <div id="recipientEmail" style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;"></div>
+      <div class="field" style="margin-top:4px;">
+        <label>Recipient email</label>
+        <input type="text" id="dRecipientEmail" placeholder="them@example.com" />
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:5px;">
+          Setting this yourself will enable email delivery for this gift. Your recipient can still add push or SMS themselves via their gift link.
+        </p>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="saveRecipientEmail()">Save email</button>
       <button class="btn btn-secondary btn-sm" onclick="sendTestNow()">Send test now</button>
     </div>
 
@@ -606,12 +613,13 @@
   }
 
   function renderRecipient() {
-    var row     = document.getElementById('recipientChannels');
-    var emailEl = document.getElementById('recipientEmail');
+    var row       = document.getElementById('recipientChannels');
+    var emailInput = document.getElementById('dRecipientEmail');
+
+    emailInput.value = (RECIPIENT && RECIPIENT.email) || '';
 
     if (!RECIPIENT || !RECIPIENT.channels || !RECIPIENT.channels.length) {
-      row.innerHTML     = '<div class="channel-status inactive">Recipient hasn\'t opened the gift yet</div>';
-      emailEl.textContent = '';
+      row.innerHTML = '<div class="channel-status inactive">Recipient hasn\'t opened the gift yet</div>';
       return;
     }
 
@@ -619,8 +627,23 @@
       var on = RECIPIENT.channels.includes(c);
       return '<div class="channel-status ' + (on ? 'active' : 'inactive') + '">' + (on ? '✓' : '○') + ' ' + c + '</div>';
     }).join('');
+  }
 
-    emailEl.textContent = RECIPIENT.email ? '✉ ' + RECIPIENT.email : '';
+  async function saveRecipientEmail() {
+    var email = document.getElementById('dRecipientEmail').value.trim();
+    if (!email) { showToast('Enter an email address'); return; }
+
+    var channels = (RECIPIENT && RECIPIENT.channels) ? RECIPIENT.channels.slice() : [];
+    if (!channels.includes('email')) channels.push('email');
+
+    var { error } = await sb.from('recipients')
+      .upsert({ gift_id: CURRENT_GIFT.id, email: email, channels: channels }, { onConflict: 'gift_id' });
+    if (error) { showToast('Error: ' + error.message); return; }
+
+    const { data: rec } = await sb.from('recipients').select('*').eq('gift_id', CURRENT_GIFT.id).single();
+    RECIPIENT = rec;
+    renderRecipient();
+    showToast('Recipient email saved ✓');
   }
 
   function renderNotes() {
@@ -658,20 +681,52 @@
   // ── SAVE SETTINGS ─────────────────────────────────────────────
 
   async function saveGiftSettings() {
+    // sms_addon is handled separately below via /api/update-sms-addon so
+    // that Stripe billing stays in sync with the DB flag — it's never
+    // written directly from the client.
     var updates = {
       display_name: document.getElementById('dName').value.trim(),
       sender_name:  document.getElementById('dSender').value.trim(),
       slug:         document.getElementById('dSlug').value.trim().toLowerCase(),
       start_date:   document.getElementById('dStartDate').value,
       frequency:    document.getElementById('dFrequency').value,
-      sms_addon:    document.getElementById('dSmsAddon').checked,
     };
     if (!updates.slug) { showToast('Slug is required'); return; }
+
+    var smsEnabled = document.getElementById('dSmsAddon').checked;
+    var smsChanged = smsEnabled !== !!CURRENT_GIFT.sms_addon;
+
     var { error } = await sb.from('gifts').update(updates).eq('id', CURRENT_GIFT.id);
     if (error) { showToast('Error: ' + error.message); return; }
     Object.assign(CURRENT_GIFT, updates);
     updateSlugPreview();
-    showToast('Settings saved ✓');
+
+    if (!smsChanged) {
+      showToast('Settings saved ✓');
+      return;
+    }
+
+    try {
+      var res = await fetch('/api/update-sms-addon', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + SESSION.access_token,
+        },
+        body: JSON.stringify({ giftId: CURRENT_GIFT.id, enabled: smsEnabled }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        document.getElementById('dSmsAddon').checked = !!CURRENT_GIFT.sms_addon; // revert checkbox
+        showToast('Settings saved, but SMS add-on billing failed: ' + (data.error || 'unknown'));
+        return;
+      }
+      CURRENT_GIFT.sms_addon = smsEnabled;
+      showToast('Settings saved ✓');
+    } catch (e) {
+      document.getElementById('dSmsAddon').checked = !!CURRENT_GIFT.sms_addon; // revert checkbox
+      showToast('Settings saved, but could not reach billing server for the SMS add-on');
+    }
   }
 
   // ── SEND TEST ─────────────────────────────────────────────────
