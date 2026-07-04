@@ -54,6 +54,32 @@ CREATE TABLE IF NOT EXISTS recipients (
   UNIQUE (gift_id)
 );
 
+-- ── PROFILES ──────────────────────────────────────────────────
+-- One row per buyer (auth user). Tracks their Stripe subscription
+-- status — gates access to the dashboard (see account.html boot())
+-- and is written by create-checkout.js / stripe-webhook.js.
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id                     UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  stripe_customer_id     TEXT,
+  stripe_subscription_id TEXT,
+  stripe_status          TEXT,        -- active | trialing | past_due | canceled
+  plan                   TEXT,        -- monthly | annual
+  current_period_end     TIMESTAMPTZ,
+  created_at             TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Buyers can read their own profile (needed for the paywall check in account.html)
+CREATE POLICY "profile_owner_read" ON profiles
+  FOR SELECT TO authenticated
+  USING (auth.uid() = id);
+
+-- Note: all writes to profiles come from Netlify functions using the
+-- service role key (create-checkout.js, stripe-webhook.js), which
+-- bypasses RLS, so no write policy is needed here.
+
 -- ── INDEXES ───────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_gifts_user_id  ON gifts(user_id);
@@ -141,6 +167,22 @@ CREATE POLICY "recipient_public_upsert" ON recipients
 CREATE POLICY "recipient_owner_read" ON recipients
   FOR SELECT TO authenticated
   USING (
+    EXISTS (SELECT 1 FROM gifts
+            WHERE gifts.id = recipients.gift_id
+            AND   gifts.user_id = auth.uid())
+  );
+
+-- Buyers can also set/update the recipient record themselves for their own
+-- gifts (e.g. entering the recipient's email directly from the dashboard,
+-- instead of waiting for the giftee to onboard via the public link)
+CREATE POLICY "recipient_owner_write" ON recipients
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM gifts
+            WHERE gifts.id = recipients.gift_id
+            AND   gifts.user_id = auth.uid())
+  )
+  WITH CHECK (
     EXISTS (SELECT 1 FROM gifts
             WHERE gifts.id = recipients.gift_id
             AND   gifts.user_id = auth.uid())
