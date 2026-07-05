@@ -836,8 +836,9 @@
   const sb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const slug = window.location.pathname.replace(/^\//, '').split('/')[0];
 
-  var GIFT  = null;
-  var NOTES = [];
+  var GIFT      = null;
+  var NOTES     = [];
+  var RECIPIENT = null;
 
   // ── BOOT ────────────────────────────────────────────────────
 
@@ -859,15 +860,25 @@
       .eq('gift_id', gift.id)
       .order('order_index', { ascending: true });
 
-    GIFT  = gift;
-    NOTES = notes || [];
+    const { data: recipient } = await sb
+      .from('recipients')
+      .select('*')
+      .eq('gift_id', gift.id)
+      .maybeSingle();
+
+    GIFT      = gift;
+    NOTES     = notes || [];
+    RECIPIENT = recipient || null;
 
     document.getElementById('loading').style.display = 'none';
 
-    var setupKey = 'gift-setup-' + slug;
-    if (!localStorage.getItem(setupKey)) {
-      showOnboarding(gift);
+    var setupKey  = 'gift-setup-' + slug;
+    var alreadySetUp = !!localStorage.getItem(setupKey) || !!(RECIPIENT && RECIPIENT.onboarded_at);
+
+    if (!alreadySetUp) {
+      showOnboarding(gift, RECIPIENT);
     } else {
+      localStorage.setItem(setupKey, '1'); // keep the local flag in sync so this check stays fast next time
       startApp(gift, NOTES);
     }
   }
@@ -881,13 +892,22 @@
 
   var selectedChannels = new Set(['email']); // email is the default delivery channel and can't be turned off
 
-  function showOnboarding(gift) {
+  function showOnboarding(gift, recipient) {
     document.getElementById('obTitle').textContent = gift.sender_name
       ? 'You have a gift from ' + gift.sender_name
       : 'You have a gift';
 
     if (gift.sms_addon) {
       document.getElementById('obSms').style.display = 'block';
+    }
+
+    // Pre-fill from any existing recipient record (e.g. an email the buyer
+    // already set from their dashboard) so it doesn't have to be re-entered.
+    if (recipient) {
+      if (recipient.email) document.getElementById('emailInput').value = recipient.email;
+      if (recipient.phone) document.getElementById('phoneInput').value = recipient.phone;
+      if (recipient.channels && recipient.channels.includes('push')) toggleOption('push');
+      if (recipient.channels && recipient.channels.includes('sms'))  toggleOption('sms');
     }
 
     document.getElementById('onboarding').style.display = 'block';
