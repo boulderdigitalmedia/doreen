@@ -841,7 +841,7 @@
       .select('*')
       .eq('slug', slug)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
     if (error || !gift) return showNotFound();
 
