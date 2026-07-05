@@ -454,7 +454,7 @@
       .from('profiles')
       .select('stripe_status, plan, current_period_end')
       .eq('id', USER.id)
-      .single();
+      .maybeSingle();
 
     PROFILE = profile;
 
@@ -640,7 +640,7 @@
     updateSlugPreview();
 
     const [{ data: rec }, { data: notes }] = await Promise.all([
-      sb.from('recipients').select('*').eq('gift_id', gift.id).single(),
+      sb.from('recipients').select('*').eq('gift_id', gift.id).maybeSingle(),
       sb.from('notes').select('*').eq('gift_id', gift.id).order('order_index')
     ]);
 
