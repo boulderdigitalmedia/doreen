@@ -131,7 +131,15 @@
     .note-editor { background: var(--sage-pale); border: 1px solid var(--sage-light); border-radius: 12px; padding: 16px; }
     .photo-upload-area { border: 2px dashed var(--sage-light); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; margin-bottom: 12px; font-size: 13px; color: var(--ink-soft); transition: border-color 0.15s; }
     .photo-upload-area:hover { border-color: var(--sage); }
-    .photo-preview { width: 100%; max-height: 160px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; display: none; }
+    .photo-reposition-wrap { margin-bottom: 12px; }
+    .photo-reposition-box {
+      width: 100%; aspect-ratio: 4/3; border-radius: 10px; overflow: hidden;
+      position: relative; cursor: grab; background: var(--bg); touch-action: none;
+    }
+    .photo-reposition-box.dragging { cursor: grabbing; }
+    .photo-reposition-img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; -webkit-user-drag: none; }
+    .photo-reposition-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .reposition-hint { font-size: 12px; color: var(--ink-soft); }
     .editor-actions { display: flex; gap: 8px; margin-top: 10px; }
 
     /* ── DANGER ZONE ── */
@@ -298,9 +306,17 @@
       </div>
       <div id="addNoteEditor" style="display:none;margin-top:16px;">
         <div class="note-editor">
-          <div class="photo-upload-area" onclick="document.getElementById('addPhotoInput').click()">
-            <img id="addPhotoPreview" class="photo-preview" alt="" />
+          <div class="photo-upload-area" id="addPhotoUploadArea" onclick="document.getElementById('addPhotoInput').click()">
             <span id="addPhotoLabel">📷 Click to add a photo (optional)</span>
+          </div>
+          <div class="photo-reposition-wrap" id="addPhotoWrap" style="display:none;">
+            <div class="photo-reposition-box" id="addPhotoBox">
+              <img id="addPhotoPreview" class="photo-reposition-img" alt="" draggable="false" />
+            </div>
+            <div class="photo-reposition-actions">
+              <span class="reposition-hint">↔ Drag the photo to reframe it</span>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('addPhotoInput').click()">Change photo</button>
+            </div>
           </div>
           <input type="file" id="addPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect('add')" />
           <textarea id="addNoteText" placeholder="Write your note…"></textarea>
@@ -379,9 +395,17 @@
   <div class="modal">
     <div class="modal-title">Edit note</div>
     <input type="hidden" id="editNoteId" />
-    <div class="photo-upload-area" onclick="document.getElementById('editPhotoInput').click()">
-      <img id="editPhotoPreview" class="photo-preview" alt="" />
+    <div class="photo-upload-area" id="editPhotoUploadArea" onclick="document.getElementById('editPhotoInput').click()">
       <span id="editPhotoLabel">📷 Click to change photo (optional)</span>
+    </div>
+    <div class="photo-reposition-wrap" id="editPhotoWrap" style="display:none;">
+      <div class="photo-reposition-box" id="editPhotoBox">
+        <img id="editPhotoPreview" class="photo-reposition-img" alt="" draggable="false" />
+      </div>
+      <div class="photo-reposition-actions">
+        <span class="reposition-hint">↔ Drag the photo to reframe it</span>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('editPhotoInput').click()">Change photo</button>
+      </div>
     </div>
     <input type="file" id="editPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect('edit')" />
     <input type="hidden" id="editPhotoUrl" />
@@ -413,6 +437,7 @@
   var SELECTED_PLAN = 'annual';
   var ADD_PHOTO_FILE  = null;
   var EDIT_PHOTO_FILE = null;
+  var PHOTO_POS = { add: { x: 50, y: 50 }, edit: { x: 50, y: 50 } };
 
   // ── BOOT ──────────────────────────────────────────────────────
 
@@ -675,7 +700,7 @@
       row.className = 'note-row';
 
       var thumb = note.photo_url
-        ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" />'
+        ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" style="object-position:' + esc(note.photo_position || '50% 50%') + '" />'
         : '<div class="note-thumb-ph">🌿</div>';
 
       row.innerHTML =
@@ -768,8 +793,8 @@
     document.getElementById('addNoteEditor').style.display = 'block';
     document.getElementById('addNoteText').focus();
     ADD_PHOTO_FILE = null;
-    document.getElementById('addPhotoPreview').style.display = 'none';
-    document.getElementById('addPhotoLabel').style.display   = 'block';
+    setPhotoPosition('add', 50, 50);
+    hidePhotoPreview('add');
     document.getElementById('addNoteText').value = '';
   }
   function cancelAddNote() {
@@ -829,6 +854,7 @@
 
       var { error } = await sb.from('notes').insert({
         gift_id: CURRENT_GIFT.id, order_index: NOTES.length, text, photo_url: photoUrl,
+        photo_position: photoUrl ? (PHOTO_POS.add.x + '% ' + PHOTO_POS.add.y + '%') : null,
       });
       if (error) { showToast('Error: ' + error.message); return; }
 
@@ -853,9 +879,15 @@
     document.getElementById('editPhotoUrl').value = note.photo_url || '';
     EDIT_PHOTO_FILE = null;
     var preview = document.getElementById('editPhotoPreview');
-    var label   = document.getElementById('editPhotoLabel');
-    if (note.photo_url) { preview.src = note.photo_url; preview.style.display = 'block'; label.style.display = 'none'; }
-    else { preview.style.display = 'none'; label.style.display = 'block'; }
+    if (note.photo_url) {
+      preview.src = note.photo_url;
+      var pos = parsePhotoPosition(note.photo_position);
+      setPhotoPosition('edit', pos.x, pos.y);
+      showPhotoPreview('edit');
+    } else {
+      setPhotoPosition('edit', 50, 50);
+      hidePhotoPreview('edit');
+    }
     document.getElementById('editNoteModal').classList.add('open');
   }
   function closeEditModal() {
@@ -879,7 +911,10 @@
         if (!photoUrl) return;
         btn.textContent = 'Saving…';
       }
-      var { error } = await sb.from('notes').update({ text, photo_url: photoUrl }).eq('id', id);
+      var { error } = await sb.from('notes').update({
+        text, photo_url: photoUrl,
+        photo_position: photoUrl ? (PHOTO_POS.edit.x + '% ' + PHOTO_POS.edit.y + '%') : null,
+      }).eq('id', id);
       if (error) { showToast('Error: ' + error.message); return; }
       closeEditModal();
       const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
@@ -915,8 +950,8 @@
     reader.onload = function(e) {
       var preview = document.getElementById(mode + 'PhotoPreview');
       preview.src = e.target.result;
-      preview.style.display = 'block';
-      document.getElementById(mode + 'PhotoLabel').style.display = 'none';
+      setPhotoPosition(mode, 50, 50); // new photo — start centred
+      showPhotoPreview(mode);
     };
     reader.readAsDataURL(file);
   }
@@ -928,6 +963,67 @@
     var { data } = sb.storage.from('photos').getPublicUrl(filename);
     return data.publicUrl;
   }
+
+  // ── PHOTO REPOSITION (drag to reframe) ───────────────────────
+
+  function showPhotoPreview(mode) {
+    document.getElementById(mode + 'PhotoUploadArea').style.display = 'none';
+    document.getElementById(mode + 'PhotoWrap').style.display       = 'block';
+  }
+  function hidePhotoPreview(mode) {
+    document.getElementById(mode + 'PhotoUploadArea').style.display = 'block';
+    document.getElementById(mode + 'PhotoWrap').style.display       = 'none';
+  }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function parsePhotoPosition(value) {
+    if (!value) return { x: 50, y: 50 };
+    var parts = value.trim().split(/\s+/);
+    var x = parseFloat(parts[0]);
+    var y = parseFloat(parts[1]);
+    return { x: isNaN(x) ? 50 : x, y: isNaN(y) ? 50 : y };
+  }
+
+  function setPhotoPosition(mode, x, y) {
+    PHOTO_POS[mode] = { x: x, y: y };
+    document.getElementById(mode + 'PhotoPreview').style.objectPosition = x + '% ' + y + '%';
+  }
+
+  function initPhotoReposition(mode) {
+    var box     = document.getElementById(mode + 'PhotoBox');
+    var img     = document.getElementById(mode + 'PhotoPreview');
+    var dragging = null;
+
+    box.addEventListener('pointerdown', function(e) {
+      var natW = img.naturalWidth, natH = img.naturalHeight;
+      if (!natW || !natH) return;
+      var boxW = box.clientWidth, boxH = box.clientHeight;
+      var scale = Math.max(boxW / natW, boxH / natH);
+      var overflowX = Math.max(natW * scale - boxW, 0);
+      var overflowY = Math.max(natH * scale - boxH, 0);
+      dragging = {
+        startX: e.clientX, startY: e.clientY,
+        posX: PHOTO_POS[mode].x, posY: PHOTO_POS[mode].y,
+        overflowX: overflowX, overflowY: overflowY,
+      };
+      box.setPointerCapture(e.pointerId);
+      box.classList.add('dragging');
+    });
+    box.addEventListener('pointermove', function(e) {
+      if (!dragging) return;
+      var dx = e.clientX - dragging.startX;
+      var dy = e.clientY - dragging.startY;
+      var newX = dragging.overflowX > 0 ? clamp(dragging.posX - (dx / dragging.overflowX) * 100, 0, 100) : 50;
+      var newY = dragging.overflowY > 0 ? clamp(dragging.posY - (dy / dragging.overflowY) * 100, 0, 100) : 50;
+      setPhotoPosition(mode, newX, newY);
+    });
+    function endDrag() { dragging = null; box.classList.remove('dragging'); }
+    box.addEventListener('pointerup', endDrag);
+    box.addEventListener('pointercancel', endDrag);
+    box.addEventListener('pointerleave', endDrag);
+  }
+  initPhotoReposition('add');
+  initPhotoReposition('edit');
 
   // ── CREATE GIFT ───────────────────────────────────────────────
 
