@@ -155,7 +155,7 @@
     .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
 
     /* ── TOAST ── */
-    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; transition: transform 0.3s ease; pointer-events: none; white-space: nowrap; z-index: 99; }
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; transition: transform 0.3s ease; pointer-events: none; max-width: min(90vw, 480px); text-align: center; z-index: 99; }
     #toast.show { transform: translateX(-50%) translateY(0); }
 
     .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
@@ -780,7 +780,28 @@
         body: JSON.stringify({ slug: CURRENT_GIFT.slug }),
       });
       var data = await res.json();
-      showToast(data.ok ? 'Test sent! 💚' : 'Send failed: ' + (data.error || 'unknown'));
+
+      if (!res.ok || !data.ok) {
+        showToast('Send failed: ' + (data.error || 'unknown'));
+        return;
+      }
+      if (data.skipped) {
+        showToast('Not sent: ' + (data.reason || 'no channels set up yet'));
+        return;
+      }
+
+      var results  = data.results || {};
+      var channels = Object.keys(results);
+      var failed   = channels.filter(function(c) { return String(results[c]).indexOf('error') === 0; });
+
+      if (!channels.length) {
+        showToast('Nothing to send — no delivery channels set up for this recipient yet');
+      } else if (failed.length) {
+        // Surface the real reason instead of a false "sent" — e.g. Resend/Twilio not configured
+        showToast(failed.map(function(c) { return c + ' ' + results[c]; }).join(' · '));
+      } else {
+        showToast('Test sent! 💚 (' + channels.map(function(c) { return c + ': ' + results[c]; }).join(', ') + ')');
+      }
     } catch (e) {
       showToast('Could not reach server');
     }
@@ -1096,7 +1117,7 @@
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
+    toastTimer = setTimeout(function() { el.classList.remove('show'); }, msg.length > 50 ? 6000 : 3000);
   }
   document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.classList.remove('open'); });
