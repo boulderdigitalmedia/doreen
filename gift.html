@@ -147,6 +147,14 @@
       transition: border-color 0.15s, background 0.15s;
     }
 
+    .ob-option.locked { cursor: default; }
+    .ob-option.locked .ob-input-wrap { cursor: text; }
+
+    .ob-required-badge {
+      font-size: 10px; background: var(--sage-pale); color: var(--sage);
+      border-radius: 20px; padding: 2px 7px; vertical-align: middle;
+    }
+
     .ob-option.selected {
       border-color: var(--sage);
       background: var(--sage-pale);
@@ -710,11 +718,11 @@
     </div>
 
     <!-- Email -->
-    <div class="ob-option" id="obEmail" onclick="toggleOption('email')">
+    <div class="ob-option selected locked" id="obEmail" onclick="toggleOption('email')">
       <div class="ob-option-row">
         <div class="ob-option-icon">✉️</div>
         <div class="ob-option-body">
-          <div class="ob-option-title">Email</div>
+          <div class="ob-option-title">Email <span class="ob-required-badge">Default</span></div>
           <div class="ob-option-desc">A gentle reminder in your inbox</div>
         </div>
         <div class="ob-check" id="checkEmail"></div>
@@ -871,11 +879,11 @@
 
   // ── ONBOARDING ──────────────────────────────────────────────
 
-  var selectedChannels = new Set();
+  var selectedChannels = new Set(['email']); // email is the default delivery channel and can't be turned off
 
   function showOnboarding(gift) {
-    document.getElementById('obTitle').textContent = gift.display_name
-      ? 'You have a gift from ' + gift.display_name.split('&')[0].trim()
+    document.getElementById('obTitle').textContent = gift.sender_name
+      ? 'You have a gift from ' + gift.sender_name
       : 'You have a gift';
 
     if (gift.sms_addon) {
@@ -886,6 +894,7 @@
   }
 
   function toggleOption(channel) {
+    if (channel === 'email') return; // locked on — see selectedChannels init above
     if (selectedChannels.has(channel)) {
       selectedChannels.delete(channel);
       document.getElementById('ob' + channel.charAt(0).toUpperCase() + channel.slice(1)).classList.remove('selected');
@@ -896,11 +905,16 @@
   }
 
   async function submitOnboarding() {
+    var email = document.getElementById('emailInput').value.trim();
+    if (!email) {
+      document.getElementById('emailInput').focus();
+      return;
+    }
+
     var btn = document.getElementById('obBtn');
     btn.disabled = true;
     btn.textContent = 'Setting up…';
 
-    var email = document.getElementById('emailInput').value.trim();
     var phone = document.getElementById('phoneInput').value.trim();
     var channels = Array.from(selectedChannels);
 
