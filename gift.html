@@ -1099,6 +1099,7 @@
           var img = document.createElement('img');
           img.className = 'fav-thumb';
           img.src = note.photo_url;
+          img.style.objectPosition = note.photo_position || '50% 50%';
           img.alt = '';
           item.appendChild(img);
         } else {
@@ -1179,6 +1180,7 @@
           var tmp = new Image();
           tmp.onload = function() {
             cardImgEl.src = src;
+            cardImgEl.style.objectPosition = note.photo_position || '50% 50%';
             requestAnimationFrame(function() { cardImgEl.classList.remove('loading'); });
           };
           tmp.onerror = function() {
