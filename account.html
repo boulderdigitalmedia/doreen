@@ -305,7 +305,7 @@
           <input type="file" id="addPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect('add')" />
           <textarea id="addNoteText" placeholder="Write your note…"></textarea>
           <div class="editor-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveNewNote()">Save note</button>
+            <button class="btn btn-primary btn-sm" id="saveNoteBtn" onclick="saveNewNote()">Save note</button>
             <button class="btn btn-ghost btn-sm" onclick="cancelAddNote()">Cancel</button>
           </div>
         </div>
@@ -389,7 +389,7 @@
       <textarea id="editNoteText" placeholder="Write your note…" style="min-height:120px;"></textarea>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-primary" style="flex:1" onclick="saveEditNote()">Save</button>
+      <button class="btn btn-primary" style="flex:1" id="saveEditBtn" onclick="saveEditNote()">Save</button>
       <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
     </div>
   </div>
@@ -814,22 +814,33 @@
     var text = document.getElementById('addNoteText').value.trim();
     if (!text) { showToast('Note text is required'); return; }
 
-    var photoUrl = null;
-    if (ADD_PHOTO_FILE) {
-      photoUrl = await uploadPhoto(ADD_PHOTO_FILE, CURRENT_GIFT.id);
-      if (!photoUrl) return;
+    var btn = document.getElementById('saveNoteBtn');
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = ADD_PHOTO_FILE ? 'Uploading photo…' : 'Saving…';
+
+    try {
+      var photoUrl = null;
+      if (ADD_PHOTO_FILE) {
+        photoUrl = await uploadPhoto(ADD_PHOTO_FILE, CURRENT_GIFT.id);
+        if (!photoUrl) return;
+        btn.textContent = 'Saving…';
+      }
+
+      var { error } = await sb.from('notes').insert({
+        gift_id: CURRENT_GIFT.id, order_index: NOTES.length, text, photo_url: photoUrl,
+      });
+      if (error) { showToast('Error: ' + error.message); return; }
+
+      cancelAddNote();
+      const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
+      NOTES = notes || [];
+      renderNotes();
+      showToast('Note added ✓');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     }
-
-    var { error } = await sb.from('notes').insert({
-      gift_id: CURRENT_GIFT.id, order_index: NOTES.length, text, photo_url: photoUrl,
-    });
-    if (error) { showToast('Error: ' + error.message); return; }
-
-    cancelAddNote();
-    const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
-    NOTES = notes || [];
-    renderNotes();
-    showToast('Note added ✓');
   }
 
   // ── EDIT NOTE ─────────────────────────────────────────────────
@@ -855,15 +866,30 @@
     var id   = document.getElementById('editNoteId').value;
     var text = document.getElementById('editNoteText').value.trim();
     if (!text) { showToast('Note text is required'); return; }
-    var photoUrl = document.getElementById('editPhotoUrl').value || null;
-    if (EDIT_PHOTO_FILE) { photoUrl = await uploadPhoto(EDIT_PHOTO_FILE, CURRENT_GIFT.id); if (!photoUrl) return; }
-    var { error } = await sb.from('notes').update({ text, photo_url: photoUrl }).eq('id', id);
-    if (error) { showToast('Error: ' + error.message); return; }
-    closeEditModal();
-    const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
-    NOTES = notes || [];
-    renderNotes();
-    showToast('Note saved ✓');
+
+    var btn = document.getElementById('saveEditBtn');
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = EDIT_PHOTO_FILE ? 'Uploading photo…' : 'Saving…';
+
+    try {
+      var photoUrl = document.getElementById('editPhotoUrl').value || null;
+      if (EDIT_PHOTO_FILE) {
+        photoUrl = await uploadPhoto(EDIT_PHOTO_FILE, CURRENT_GIFT.id);
+        if (!photoUrl) return;
+        btn.textContent = 'Saving…';
+      }
+      var { error } = await sb.from('notes').update({ text, photo_url: photoUrl }).eq('id', id);
+      if (error) { showToast('Error: ' + error.message); return; }
+      closeEditModal();
+      const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
+      NOTES = notes || [];
+      renderNotes();
+      showToast('Note saved ✓');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   }
   async function deleteNote(noteId) {
     if (!confirm('Delete this note?')) return;
