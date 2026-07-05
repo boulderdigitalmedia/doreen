@@ -29,12 +29,14 @@ CREATE TABLE IF NOT EXISTS gifts (
 -- Ordered list of notes for each gift.
 
 CREATE TABLE IF NOT EXISTS notes (
-  id          UUID    DEFAULT gen_random_uuid() PRIMARY KEY,
-  gift_id     UUID    NOT NULL REFERENCES gifts(id) ON DELETE CASCADE,
-  order_index INTEGER NOT NULL,
-  text        TEXT    NOT NULL,
-  photo_url   TEXT,                              -- Supabase Storage public URL
-  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  id              UUID    DEFAULT gen_random_uuid() PRIMARY KEY,
+  gift_id         UUID    NOT NULL REFERENCES gifts(id) ON DELETE CASCADE,
+  order_index     INTEGER NOT NULL,
+  text            TEXT    NOT NULL,
+  photo_url       TEXT,                              -- Supabase Storage public URL
+  photo_position  TEXT    DEFAULT '50% 50%',         -- CSS object-position, e.g. "30% 70%" — lets the sender reframe a cropped photo
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (gift_id, order_index)
 );
 
@@ -103,6 +105,10 @@ CREATE TRIGGER gifts_updated_at
 
 CREATE TRIGGER recipients_updated_at
   BEFORE UPDATE ON recipients
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER notes_updated_at
+  BEFORE UPDATE ON notes
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ── ROW LEVEL SECURITY ────────────────────────────────────────
