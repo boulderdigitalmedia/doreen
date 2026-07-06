@@ -29,7 +29,6 @@
     .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 10; }
     .header-brand { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 300; color: var(--ink); }
     .header-right { display: flex; align-items: center; gap: 16px; }
-    .header-email { font-size: 13px; color: var(--ink-soft); }
     .header-signout { background: none; border: none; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink-soft); cursor: pointer; padding: 4px 0; }
     .header-signout:hover { color: var(--ink); }
 
@@ -174,7 +173,6 @@
   <div class="header">
     <div class="header-brand">A Note For You</div>
     <div class="header-right">
-      <span class="header-email" id="headerEmail"></span>
       <button class="header-signout" id="manageBillingBtn" style="display:none" onclick="openPortal()">Manage billing</button>
       <button class="header-signout" onclick="signOut()">Sign out</button>
     </div>
@@ -482,7 +480,6 @@
 
     SESSION = session;
     USER    = session.user;
-    document.getElementById('headerEmail').textContent = USER.email;
 
     // Load subscription profile
     const { data: profile } = await sb
