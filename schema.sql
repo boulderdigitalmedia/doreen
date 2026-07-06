@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS gifts (
                               CHECK (frequency IN ('daily','weekly','biweekly','monthly')),
   status          TEXT        NOT NULL DEFAULT 'active'
                               CHECK (status IN ('active','paused','cancelled')),
+  delivery_time   TIME        NOT NULL DEFAULT '08:00:00',  -- local time of day to send, in `timezone` below
+  timezone        TEXT        NOT NULL DEFAULT 'Pacific/Auckland', -- IANA tz name, e.g. 'America/Denver'
+  planned_notes_count INTEGER,                     -- buyer's intended total note count (e.g. 60) — used as the
+                                                     -- denominator on the recipient's progress bar; NULL falls
+                                                     -- back to however many notes actually exist
   sms_addon       BOOLEAN     NOT NULL DEFAULT FALSE,
   stripe_subscription_id TEXT,
   stripe_customer_id     TEXT,
@@ -50,6 +55,9 @@ CREATE TABLE IF NOT EXISTS recipients (
   email             TEXT,
   phone             TEXT,
   channels          TEXT[]      DEFAULT ARRAY[]::TEXT[],  -- ['push','email','sms']
+  delivery_time     TIME,                        -- recipient's own preferred send time; NULL = use gift's default
+  timezone          TEXT,                        -- recipient's own IANA tz name; NULL = use gift's default
+  favorites         INTEGER[]   DEFAULT ARRAY[]::INTEGER[], -- note order_indexes the giftee has favourited — synced here so it follows them across devices
   onboarded_at      TIMESTAMPTZ,
   created_at        TIMESTAMPTZ DEFAULT NOW(),
   updated_at        TIMESTAMPTZ DEFAULT NOW(),
