@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS gifts (
   planned_notes_count INTEGER,                     -- buyer's intended total note count (e.g. 60) — used as the
                                                      -- denominator on the recipient's progress bar; NULL falls
                                                      -- back to however many notes actually exist
+  access_password TEXT,                             -- optional simple passcode gating the public gift page (see
+                                                     -- verify-gift-password.js — never sent to the browser directly;
+                                                     -- checked server-side with the service role key). NULL/empty = no gate.
   sms_addon       BOOLEAN     NOT NULL DEFAULT FALSE,
   stripe_subscription_id TEXT,
   stripe_customer_id     TEXT,
@@ -136,6 +139,14 @@ CREATE POLICY "gift_owner_all" ON gifts
 CREATE POLICY "gift_public_read" ON gifts
   FOR SELECT TO anon
   USING (status = 'active');
+
+-- RLS is row-level only, so on its own it can't hide just the password
+-- column from a row anon is otherwise allowed to read. This column-level
+-- REVOKE closes that gap: the anon role can no longer read access_password
+-- at all (via gift.html's own query or a raw REST call), even for active
+-- gifts. Password checks always go through verify-gift-password.js, which
+-- uses the service-role key and bypasses this restriction.
+REVOKE SELECT (access_password) ON gifts FROM anon;
 
 -- NOTES
 -- Buyers manage notes on their own gifts
