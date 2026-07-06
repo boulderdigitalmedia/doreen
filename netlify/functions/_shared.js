@@ -24,49 +24,65 @@ const twilioClient = twilio(
 );
 
 // ── Date helpers ─────────────────────────────────────────────────
-// All day/time math is done in the gift's own `timezone` (buyer-chosen),
-// not the server's — falls back to the original NZ default for any gift
-// created before this column existed.
+// Day/time math is done in the *effective* timezone — the recipient's own
+// choice if they've set one, otherwise the gift's buyer-set default —
+// which matches how isDeliveryWindow decides *when* to send. Using the
+// same resolution everywhere means the note index the page shows and the
+// note index an email actually delivers can't disagree.
 
-function getGiftNow(gift) {
-  const tz = (gift && gift.timezone) || 'Pacific/Auckland';
-  return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+// `gift.start_date` comes back from Postgres as a plain "YYYY-MM-DD"
+// string. `new Date('YYYY-MM-DD')` parses that as UTC midnight, which
+// then gets shifted onto the *previous* local calendar day by any
+// downstream .setHours(0,0,0,0) call in a timezone behind UTC — a classic
+// off-by-one that made the site and emails disagree by a full day for
+// recipients west of UTC. Parsing the pieces directly avoids that.
+function parseLocalDate(dateStr) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function resolveTimezone(gift, recipient) {
+  return (recipient && recipient.timezone) || (gift && gift.timezone) || 'Pacific/Auckland';
+}
+
+function tzNow(timezone) {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
 }
 
 // dayOffset lets callers ask "what would this be N days from now" — used
 // to check tomorrow's note requirement in advance (see
 // checkUpcomingNoteShortage below), without duplicating this math.
-function getDaysElapsed(gift, dayOffset = 0) {
-  const start = new Date(gift.start_date);
+function getDaysElapsed(gift, recipient, dayOffset = 0) {
+  const start = parseLocalDate(gift.start_date);
   start.setHours(0, 0, 0, 0);
-  const now = getGiftNow(gift);
+  const now = tzNow(resolveTimezone(gift, recipient));
   now.setHours(0, 0, 0, 0);
   now.setDate(now.getDate() + dayOffset);
   return Math.max(0, Math.floor((now - start) / 86400000));
 }
 
-function getNoteIndex(gift, dayOffset = 0) {
-  const days = getDaysElapsed(gift, dayOffset);
+function getNoteIndex(gift, recipient, dayOffset = 0) {
+  const days = getDaysElapsed(gift, recipient, dayOffset);
   if (gift.frequency === 'weekly')   return Math.floor(days / 7);
   if (gift.frequency === 'biweekly') return Math.floor(days / 14);
   if (gift.frequency === 'monthly') {
-    const start = new Date(gift.start_date);
-    const now   = getGiftNow(gift);
+    const start = parseLocalDate(gift.start_date);
+    const now   = tzNow(resolveTimezone(gift, recipient));
     now.setDate(now.getDate() + dayOffset);
     return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
   }
   return days;
 }
 
-function shouldSendToday(gift) {
-  const days = getDaysElapsed(gift);
+function shouldSendToday(gift, recipient) {
+  const days = getDaysElapsed(gift, recipient);
   if (days === 0)                    return true;
   if (gift.frequency === 'daily')    return true;
   if (gift.frequency === 'weekly')   return days % 7  === 0;
   if (gift.frequency === 'biweekly') return days % 14 === 0;
   if (gift.frequency === 'monthly') {
-    const start = new Date(gift.start_date);
-    const now   = getGiftNow(gift);
+    const start = parseLocalDate(gift.start_date);
+    const now   = tzNow(resolveTimezone(gift, recipient));
     return now.getDate() === start.getDate();
   }
   return true;
@@ -77,10 +93,10 @@ function shouldSendToday(gift) {
 // timezone applies? send-daily.js runs every 15 minutes, so this matches
 // within that same 15-minute bucket rather than requiring an exact match.
 function isDeliveryWindow(gift, recipient, windowMinutes = 15) {
-  const timezone     = (recipient && recipient.timezone)      || gift.timezone      || 'Pacific/Auckland';
+  const timezone     = resolveTimezone(gift, recipient);
   const deliveryTime = (recipient && recipient.delivery_time)  || gift.delivery_time || '08:00:00';
 
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+  const now = tzNow(timezone);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const [h, m] = deliveryTime.split(':').map(Number);
@@ -223,9 +239,9 @@ async function sendNoteShortageAlert(gift, noteIndex, isAdvanceWarning = false) 
 // early if tomorrow's slot needs a *new* note that doesn't exist yet. If
 // tomorrow's note index is the same as today's (e.g. mid-week for a weekly
 // gift), nothing new is needed tomorrow, so this is a no-op.
-async function checkUpcomingNoteShortage(gift) {
-  const todayIndex    = getNoteIndex(gift, 0);
-  const tomorrowIndex = getNoteIndex(gift, 1);
+async function checkUpcomingNoteShortage(gift, recipient) {
+  const todayIndex    = getNoteIndex(gift, recipient, 0);
+  const tomorrowIndex = getNoteIndex(gift, recipient, 1);
 
   if (tomorrowIndex === todayIndex) return;
 
@@ -244,10 +260,6 @@ async function checkUpcomingNoteShortage(gift) {
 // ── Core send function ───────────────────────────────────────────
 
 async function sendGiftNotifications(gift, force = false) {
-  if (!force && !shouldSendToday(gift)) {
-    return { skipped: true, reason: `Not a send day (${gift.frequency})` };
-  }
-
   const { data: recipient } = await sb
     .from('recipients')
     .select('*')
@@ -258,7 +270,11 @@ async function sendGiftNotifications(gift, force = false) {
     return { skipped: true, reason: 'No recipient or no channels set up' };
   }
 
-  const noteIndex = getNoteIndex(gift);
+  if (!force && !shouldSendToday(gift, recipient)) {
+    return { skipped: true, reason: `Not a send day (${gift.frequency})` };
+  }
+
+  const noteIndex = getNoteIndex(gift, recipient);
   const { data: note } = await sb
     .from('notes')
     .select('*')
@@ -324,7 +340,7 @@ async function sendGiftNotifications(gift, force = false) {
 
   // Today's note went out fine — now peek at tomorrow so a gap gets caught
   // a day early instead of only being discovered when it's already due.
-  await checkUpcomingNoteShortage(gift);
+  await checkUpcomingNoteShortage(gift, recipient);
 
   return { sent: true, noteNum, results };
 }
