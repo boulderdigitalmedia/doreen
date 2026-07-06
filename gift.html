@@ -918,6 +918,13 @@
       </div>
     </div>
 
+    <div class="ob-time-section" id="obPasswordSection" style="display:none">
+      <div class="ob-section-label">Change gift page password</div>
+      <input class="ob-input" type="password" id="obCurrentPassword" placeholder="Current password" autocomplete="off" style="margin-bottom:8px;" />
+      <input class="ob-input" type="password" id="obNewPassword" placeholder="New password" autocomplete="off" />
+      <div class="lock-error" id="obPasswordError" style="display:none"></div>
+    </div>
+
     <button class="ob-btn" id="obBtn" onclick="submitOnboarding()">Open my gift</button>
     <span class="ob-skip" id="obSkip" onclick="skipOnboarding()">Skip for now</span>
     <span class="ob-skip" id="obCancel" style="display:none" onclick="cancelPrefsEdit()">Cancel</span>
@@ -1037,6 +1044,12 @@
   var NOTES     = [];
   var RECIPIENT = null;
 
+  // Whether the buyer currently has a password gate turned on for this
+  // gift — resolved once at boot (via the same verify-gift-password check
+  // used for the lock screen itself) so the recipient's own "change
+  // password" option in Settings knows whether to show at all.
+  var giftPasswordEnabled = false;
+
   // ── BOOT ────────────────────────────────────────────────────
   //
   // If the buyer set a password on this gift, we don't fetch notes or the
@@ -1066,13 +1079,13 @@
     var unlockKey = 'gift-unlocked-' + slug;
     var alreadyUnlocked = !!localStorage.getItem(unlockKey);
 
-    if (!alreadyUnlocked) {
-      var check = await checkGiftPassword(null);
-      if (check.requiresPassword) {
-        document.getElementById('loading').style.display = 'none';
-        showLockScreen(gift);
-        return;
-      }
+    var check = await checkGiftPassword(null);
+    giftPasswordEnabled = !!check.requiresPassword;
+
+    if (giftPasswordEnabled && !alreadyUnlocked) {
+      document.getElementById('loading').style.display = 'none';
+      showLockScreen(gift);
+      return;
     }
 
     await loadGiftContents(gift);
@@ -1089,6 +1102,24 @@
     } catch (e) {
       console.error('Password check failed:', e);
       return { requiresPassword: false, valid: true }; // fail open on a network hiccup rather than locking someone out
+    }
+  }
+
+  // Lets the recipient change the gift page password themselves from
+  // Settings — requires the current password (checked server-side) so
+  // this can't be used to take over a gate someone else set.
+  async function updateGiftPassword(currentPassword, newPassword) {
+    try {
+      var res = await fetch('/api/update-gift-password', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ slug: slug, currentPassword: currentPassword, newPassword: newPassword })
+      });
+      var data = await res.json();
+      if (!res.ok) return { success: false, error: data.error };
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: 'Network error — try again.' };
     }
   }
 
@@ -1223,6 +1254,14 @@
     var defaultTz = (recipient && recipient.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone || gift.timezone || 'Pacific/Auckland';
     populateTimezoneSelect('obTimezone', defaultTz);
 
+    // Changing the gift page password only makes sense once one already
+    // exists — whether to gate the page at all is the sender's call, made
+    // from their own dashboard.
+    document.getElementById('obPasswordSection').style.display = (isPrefsRevisit && giftPasswordEnabled) ? 'block' : 'none';
+    document.getElementById('obCurrentPassword').value = '';
+    document.getElementById('obNewPassword').value = '';
+    document.getElementById('obPasswordError').style.display = 'none';
+
     document.getElementById('onboarding').style.display = 'block';
   }
 
@@ -1278,6 +1317,28 @@
     var btn = document.getElementById('obBtn');
     btn.disabled = true;
     btn.textContent = isPrefsRevisit ? 'Saving…' : 'Setting up…';
+
+    // Password change (only shown during a prefs revisit on a gift that
+    // already has one set) — validated first so a wrong current password
+    // doesn't silently discard everything else on this form.
+    if (isPrefsRevisit && giftPasswordEnabled) {
+      var newPassword = document.getElementById('obNewPassword').value;
+      if (newPassword) {
+        var currentPassword = document.getElementById('obCurrentPassword').value;
+        var pwResult = await updateGiftPassword(currentPassword, newPassword);
+        if (!pwResult.success) {
+          btn.disabled = false;
+          btn.textContent = 'Save preferences';
+          var pwErrEl = document.getElementById('obPasswordError');
+          pwErrEl.textContent = pwResult.error || "That current password isn't right.";
+          pwErrEl.style.display = 'block';
+          return;
+        }
+        document.getElementById('obCurrentPassword').value = '';
+        document.getElementById('obNewPassword').value = '';
+        document.getElementById('obPasswordError').style.display = 'none';
+      }
+    }
 
     var phone = document.getElementById('phoneInput').value.trim();
     var channels = Array.from(selectedChannels);
@@ -1395,29 +1456,52 @@
   }
 
   // ── NOTE INDEX LOGIC ─────────────────────────────────────────
+  // This has to agree with the exact same math in _shared.js (which is
+  // what actually sends the push/email/SMS), otherwise the page can show
+  // a different "today's note" than what gets delivered. Two things kept
+  // them out of sync before: (1) start_date is a plain "YYYY-MM-DD"
+  // string, and new Date(startDate) parses that as UTC midnight, which
+  // shifts onto the *previous* local day for anyone west of UTC once
+  // .setHours(0,0,0,0) is applied — parseLocalDate avoids that; (2) "today"
+  // needs to be measured in the recipient's chosen delivery timezone (or
+  // the gift's default), not just whatever timezone the viewing device
+  // happens to be in.
 
-  function getDaysElapsed(startDate) {
-    var start = new Date(startDate);
+  function parseLocalDate(dateStr) {
+    var parts = String(dateStr).split('-').map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  function effectiveTimezone(gift) {
+    return (RECIPIENT && RECIPIENT.timezone) || (gift && gift.timezone) || 'Pacific/Auckland';
+  }
+
+  function tzNow(timezone) {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+  }
+
+  function getDaysElapsed(gift) {
+    var start = parseLocalDate(gift.start_date);
     start.setHours(0,0,0,0);
-    var now = new Date();
+    var now = tzNow(effectiveTimezone(gift));
     now.setHours(0,0,0,0);
     return Math.max(0, Math.floor((now - start) / 86400000));
   }
 
   function getNoteIndex(gift) {
-    var days = getDaysElapsed(gift.start_date);
+    var days = getDaysElapsed(gift);
     if (gift.frequency === 'weekly')   return Math.floor(days / 7);
     if (gift.frequency === 'biweekly') return Math.floor(days / 14);
     if (gift.frequency === 'monthly') {
-      var s = new Date(gift.start_date);
-      var n = new Date(); n.setHours(0,0,0,0);
+      var s = parseLocalDate(gift.start_date);
+      var n = tzNow(effectiveTimezone(gift)); n.setHours(0,0,0,0);
       return Math.max(0, (n.getFullYear() - s.getFullYear()) * 12 + (n.getMonth() - s.getMonth()));
     }
     return days;
   }
 
   function unlockDate(gift, i) {
-    var d = new Date(gift.start_date);
+    var d = parseLocalDate(gift.start_date);
     if      (gift.frequency === 'weekly')   d.setDate(d.getDate() + i * 7);
     else if (gift.frequency === 'biweekly') d.setDate(d.getDate() + i * 14);
     else if (gift.frequency === 'monthly')  d.setMonth(d.getMonth() + i);
