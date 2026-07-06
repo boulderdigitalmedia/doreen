@@ -88,6 +88,43 @@
       line-height: 1.6;
     }
 
+    /* ── PASSWORD LOCK ── */
+    #lockScreen {
+      display: none;
+      min-height: 100svh;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      text-align: center;
+    }
+
+    .lock-icon-big { font-size: 36px; margin-bottom: 14px; }
+
+    #lockScreen h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px;
+      font-weight: 300;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    #lockScreen p {
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+
+    .lock-form { width: 100%; max-width: 320px; }
+    .lock-form .ob-input { text-align: center; }
+
+    .lock-error {
+      color: #c0392b;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
     /* ── ONBOARDING OVERLAY ── */
     #onboarding {
       display: none;
@@ -561,16 +598,17 @@
     /* INSTALL BANNER */
     .install-banner {
       margin: 0 20px 16px;
-      padding: 12px 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      padding: 16px 18px;
+      background: var(--sage);
+      border: none;
+      border-radius: 14px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: var(--ink-mid);
-      box-shadow: 0 2px 8px var(--shadow);
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #fff;
+      box-shadow: 0 8px 24px var(--shadow);
       opacity: 0;
       transform: translateY(10px);
       transition: opacity 0.4s, transform 0.4s;
@@ -578,18 +616,28 @@
     }
 
     .install-banner.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
-    .install-msg { flex: 1; }
+    .install-icon { font-size: 22px; line-height: 1; }
+    .install-msg { flex: 1; line-height: 1.4; }
     .install-btn {
-      background: var(--sage);
-      color: #fff;
+      background: #fff;
+      color: var(--sage);
       border: none;
       border-radius: 8px;
-      padding: 6px 12px;
+      padding: 8px 14px;
       font-family: 'DM Sans', sans-serif;
-      font-size: 12px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
+    }
+    .install-close {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 2px 4px;
+      line-height: 1;
     }
 
     /* FAVOURITES DRAWER */
@@ -702,6 +750,71 @@
       flex-shrink: 0; padding: 4px;
     }
 
+    /* PUSH NOTIFICATION CONSENT */
+    .push-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(44,58,46,0.45);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .push-overlay.open { display: flex; }
+
+    .push-modal {
+      background: var(--surface);
+      border-radius: 20px;
+      max-width: 340px;
+      width: 100%;
+      padding: 28px 24px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    .push-modal-icon { font-size: 36px; margin-bottom: 12px; }
+
+    .push-modal-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    .push-modal-body {
+      font-size: 14px;
+      color: var(--ink-soft);
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    .push-modal-actions { display: flex; flex-direction: column; gap: 10px; }
+
+    .push-btn-primary {
+      background: var(--sage);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 13px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .push-btn-secondary {
+      background: none;
+      border: none;
+      color: var(--ink-soft);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 6px;
+    }
+
     /* ANIMATIONS */
     @keyframes fadeDown {
       from { opacity: 0; transform: translateY(-8px); }
@@ -732,6 +845,18 @@
   <h1>💚</h1>
   <h1>Gift not found</h1>
   <p>This link doesn't match an active gift.<br>Check the URL and try again.</p>
+</div>
+
+<!-- PASSWORD LOCK -->
+<div id="lockScreen">
+  <div class="lock-icon-big">🔒</div>
+  <h1>A note from <span id="lockSenderName">Your Favorite</span></h1>
+  <p>This gift is password protected.<br>Enter the password to continue.</p>
+  <div class="lock-form">
+    <input class="ob-input" type="password" id="lockPasswordInput" placeholder="Password" autocomplete="off" />
+    <div class="lock-error" id="lockError" style="display:none">That password isn't right — try again.</div>
+    <button class="ob-btn" id="lockSubmitBtn">Unlock</button>
+  </div>
 </div>
 
 <!-- ONBOARDING -->
@@ -860,8 +985,10 @@
   </div>
 
   <div class="install-banner" id="installBanner">
-    <span class="install-msg" id="installMsg">Add to your home screen for the best experience</span>
+    <span class="install-icon">💚</span>
+    <span class="install-msg" id="installMsg">Save this to your home screen so your notes are always one tap away</span>
     <button class="install-btn" id="installBtn">Install</button>
+    <button class="install-close" id="installClose" aria-label="Dismiss">✕</button>
   </div>
 
 </div>
@@ -877,6 +1004,19 @@
   <div class="fav-empty" id="favEmpty" style="display:none">
     <div style="font-size:28px">♡</div>
     <div>Tap the heart on notes you love</div>
+  </div>
+</div>
+
+<!-- PUSH NOTIFICATION CONSENT -->
+<div class="push-overlay" id="pushOverlay">
+  <div class="push-modal">
+    <div class="push-modal-icon">🔔</div>
+    <div class="push-modal-title">Turn on notifications?</div>
+    <div class="push-modal-body">Your browser will ask you to approve this next — tap "Allow" so you get a gentle nudge whenever a new note is ready.</div>
+    <div class="push-modal-actions">
+      <button class="push-btn-primary" id="pushAllowBtn">Turn on notifications</button>
+      <button class="push-btn-secondary" id="pushSkipBtn">Not now</button>
+    </div>
   </div>
 </div>
 
@@ -898,19 +1038,95 @@
   var RECIPIENT = null;
 
   // ── BOOT ────────────────────────────────────────────────────
+  //
+  // If the buyer set a password on this gift, we don't fetch notes or the
+  // recipient record (the actual private content) until it's been verified
+  // — the check itself happens server-side via verify-gift-password.js so
+  // the password is never sent to this page. Once unlocked, that's
+  // remembered on this device so it isn't asked again.
 
   async function boot() {
     if (!slug) return showNotFound();
 
+    // Deliberately NOT select('*') — access_password is excluded from the
+    // anon role's column privileges anyway (see schema.sql), but keeping
+    // this list explicit means the client also never touches other
+    // sensitive columns (stripe ids, etc.) that live on this row.
     const { data: gift, error } = await sb
       .from('gifts')
-      .select('*')
+      .select('id, slug, display_name, sender_name, start_date, frequency, status, delivery_time, timezone, planned_notes_count, sms_addon')
       .eq('slug', slug)
       .eq('status', 'active')
       .maybeSingle();
 
     if (error || !gift) return showNotFound();
 
+    GIFT = gift;
+
+    var unlockKey = 'gift-unlocked-' + slug;
+    var alreadyUnlocked = !!localStorage.getItem(unlockKey);
+
+    if (!alreadyUnlocked) {
+      var check = await checkGiftPassword(null);
+      if (check.requiresPassword) {
+        document.getElementById('loading').style.display = 'none';
+        showLockScreen(gift);
+        return;
+      }
+    }
+
+    await loadGiftContents(gift);
+  }
+
+  async function checkGiftPassword(password) {
+    try {
+      var res = await fetch('/api/verify-gift-password', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ slug: slug, password: password })
+      });
+      return await res.json();
+    } catch (e) {
+      console.error('Password check failed:', e);
+      return { requiresPassword: false, valid: true }; // fail open on a network hiccup rather than locking someone out
+    }
+  }
+
+  function showLockScreen(gift) {
+    document.getElementById('lockSenderName').textContent = gift.sender_name || 'Your Favorite';
+    document.getElementById('lockScreen').style.display = 'flex';
+    document.getElementById('lockPasswordInput').focus();
+  }
+
+  async function submitLockPassword() {
+    var input = document.getElementById('lockPasswordInput');
+    var btn   = document.getElementById('lockSubmitBtn');
+    var errEl = document.getElementById('lockError');
+    var pwd   = input.value;
+    if (!pwd) { input.focus(); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    errEl.style.display = 'none';
+
+    var check = await checkGiftPassword(pwd);
+
+    btn.disabled = false;
+    btn.textContent = 'Unlock';
+
+    if (check.valid) {
+      try { localStorage.setItem('gift-unlocked-' + slug, '1'); } catch {}
+      document.getElementById('lockScreen').style.display = 'none';
+      document.getElementById('loading').style.display = 'flex';
+      await loadGiftContents(GIFT);
+    } else {
+      errEl.style.display = 'block';
+      input.value = '';
+      input.focus();
+    }
+  }
+
+  async function loadGiftContents(gift) {
     const { data: notes } = await sb
       .from('notes')
       .select('*')
@@ -923,7 +1139,6 @@
       .eq('gift_id', gift.id)
       .maybeSingle();
 
-    GIFT      = gift;
     NOTES     = notes || [];
     RECIPIENT = recipient || null;
 
@@ -1077,11 +1292,20 @@
       onboarded_at:  new Date().toISOString()
     };
 
-    // If push selected, get push subscription first
+    // If push selected, get push subscription first (this walks the
+    // recipient through our own consent step before the browser's native
+    // permission prompt — see askPushConsent()/registerPush() below)
     if (selectedChannels.has('push')) {
       try {
         var pushSub = await registerPush();
-        if (pushSub) recipientData.push_subscription = pushSub;
+        if (pushSub) {
+          recipientData.push_subscription = pushSub;
+        } else {
+          // Declined our prompt, declined the browser prompt, or push
+          // isn't supported here — don't report push as an active channel
+          channels = channels.filter(c => c !== 'push');
+          recipientData.channels = channels;
+        }
       } catch (e) {
         console.warn('Push registration failed:', e);
         channels = channels.filter(c => c !== 'push');
@@ -1124,8 +1348,40 @@
     return arr;
   }
 
+  // Shows our own friendly explainer *before* the browser's native
+  // permission prompt, so the recipient knows what they're about to be
+  // asked and why — resolves true if they want to proceed, false if not.
+  function askPushConsent() {
+    return new Promise(function(resolve) {
+      var overlay  = document.getElementById('pushOverlay');
+      var allowBtn = document.getElementById('pushAllowBtn');
+      var skipBtn  = document.getElementById('pushSkipBtn');
+      overlay.classList.add('open');
+      function cleanup(result) {
+        overlay.classList.remove('open');
+        allowBtn.removeEventListener('click', onAllow);
+        skipBtn.removeEventListener('click', onSkip);
+        resolve(result);
+      }
+      function onAllow() { cleanup(true); }
+      function onSkip()  { cleanup(false); }
+      allowBtn.addEventListener('click', onAllow);
+      skipBtn.addEventListener('click', onSkip);
+    });
+  }
+
   async function registerPush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+
+    // Browser hasn't been asked yet — show our own consent step first so
+    // this doesn't feel like a surprise interruption.
+    if (window.Notification && Notification.permission === 'default') {
+      var wantsToEnable = await askPushConsent();
+      if (!wantsToEnable) return null;
+    } else if (window.Notification && Notification.permission === 'denied') {
+      return null; // already declined at the browser level — nothing to ask
+    }
+
     var permission = await Notification.requestPermission();
     if (permission !== 'granted') return null;
     var reg = await navigator.serviceWorker.register('/sw.js');
@@ -1425,30 +1681,43 @@
     }, { passive:true });
 
     // ── PWA INSTALL ────────────────────────────────────────────
+    // Stays visible until the recipient installs or dismisses it (rather
+    // than auto-hiding after a few seconds), so it's not easy to miss —
+    // remembers a dismissal per device so it doesn't nag on every visit.
 
+    var installDismissKey = 'gift-install-dismissed-' + slug;
     var deferredPrompt;
-    var banner     = document.getElementById('installBanner');
-    var installBtn = document.getElementById('installBtn');
-    var installMsg = document.getElementById('installMsg');
+    var banner       = document.getElementById('installBanner');
+    var installBtn   = document.getElementById('installBtn');
+    var installMsg   = document.getElementById('installMsg');
+    var installClose = document.getElementById('installClose');
+
+    function dismissInstallBanner() {
+      banner.classList.remove('show');
+      try { localStorage.setItem(installDismissKey, '1'); } catch {}
+    }
+
+    installClose.addEventListener('click', dismissInstallBanner);
+
+    var alreadyDismissed = (function() { try { return !!localStorage.getItem(installDismissKey); } catch { return false; } })();
 
     window.addEventListener('beforeinstallprompt', function(e) {
       e.preventDefault();
       deferredPrompt = e;
-      setTimeout(function() { banner.classList.add('show'); }, 5000);
+      if (!alreadyDismissed) setTimeout(function() { banner.classList.add('show'); }, 2500);
     });
 
     installBtn.addEventListener('click', function() {
       if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then(function() { deferredPrompt = null; }); }
-      banner.classList.remove('show');
+      dismissInstallBanner();
     });
 
     var isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     var isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isIOS && !isStandalone) {
-      installMsg.textContent        = 'Tap Share → Add to Home Screen';
-      installBtn.style.display      = 'none';
-      setTimeout(function() { banner.classList.add('show'); },   5000);
-      setTimeout(function() { banner.classList.remove('show'); }, 11000);
+    if (isIOS && !isStandalone && !alreadyDismissed) {
+      installMsg.textContent   = 'Tap Share → Add to Home Screen so you never miss a note';
+      installBtn.style.display = 'none';
+      setTimeout(function() { banner.classList.add('show'); }, 2500);
     }
 
     // Register SW for offline support even if push not requested
@@ -1456,6 +1725,13 @@
       navigator.serviceWorker.register('/sw.js').catch(function(){});
     }
   }
+
+  // ── LOCK SCREEN WIRING ───────────────────────────────────────
+
+  document.getElementById('lockSubmitBtn').addEventListener('click', submitLockPassword);
+  document.getElementById('lockPasswordInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitLockPassword();
+  });
 
   // ── RUN ─────────────────────────────────────────────────────
 
