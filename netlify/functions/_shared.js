@@ -24,43 +24,64 @@ const twilioClient = twilio(
 );
 
 // ── Date helpers ─────────────────────────────────────────────────
+// All day/time math is done in the gift's own `timezone` (buyer-chosen),
+// not the server's — falls back to the original NZ default for any gift
+// created before this column existed.
 
-function getNZDate() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Auckland' }));
+function getGiftNow(gift) {
+  const tz = (gift && gift.timezone) || 'Pacific/Auckland';
+  return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
 }
 
-function getDaysElapsed(startDate) {
-  const start = new Date(startDate);
+function getDaysElapsed(gift) {
+  const start = new Date(gift.start_date);
   start.setHours(0, 0, 0, 0);
-  const nzNow = getNZDate();
-  nzNow.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((nzNow - start) / 86400000));
+  const now = getGiftNow(gift);
+  now.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((now - start) / 86400000));
 }
 
 function getNoteIndex(gift) {
-  const days = getDaysElapsed(gift.start_date);
+  const days = getDaysElapsed(gift);
   if (gift.frequency === 'weekly')   return Math.floor(days / 7);
   if (gift.frequency === 'biweekly') return Math.floor(days / 14);
   if (gift.frequency === 'monthly') {
     const start = new Date(gift.start_date);
-    const now   = getNZDate();
+    const now   = getGiftNow(gift);
     return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
   }
   return days;
 }
 
 function shouldSendToday(gift) {
-  const days = getDaysElapsed(gift.start_date);
+  const days = getDaysElapsed(gift);
   if (days === 0)                    return true;
   if (gift.frequency === 'daily')    return true;
   if (gift.frequency === 'weekly')   return days % 7  === 0;
   if (gift.frequency === 'biweekly') return days % 14 === 0;
   if (gift.frequency === 'monthly') {
     const start = new Date(gift.start_date);
-    const now   = getNZDate();
+    const now   = getGiftNow(gift);
     return now.getDate() === start.getDate();
   }
   return true;
+}
+
+// Is it currently the recipient's chosen delivery time (falling back to
+// the gift's default if the recipient hasn't set their own), in whichever
+// timezone applies? send-daily.js runs every 15 minutes, so this matches
+// within that same 15-minute bucket rather than requiring an exact match.
+function isDeliveryWindow(gift, recipient, windowMinutes = 15) {
+  const timezone     = (recipient && recipient.timezone)      || gift.timezone      || 'Pacific/Auckland';
+  const deliveryTime = (recipient && recipient.delivery_time)  || gift.delivery_time || '08:00:00';
+
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const [h, m] = deliveryTime.split(':').map(Number);
+  const targetMinutes = h * 60 + m;
+
+  return Math.floor(nowMinutes / windowMinutes) === Math.floor(targetMinutes / windowMinutes);
 }
 
 // ── Push ────────────────────────────────────────────────────────
@@ -252,6 +273,7 @@ module.exports = {
   sb,
   getNoteIndex,
   shouldSendToday,
+  isDeliveryWindow,
   sendGiftNotifications,
   ok, err, preflight
 };
