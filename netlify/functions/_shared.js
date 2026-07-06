@@ -33,21 +33,26 @@ function getGiftNow(gift) {
   return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
 }
 
-function getDaysElapsed(gift) {
+// dayOffset lets callers ask "what would this be N days from now" — used
+// to check tomorrow's note requirement in advance (see
+// checkUpcomingNoteShortage below), without duplicating this math.
+function getDaysElapsed(gift, dayOffset = 0) {
   const start = new Date(gift.start_date);
   start.setHours(0, 0, 0, 0);
   const now = getGiftNow(gift);
   now.setHours(0, 0, 0, 0);
+  now.setDate(now.getDate() + dayOffset);
   return Math.max(0, Math.floor((now - start) / 86400000));
 }
 
-function getNoteIndex(gift) {
-  const days = getDaysElapsed(gift);
+function getNoteIndex(gift, dayOffset = 0) {
+  const days = getDaysElapsed(gift, dayOffset);
   if (gift.frequency === 'weekly')   return Math.floor(days / 7);
   if (gift.frequency === 'biweekly') return Math.floor(days / 14);
   if (gift.frequency === 'monthly') {
     const start = new Date(gift.start_date);
     const now   = getGiftNow(gift);
+    now.setDate(now.getDate() + dayOffset);
     return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
   }
   return days;
@@ -175,11 +180,14 @@ async function sendSms(phone, body) {
 }
 
 // ── Low-notes alert (to the buyer, not the recipient) ─────────────
-// Fires when a scheduled delivery has nothing to send — i.e. the buyer
-// hasn't written a note yet for today's slot. Lets them know before a
-// day gets silently skipped.
+// Two triggers:
+//   - "due today"    → a scheduled delivery had nothing to send, right now.
+//   - "due tomorrow" → checkUpcomingNoteShortage (below) looked one day
+//                      ahead and found tomorrow's slot is also empty, so
+//                      the buyer gets a heads-up a day early instead of
+//                      finding out only once the recipient already missed it.
 
-async function sendNoteShortageAlert(gift, noteIndex) {
+async function sendNoteShortageAlert(gift, noteIndex, isAdvanceWarning = false) {
   try {
     const { data: userData, error: userErr } = await sb.auth.admin.getUserById(gift.user_id);
     const buyerEmail = userData && userData.user && userData.user.email;
@@ -189,19 +197,47 @@ async function sendNoteShortageAlert(gift, noteIndex) {
     }
 
     const dashboardUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+    const subject = isAdvanceWarning
+      ? `⚠ "${gift.display_name}" needs a note for tomorrow`
+      : `⚠ "${gift.display_name}" is out of notes`;
+    const message = isAdvanceWarning
+      ? `<strong>${gift.display_name}</strong> is set to send Note ${noteIndex + 1} tomorrow, but it hasn't been written yet.`
+      : `<strong>${gift.display_name}</strong> was due to send Note ${noteIndex + 1} today, but no note has been written for that slot yet, so today's delivery was skipped.`;
 
     await resend.emails.send({
       from:    process.env.FROM_EMAIL || 'notes@yourdomain.com',
       to:      buyerEmail,
-      subject: `⚠ "${gift.display_name}" is out of notes`,
+      subject,
       html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
-        <p style="font-size:16px;">Heads up — <strong>${gift.display_name}</strong> was due to send Note ${noteIndex + 1} today, but no note has been written for that slot yet, so today's delivery was skipped.</p>
+        <p style="font-size:16px;">Heads up — ${message}</p>
         <p style="font-size:16px;">Add more notes from your dashboard so your recipient doesn't miss a day:</p>
         <p><a href="${dashboardUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Open your dashboard →</a></p>
       </div>`,
     });
   } catch (err) {
     console.error(`Failed to send note-shortage alert for gift ${gift.id}:`, err.message);
+  }
+}
+
+// Looks one day ahead (in the gift's own day-counting) and warns the buyer
+// early if tomorrow's slot needs a *new* note that doesn't exist yet. If
+// tomorrow's note index is the same as today's (e.g. mid-week for a weekly
+// gift), nothing new is needed tomorrow, so this is a no-op.
+async function checkUpcomingNoteShortage(gift) {
+  const todayIndex    = getNoteIndex(gift, 0);
+  const tomorrowIndex = getNoteIndex(gift, 1);
+
+  if (tomorrowIndex === todayIndex) return;
+
+  const { data: note } = await sb
+    .from('notes')
+    .select('id')
+    .eq('gift_id', gift.id)
+    .eq('order_index', tomorrowIndex)
+    .maybeSingle();
+
+  if (!note) {
+    await sendNoteShortageAlert(gift, tomorrowIndex, true);
   }
 }
 
@@ -285,6 +321,11 @@ async function sendGiftNotifications(gift, force = false) {
   }
 
   console.log(`[${gift.slug}] note ${noteNum}:`, results);
+
+  // Today's note went out fine — now peek at tomorrow so a gap gets caught
+  // a day early instead of only being discovered when it's already due.
+  await checkUpcomingNoteShortage(gift);
+
   return { sent: true, noteNum, results };
 }
 
