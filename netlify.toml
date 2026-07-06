@@ -48,6 +48,11 @@
   to     = "/.netlify/functions/update-sms-addon"
   status = 200
 
+[[redirects]]
+  from   = "/api/verify-gift-password"
+  to     = "/.netlify/functions/verify-gift-password"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
