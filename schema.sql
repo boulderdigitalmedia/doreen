@@ -144,8 +144,11 @@ CREATE POLICY "gift_public_read" ON gifts
 -- column from a row anon is otherwise allowed to read. This column-level
 -- REVOKE closes that gap: the anon role can no longer read access_password
 -- at all (via gift.html's own query or a raw REST call), even for active
--- gifts. Password checks always go through verify-gift-password.js, which
--- uses the service-role key and bypasses this restriction.
+-- gifts. Password checks and changes always go through
+-- verify-gift-password.js / update-gift-password.js, which use the
+-- service-role key and bypass this restriction. Note anon has no UPDATE
+-- grant on gifts at all, so recipients can't write to this column even
+-- indirectly — every write to access_password happens through that function.
 REVOKE SELECT (access_password) ON gifts FROM anon;
 
 -- NOTES
