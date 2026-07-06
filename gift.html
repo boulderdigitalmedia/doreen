@@ -706,7 +706,7 @@
   <div class="ob-inner">
     <div class="ob-heart">💚</div>
     <h1 class="ob-title" id="obTitle">You have a gift</h1>
-    <p class="ob-sub">How would you like to be notified<br>when a new note is ready for you?</p>
+    <p class="ob-sub" id="obSub">How would you like to be notified<br>when a new note is ready for you?</p>
 
     <div class="ob-section-label">Choose your notifications (pick any)</div>
 
@@ -761,7 +761,8 @@
     </div>
 
     <button class="ob-btn" id="obBtn" onclick="submitOnboarding()">Open my gift</button>
-    <span class="ob-skip" onclick="skipOnboarding()">Skip for now</span>
+    <span class="ob-skip" id="obSkip" onclick="skipOnboarding()">Skip for now</span>
+    <span class="ob-skip" id="obCancel" style="display:none" onclick="cancelPrefsEdit()">Cancel</span>
   </div>
 </div>
 
@@ -775,6 +776,7 @@
     </div>
     <div class="topbar-right">
       <div class="date-badge" id="dateBadge"></div>
+      <button class="fav-btn" id="prefsOpenBtn" title="Notification preferences">⚙</button>
       <button class="fav-btn" id="favOpenBtn" title="Favourites">
         ♥ <span class="fav-count" id="favCount"></span>
       </button>
@@ -904,23 +906,44 @@
   // ── ONBOARDING ──────────────────────────────────────────────
 
   var selectedChannels = new Set(['email']); // email is the default delivery channel and can't be turned off
+  var isPrefsRevisit   = false; // true when reopened from the ⚙ button, vs. first-time onboarding
 
-  function showOnboarding(gift, recipient) {
-    document.getElementById('obTitle').textContent = gift.sender_name
-      ? 'You have a gift from ' + gift.sender_name
-      : 'You have a gift';
+  function showOnboarding(gift, recipient, revisit) {
+    isPrefsRevisit = !!revisit;
+
+    document.getElementById('obTitle').textContent = isPrefsRevisit
+      ? 'Notification preferences'
+      : (gift.sender_name ? 'You have a gift from ' + gift.sender_name : 'You have a gift');
+    document.getElementById('obSub').innerHTML = isPrefsRevisit
+      ? 'Update how and when you\'d like to hear<br>about new notes.'
+      : 'How would you like to be notified<br>when a new note is ready for you?';
+    document.getElementById('obBtn').textContent = isPrefsRevisit ? 'Save preferences' : 'Open my gift';
+    document.getElementById('obSkip').style.display = isPrefsRevisit ? 'none' : 'block';
+    document.getElementById('obCancel').style.display = isPrefsRevisit ? 'block' : 'none';
 
     if (gift.sms_addon) {
       document.getElementById('obSms').style.display = 'block';
     }
 
-    // Pre-fill from any existing recipient record (e.g. an email the buyer
-    // already set from their dashboard) so it doesn't have to be re-entered.
+    // Reset to a known state derived from the recipient record each time
+    // this is shown, rather than toggling — this function can now be
+    // called more than once per page load (e.g. reopened from ⚙), and
+    // toggling from whatever state it was already in would be wrong.
+    selectedChannels = new Set(['email']);
+    document.getElementById('obPush').classList.remove('selected');
+    document.getElementById('obSms').classList.remove('selected');
+
     if (recipient) {
       if (recipient.email) document.getElementById('emailInput').value = recipient.email;
       if (recipient.phone) document.getElementById('phoneInput').value = recipient.phone;
-      if (recipient.channels && recipient.channels.includes('push')) toggleOption('push');
-      if (recipient.channels && recipient.channels.includes('sms'))  toggleOption('sms');
+      if (recipient.channels && recipient.channels.includes('push')) {
+        selectedChannels.add('push');
+        document.getElementById('obPush').classList.add('selected');
+      }
+      if (recipient.channels && recipient.channels.includes('sms')) {
+        selectedChannels.add('sms');
+        document.getElementById('obSms').classList.add('selected');
+      }
     }
 
     // Delivery time is the recipient's own choice — defaults to whatever
@@ -931,6 +954,10 @@
     populateTimezoneSelect('obTimezone', defaultTz);
 
     document.getElementById('onboarding').style.display = 'block';
+  }
+
+  function cancelPrefsEdit() {
+    document.getElementById('onboarding').style.display = 'none';
   }
 
   var COMMON_TIMEZONES = [
@@ -980,7 +1007,7 @@
 
     var btn = document.getElementById('obBtn');
     btn.disabled = true;
-    btn.textContent = 'Setting up…';
+    btn.textContent = isPrefsRevisit ? 'Saving…' : 'Setting up…';
 
     var phone = document.getElementById('phoneInput').value.trim();
     var channels = Array.from(selectedChannels);
@@ -1012,9 +1039,17 @@
       await sb.from('recipients').upsert(recipientData, { onConflict: 'gift_id' });
     }
 
+    RECIPIENT = Object.assign({}, RECIPIENT, recipientData); // keep in sync for if prefs are reopened again this session
     localStorage.setItem('gift-setup-' + slug, '1');
     document.getElementById('onboarding').style.display = 'none';
-    startApp(GIFT, NOTES);
+    btn.disabled = false;
+
+    if (isPrefsRevisit) {
+      btn.textContent = 'Save preferences';
+    } else {
+      btn.textContent = 'Open my gift';
+      startApp(GIFT, NOTES);
+    }
   }
 
   function skipOnboarding() {
@@ -1111,6 +1146,7 @@
     var nextBtn        = document.getElementById('nextBtn');
     var heartBtn       = document.getElementById('heartBtn');
     var favOpenBtn     = document.getElementById('favOpenBtn');
+    var prefsOpenBtn   = document.getElementById('prefsOpenBtn');
     var favOverlay     = document.getElementById('favOverlay');
     var favDrawer      = document.getElementById('favDrawer');
     var favClose       = document.getElementById('favClose');
@@ -1155,6 +1191,7 @@
     function closeDrawer() { favOverlay.classList.remove('open'); favDrawer.classList.remove('open'); }
 
     favOpenBtn.addEventListener('click', openDrawer);
+    prefsOpenBtn.addEventListener('click', function() { showOnboarding(gift, RECIPIENT, true); });
     favClose.addEventListener('click', closeDrawer);
     favOverlay.addEventListener('click', closeDrawer);
 
