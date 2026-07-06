@@ -282,6 +282,13 @@
       <p style="font-size:12px;color:var(--ink-soft);margin-top:-10px;margin-bottom:16px;">
         Used until your recipient sets their own preferred time during onboarding — accurate to within about 15 minutes either way.
       </p>
+      <div class="field">
+        <label>How many notes do you plan to write in total?</label>
+        <input type="number" id="dPlannedCount" min="1" placeholder="e.g. 60" />
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:5px;">
+          Shows your recipient an accurate "Note 12 of 60" instead of just however many you've written so far. Leave blank if you're not sure yet.
+        </p>
+      </div>
       <div class="field" style="margin-top:4px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
           <input type="checkbox" id="dSmsAddon" style="width:16px;height:16px;accent-color:var(--sage);" />
@@ -404,6 +411,10 @@
         <label>Timezone</label>
         <select id="newTimezone"></select>
       </div>
+    </div>
+    <div class="field">
+      <label>How many notes do you plan to write? (optional)</label>
+      <input type="number" id="newPlannedCount" min="1" placeholder="e.g. 60" />
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1" onclick="createGift()">Create gift</button>
@@ -661,6 +672,7 @@
     document.getElementById('dFrequency').value = gift.frequency;
     document.getElementById('dDeliveryTime').value = (gift.delivery_time || '08:00:00').slice(0, 5);
     populateTimezoneSelect('dTimezone', gift.timezone || 'Pacific/Auckland');
+    document.getElementById('dPlannedCount').value = gift.planned_notes_count || '';
     document.getElementById('dSmsAddon').checked = !!gift.sms_addon;
     updateSlugPreview();
 
@@ -747,14 +759,16 @@
     // sms_addon is handled separately below via /api/update-sms-addon so
     // that Stripe billing stays in sync with the DB flag — it's never
     // written directly from the client.
+    var plannedCountRaw = document.getElementById('dPlannedCount').value;
     var updates = {
-      display_name:  document.getElementById('dName').value.trim(),
-      sender_name:   document.getElementById('dSender').value.trim(),
-      slug:          document.getElementById('dSlug').value.trim().toLowerCase(),
-      start_date:    document.getElementById('dStartDate').value,
-      frequency:     document.getElementById('dFrequency').value,
-      delivery_time: document.getElementById('dDeliveryTime').value + ':00',
-      timezone:      document.getElementById('dTimezone').value,
+      display_name:        document.getElementById('dName').value.trim(),
+      sender_name:         document.getElementById('dSender').value.trim(),
+      slug:                document.getElementById('dSlug').value.trim().toLowerCase(),
+      start_date:          document.getElementById('dStartDate').value,
+      frequency:           document.getElementById('dFrequency').value,
+      delivery_time:       document.getElementById('dDeliveryTime').value + ':00',
+      timezone:            document.getElementById('dTimezone').value,
+      planned_notes_count: plannedCountRaw ? parseInt(plannedCountRaw, 10) : null,
     };
     if (!updates.slug) { showToast('Slug is required'); return; }
 
@@ -1112,6 +1126,7 @@
     document.getElementById('newFrequency').value = 'daily';
     document.getElementById('newDeliveryTime').value = '08:00';
     populateTimezoneSelect('newTimezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    document.getElementById('newPlannedCount').value = '';
     document.getElementById('createError').style.display = 'none';
     updateNewSlugPreview();
     document.getElementById('createModal').classList.add('open');
@@ -1135,14 +1150,16 @@
     var slug      = document.getElementById('newSlug').value.trim().toLowerCase();
     var startDate    = document.getElementById('newStartDate').value;
     var frequency    = document.getElementById('newFrequency').value;
-    var deliveryTime = document.getElementById('newDeliveryTime').value + ':00';
-    var timezone     = document.getElementById('newTimezone').value;
+    var deliveryTime   = document.getElementById('newDeliveryTime').value + ':00';
+    var timezone       = document.getElementById('newTimezone').value;
+    var plannedCountRaw = document.getElementById('newPlannedCount').value;
+    var plannedCount   = plannedCountRaw ? parseInt(plannedCountRaw, 10) : null;
     if (!name || !slug || !startDate) { errEl.textContent = 'All fields are required'; errEl.style.display = 'block'; return; }
     if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) { errEl.textContent = 'Slug: lowercase letters, numbers and hyphens only'; errEl.style.display = 'block'; return; }
     if (GIFTS.length >= 4) { errEl.textContent = 'You\'ve reached the 4-gift limit'; errEl.style.display = 'block'; return; }
     var { error } = await sb.from('gifts').insert({
       user_id: USER.id, slug, display_name: name, sender_name: sender, start_date: startDate, frequency,
-      delivery_time: deliveryTime, timezone: timezone, status: 'active',
+      delivery_time: deliveryTime, timezone: timezone, planned_notes_count: plannedCount, status: 'active',
     });
     if (error) { errEl.textContent = error.code === '23505' ? 'That slug is already taken' : error.message; errEl.style.display = 'block'; return; }
     closeCreateModal();
