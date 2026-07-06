@@ -175,6 +175,7 @@
     <div class="header-brand">A Note For You</div>
     <div class="header-right">
       <span class="header-email" id="headerEmail"></span>
+      <button class="header-signout" id="manageBillingBtn" style="display:none" onclick="openPortal()">Manage billing</button>
       <button class="header-signout" onclick="signOut()">Sign out</button>
     </div>
   </div>
@@ -496,6 +497,11 @@
     document.getElementById('app').style.display     = 'block';
 
     const isActive = profile && (profile.stripe_status === 'active' || profile.stripe_status === 'trialing');
+
+    // Always-visible way to reach Stripe's billing portal (to update payment
+    // method, change plan, or cancel) — not just when payment is past due.
+    var hasSubscription = profile && ['active', 'trialing', 'past_due'].indexOf(profile.stripe_status) !== -1;
+    document.getElementById('manageBillingBtn').style.display = hasSubscription ? 'inline-block' : 'none';
 
     if (isActive) {
       await showGiftList();
