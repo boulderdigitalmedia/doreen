@@ -34,7 +34,7 @@ exports.handler = schedule('*/15 * * * *', async () => {
 
   const results = await Promise.allSettled(
     gifts
-      .filter(g => shouldSendToday(g) && isDeliveryWindow(g, recipientByGiftId.get(g.id)))
+      .filter(g => shouldSendToday(g, recipientByGiftId.get(g.id)) && isDeliveryWindow(g, recipientByGiftId.get(g.id)))
       .map(g => sendGiftNotifications(g))
   );
 
