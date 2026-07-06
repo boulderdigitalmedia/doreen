@@ -297,6 +297,13 @@
           When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding.
         </p>
       </div>
+      <div class="field" style="margin-top:4px;">
+        <label>Gift page password (optional)</label>
+        <input type="text" id="dAccessPassword" placeholder="Leave blank for no password" autocomplete="off" />
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:5px;">
+          If set, your recipient has to enter this before they can see any notes — a simple way to keep the page private if you're worried about the link being shared or found. Leave blank to remove it.
+        </p>
+      </div>
       <button class="btn btn-primary" onclick="saveGiftSettings()">Save settings</button>
     </div>
 
@@ -674,6 +681,7 @@
     document.getElementById('dStartDate').value = gift.start_date;
     document.getElementById('dFrequency').value = gift.frequency;
     document.getElementById('dDeliveryTime').value = (gift.delivery_time || '08:00:00').slice(0, 5);
+    document.getElementById('dAccessPassword').value = gift.access_password || '';
     populateTimezoneSelect('dTimezone', gift.timezone || 'Pacific/Auckland');
     document.getElementById('dPlannedCount').value = gift.planned_notes_count || '';
     document.getElementById('dSmsAddon').checked = !!gift.sms_addon;
@@ -763,6 +771,7 @@
     // that Stripe billing stays in sync with the DB flag — it's never
     // written directly from the client.
     var plannedCountRaw = document.getElementById('dPlannedCount').value;
+    var accessPasswordRaw = document.getElementById('dAccessPassword').value.trim();
     var updates = {
       display_name:        document.getElementById('dName').value.trim(),
       sender_name:         document.getElementById('dSender').value.trim(),
@@ -772,6 +781,7 @@
       delivery_time:       document.getElementById('dDeliveryTime').value + ':00',
       timezone:            document.getElementById('dTimezone').value,
       planned_notes_count: plannedCountRaw ? parseInt(plannedCountRaw, 10) : null,
+      access_password:     accessPasswordRaw || null,
     };
     if (!updates.slug) { showToast('Slug is required'); return; }
 
