@@ -306,6 +306,11 @@
       padding: 4px;
     }
 
+    #prefsOpenBtn {
+      font-size: 24px;
+      color: var(--sage);
+    }
+
     .fav-count {
       position: absolute;
       top: -2px; right: -4px;
@@ -885,6 +890,19 @@
     NOTES     = notes || [];
     RECIPIENT = recipient || null;
 
+    // One-time migration: if this device has locally-saved favourites but
+    // the server record doesn't have any yet, push the local list up so
+    // they aren't lost now that favourites sync across devices.
+    if (RECIPIENT && RECIPIENT.id && (!Array.isArray(RECIPIENT.favorites) || RECIPIENT.favorites.length === 0)) {
+      try {
+        var localFavs = JSON.parse(localStorage.getItem('gift-favs-' + slug)) || [];
+        if (localFavs.length) {
+          RECIPIENT.favorites = localFavs;
+          sb.from('recipients').update({ favorites: localFavs }).eq('gift_id', gift.id).then(function(){});
+        }
+      } catch {}
+    }
+
     document.getElementById('loading').style.display = 'none';
 
     var setupKey  = 'gift-setup-' + slug;
@@ -1158,8 +1176,24 @@
 
     var FAVS_KEY = 'gift-favs-' + slug;
 
-    function loadFavs()       { try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; } }
-    function saveFavs(f)      { try { localStorage.setItem(FAVS_KEY, JSON.stringify(f)); } catch {} }
+    // Favourites live on the recipients row (RECIPIENT.favorites) so they
+    // follow the giftee across devices — localStorage is kept only as an
+    // instant-read cache in case the server value hasn't loaded yet.
+    function loadFavs() {
+      if (RECIPIENT && Array.isArray(RECIPIENT.favorites)) return RECIPIENT.favorites;
+      try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; }
+    }
+
+    function saveFavs(f) {
+      try { localStorage.setItem(FAVS_KEY, JSON.stringify(f)); } catch {}
+      if (RECIPIENT) RECIPIENT.favorites = f;
+      if (RECIPIENT && RECIPIENT.id) {
+        sb.from('recipients').update({ favorites: f }).eq('gift_id', GIFT.id).then(function(res) {
+          if (res.error) console.error('Failed to sync favourites:', res.error.message);
+        });
+      }
+    }
+
     function isFavourited(i)  { return loadFavs().indexOf(i) !== -1; }
 
     function toggleFavourite(i) {
