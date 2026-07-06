@@ -1321,9 +1321,13 @@
       prevBtn.disabled = index <= 0;
       nextBtn.disabled = index >= todayNoteIndex;
 
-      var pct = notes.length > 1 ? ((todayNoteIndex+1) / notes.length) * 100 : 100;
+      // Use the buyer's declared total (if they set one) instead of however
+      // many notes happen to be written so far, so the recipient sees an
+      // accurate "Note 12 of 60" even before all 60 exist yet.
+      var total = gift.planned_notes_count || notes.length;
+      var pct = total > 1 ? ((todayNoteIndex+1) / total) * 100 : 100;
       progressFillEl.style.width = pct + '%';
-      progressLblEl.textContent  = (todayNoteIndex+1) + ' of ' + notes.length + ' unlocked';
+      progressLblEl.textContent  = (todayNoteIndex+1) + ' of ' + total + ' unlocked';
 
       renderDots();
     }
