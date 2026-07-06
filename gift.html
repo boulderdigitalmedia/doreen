@@ -229,6 +229,11 @@
 
     .ob-input:focus { border-color: var(--sage); }
 
+    .ob-time-section { margin-top: 4px; margin-bottom: 8px; }
+    .ob-time-row { display: flex; gap: 8px; }
+    .ob-time-row .ob-input { width: auto; flex: 1; }
+    .ob-time-row select.ob-input { min-width: 0; }
+
     .ob-btn {
       width: 100%;
       margin-top: 24px;
@@ -747,6 +752,14 @@
       </div>
     </div>
 
+    <div class="ob-time-section">
+      <div class="ob-section-label">What time should notes arrive?</div>
+      <div class="ob-time-row">
+        <input class="ob-input" type="time" id="obDeliveryTime" />
+        <select class="ob-input" id="obTimezone"></select>
+      </div>
+    </div>
+
     <button class="ob-btn" id="obBtn" onclick="submitOnboarding()">Open my gift</button>
     <span class="ob-skip" onclick="skipOnboarding()">Skip for now</span>
   </div>
@@ -910,7 +923,41 @@
       if (recipient.channels && recipient.channels.includes('sms'))  toggleOption('sms');
     }
 
+    // Delivery time is the recipient's own choice — defaults to whatever
+    // the sender set up, but the recipient can pick whatever suits them.
+    var defaultTime = (recipient && recipient.delivery_time) || gift.delivery_time || '08:00:00';
+    document.getElementById('obDeliveryTime').value = defaultTime.slice(0, 5);
+    var defaultTz = (recipient && recipient.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone || gift.timezone || 'Pacific/Auckland';
+    populateTimezoneSelect('obTimezone', defaultTz);
+
     document.getElementById('onboarding').style.display = 'block';
+  }
+
+  var COMMON_TIMEZONES = [
+    'Pacific/Auckland','Australia/Sydney','Australia/Melbourne','Australia/Perth',
+    'Asia/Tokyo','Asia/Shanghai','Asia/Singapore','Asia/Kolkata','Asia/Dubai',
+    'Europe/London','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome',
+    'Africa/Johannesburg','Africa/Cairo',
+    'America/New_York','America/Chicago','America/Denver','America/Phoenix',
+    'America/Los_Angeles','America/Anchorage','Pacific/Honolulu',
+    'America/Toronto','America/Vancouver','America/Mexico_City',
+    'America/Sao_Paulo','America/Bogota','UTC',
+  ];
+
+  function populateTimezoneSelect(selectId, currentValue) {
+    var select = document.getElementById(selectId);
+    var zones;
+    try {
+      zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : COMMON_TIMEZONES;
+    } catch (e) {
+      zones = COMMON_TIMEZONES;
+    }
+    if (currentValue && zones.indexOf(currentValue) === -1) zones = [currentValue].concat(zones);
+
+    select.innerHTML = zones.map(function(z) {
+      return '<option value="' + z + '">' + z.replace(/_/g, ' ') + '</option>';
+    }).join('');
+    select.value = currentValue || 'Pacific/Auckland';
   }
 
   function toggleOption(channel) {
@@ -939,11 +986,13 @@
     var channels = Array.from(selectedChannels);
 
     var recipientData = {
-      gift_id:      GIFT.id,
-      channels:     channels,
-      email:        selectedChannels.has('email') ? email : null,
-      phone:        selectedChannels.has('sms')   ? phone : null,
-      onboarded_at: new Date().toISOString()
+      gift_id:       GIFT.id,
+      channels:      channels,
+      email:         selectedChannels.has('email') ? email : null,
+      phone:         selectedChannels.has('sms')   ? phone : null,
+      delivery_time: document.getElementById('obDeliveryTime').value + ':00',
+      timezone:      document.getElementById('obTimezone').value,
+      onboarded_at:  new Date().toISOString()
     };
 
     // If push selected, get push subscription first
