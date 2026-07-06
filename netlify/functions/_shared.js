@@ -174,6 +174,37 @@ async function sendSms(phone, body) {
   });
 }
 
+// ── Low-notes alert (to the buyer, not the recipient) ─────────────
+// Fires when a scheduled delivery has nothing to send — i.e. the buyer
+// hasn't written a note yet for today's slot. Lets them know before a
+// day gets silently skipped.
+
+async function sendNoteShortageAlert(gift, noteIndex) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(gift.user_id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for gift ${gift.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const dashboardUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    await resend.emails.send({
+      from:    process.env.FROM_EMAIL || 'notes@yourdomain.com',
+      to:      buyerEmail,
+      subject: `⚠ "${gift.display_name}" is out of notes`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Heads up — <strong>${gift.display_name}</strong> was due to send Note ${noteIndex + 1} today, but no note has been written for that slot yet, so today's delivery was skipped.</p>
+        <p style="font-size:16px;">Add more notes from your dashboard so your recipient doesn't miss a day:</p>
+        <p><a href="${dashboardUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Open your dashboard →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send note-shortage alert for gift ${gift.id}:`, err.message);
+  }
+}
+
 // ── Core send function ───────────────────────────────────────────
 
 async function sendGiftNotifications(gift, force = false) {
@@ -185,7 +216,7 @@ async function sendGiftNotifications(gift, force = false) {
     .from('recipients')
     .select('*')
     .eq('gift_id', gift.id)
-    .single();
+    .maybeSingle();
 
   if (!recipient || !recipient.channels || recipient.channels.length === 0) {
     return { skipped: true, reason: 'No recipient or no channels set up' };
@@ -197,9 +228,10 @@ async function sendGiftNotifications(gift, force = false) {
     .select('*')
     .eq('gift_id', gift.id)
     .eq('order_index', noteIndex)
-    .single();
+    .maybeSingle();
 
   if (!note) {
+    await sendNoteShortageAlert(gift, noteIndex);
     return { skipped: true, reason: `No note at index ${noteIndex}` };
   }
 
