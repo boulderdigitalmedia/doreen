@@ -39,7 +39,7 @@ exports.handler = async (event) => {
     .from('profiles')
     .select('stripe_customer_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   if (!profile?.stripe_customer_id) {
     return err('No billing account found — subscribe first', 404);
