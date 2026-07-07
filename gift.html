@@ -919,9 +919,9 @@
     </div>
 
     <div class="ob-time-section" id="obPasswordSection" style="display:none">
-      <div class="ob-section-label">Change gift page password</div>
+      <div class="ob-section-label" id="obPasswordLabel">Gift page password</div>
       <input class="ob-input" type="password" id="obCurrentPassword" placeholder="Current password" autocomplete="off" style="margin-bottom:8px;" />
-      <input class="ob-input" type="password" id="obNewPassword" placeholder="New password" autocomplete="off" />
+      <input class="ob-input" type="password" id="obNewPassword" placeholder="Password" autocomplete="off" />
       <div class="lock-error" id="obPasswordError" style="display:none"></div>
     </div>
 
@@ -1254,10 +1254,12 @@
     var defaultTz = (recipient && recipient.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone || gift.timezone || 'Pacific/Auckland';
     populateTimezoneSelect('obTimezone', defaultTz);
 
-    // Changing the gift page password only makes sense once one already
-    // exists — whether to gate the page at all is the sender's call, made
-    // from their own dashboard.
-    document.getElementById('obPasswordSection').style.display = (isPrefsRevisit && giftPasswordEnabled) ? 'block' : 'none';
+    // Recipients can set or change their own gift page password from here.
+    // The "current password" field only shows (and is only required) once
+    // one is already active — otherwise there's nothing to confirm yet.
+    document.getElementById('obPasswordSection').style.display = isPrefsRevisit ? 'block' : 'none';
+    document.getElementById('obPasswordLabel').textContent = giftPasswordEnabled ? 'Change gift page password' : 'Set a gift page password (optional)';
+    document.getElementById('obCurrentPassword').style.display = giftPasswordEnabled ? 'block' : 'none';
     document.getElementById('obCurrentPassword').value = '';
     document.getElementById('obNewPassword').value = '';
     document.getElementById('obPasswordError').style.display = 'none';
@@ -1318,13 +1320,13 @@
     btn.disabled = true;
     btn.textContent = isPrefsRevisit ? 'Saving…' : 'Setting up…';
 
-    // Password change (only shown during a prefs revisit on a gift that
-    // already has one set) — validated first so a wrong current password
-    // doesn't silently discard everything else on this form.
-    if (isPrefsRevisit && giftPasswordEnabled) {
+    // Setting/changing the gift page password (only shown during a prefs
+    // revisit) — validated first so a wrong current password doesn't
+    // silently discard everything else on this form.
+    if (isPrefsRevisit) {
       var newPassword = document.getElementById('obNewPassword').value;
       if (newPassword) {
-        var currentPassword = document.getElementById('obCurrentPassword').value;
+        var currentPassword = giftPasswordEnabled ? document.getElementById('obCurrentPassword').value : '';
         var pwResult = await updateGiftPassword(currentPassword, newPassword);
         if (!pwResult.success) {
           btn.disabled = false;
@@ -1334,6 +1336,7 @@
           pwErrEl.style.display = 'block';
           return;
         }
+        giftPasswordEnabled = true;
         document.getElementById('obCurrentPassword').value = '';
         document.getElementById('obNewPassword').value = '';
         document.getElementById('obPasswordError').style.display = 'none';
