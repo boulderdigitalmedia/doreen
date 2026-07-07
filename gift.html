@@ -450,7 +450,7 @@
 
     .photo-placeholder {
       width: 100%;
-      aspect-ratio: 4/3;
+      aspect-ratio: 1/1;
       background: var(--sage-pale);
       border-radius: 2px;
       display: flex;
@@ -466,10 +466,11 @@
 
     .card-img {
       width: 100%;
-      aspect-ratio: 4/3;
+      aspect-ratio: 1/1;
       object-fit: cover;
       border-radius: 2px;
       display: block;
+      cursor: pointer;
       transition: opacity 0.3s;
     }
 
@@ -754,6 +755,45 @@
       flex-shrink: 0; padding: 4px;
     }
 
+    /* PHOTO LIGHTBOX — tap the (now-square) photo to see the full,
+       uncropped image, like tapping a photo in a social feed. */
+    .photo-lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(20,26,20,0.92);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      cursor: zoom-out;
+    }
+
+    .photo-lightbox.open { display: flex; }
+
+    .photo-lightbox img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+
+    .photo-lightbox-close {
+      position: absolute;
+      top: 16px; right: 20px;
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: #fff;
+      font-size: 18px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     /* PUSH NOTIFICATION CONSENT */
     .push-overlay {
       display: none;
@@ -1016,6 +1056,12 @@
     <div style="font-size:28px">♡</div>
     <div>Tap the heart on notes you love</div>
   </div>
+</div>
+
+<!-- PHOTO LIGHTBOX -->
+<div class="photo-lightbox" id="photoLightbox">
+  <button class="photo-lightbox-close" id="lightboxCloseBtn" aria-label="Close">✕</button>
+  <img id="lightboxImg" src="" alt="" />
 </div>
 
 <!-- PUSH NOTIFICATION CONSENT -->
@@ -1536,6 +1582,9 @@
     var placeholderEl  = document.getElementById('photoPlaceholder');
     var phHintEl       = document.getElementById('phHint');
     var cardImgEl      = document.getElementById('cardImg');
+    var photoLightbox  = document.getElementById('photoLightbox');
+    var lightboxImg    = document.getElementById('lightboxImg');
+    var lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
     var dayBadgeEl     = document.getElementById('dayBadge');
     var todayRibbonEl  = document.getElementById('todayRibbon');
     var lockOverlayEl  = document.getElementById('lockOverlay');
@@ -1555,6 +1604,25 @@
     var favList        = document.getElementById('favList');
     var favEmpty       = document.getElementById('favEmpty');
     var favCountEl     = document.getElementById('favCount');
+
+    // ── PHOTO LIGHTBOX ───────────────────────────────────────────
+    // Tapping the (now square-cropped) photo opens the full, uncropped
+    // image full-screen — same as tapping a photo in a social feed.
+
+    function openLightbox(url) {
+      if (!url) return;
+      lightboxImg.src = url;
+      photoLightbox.classList.add('open');
+    }
+
+    function closeLightbox() {
+      photoLightbox.classList.remove('open');
+      lightboxImg.src = '';
+    }
+
+    cardImgEl.addEventListener('click', function() { openLightbox(cardImgEl.src); });
+    photoLightbox.addEventListener('click', closeLightbox);
+    lightboxCloseBtn.addEventListener('click', function(e) { e.stopPropagation(); closeLightbox(); });
 
     // ── FAVOURITES ─────────────────────────────────────────────
 
