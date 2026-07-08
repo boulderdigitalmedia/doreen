@@ -114,13 +114,16 @@
       touch-action: pan-y;
       user-select: none; -webkit-user-select: none;
     }
-    .hero-photo {
+    .hero-photo-wrap {
       width: 100%; aspect-ratio: 1/1;
       background: var(--sage-pale); border-radius: 2px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--sage-light);
+      overflow: hidden;
     }
-    .hero-photo svg { width: 44px; height: 44px; }
+    .hero-photo {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+      transition: opacity 0.25s;
+    }
     .hero-card-body { padding: 18px 8px 30px; text-align: center; }
     .card-from {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
@@ -265,12 +268,12 @@
   <div class="hero-card-wrap">
     <div class="hero-day-badge" id="heroDayBadge">Day 47</div>
     <div class="hero-card" id="heroCard">
-      <div class="hero-photo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <div class="hero-photo-wrap">
+        <img class="hero-photo" id="heroPhoto" alt="" src="https://images.unsplash.com/photo-1662858557337-48c9ecf07ee0?w=500&amp;q=80&amp;auto=format&amp;fit=crop" onerror="this.style.opacity='0'" />
       </div>
       <div class="hero-card-body">
         <div class="card-from">From</div>
-        <div class="card-sender">Jake</div>
+        <div class="card-sender" id="heroCardSender">Mom</div>
         <div class="card-note" id="heroCardNote">"Thank you for always picking up the phone, no matter how many times I call in one week."</div>
       </div>
     </div>
@@ -436,14 +439,28 @@
 
   // ── Hero note card: swipeable preview ──
   var HERO_NOTES = [
-    { day: 47, text: '"Thank you for always picking up the phone, no matter how many times I call in one week."' },
-    { day: 48, text: '"I keep thinking about the drive back from the airport last spring — we didn’t even talk much, just had the windows down and that one song on repeat. I don’t think I told you then, but that’s one of my favorite memories of us. You make ordinary days feel like something worth celebrating, and I notice it more than you know."' },
-    { day: 49, text: '"I don’t say it enough, but I notice everything you do — and I’m grateful for all of it."' }
+    {
+      day: 47, sender: 'Mom',
+      text: '"Thank you for always picking up the phone, no matter how many times I call in one week."',
+      photo: 'https://images.unsplash.com/photo-1662858557337-48c9ecf07ee0?w=500&q=80&auto=format&fit=crop'
+    },
+    {
+      day: 48, sender: 'Alex',
+      text: '"I keep thinking about the drive back from the airport last spring — we didn’t even talk much, just had the windows down and that one song on repeat. I don’t think I told you then, but that’s one of my favorite memories of us. You make ordinary days feel like something worth celebrating, and I notice it more than you know."',
+      photo: 'https://images.unsplash.com/photo-1570452252314-8f548ba02780?w=500&q=80&auto=format&fit=crop'
+    },
+    {
+      day: 49, sender: 'Priya',
+      text: '"I don’t say it enough, but I notice everything you do — and I’m grateful for all of it."',
+      photo: 'https://images.unsplash.com/photo-1677846092922-5b685ba0afb2?w=500&q=80&auto=format&fit=crop'
+    }
   ];
   var heroIndex   = 0;
   var heroCardEl  = document.getElementById('heroCard');
   var heroNoteEl  = document.getElementById('heroCardNote');
   var heroDayEl   = document.getElementById('heroDayBadge');
+  var heroSenderEl = document.getElementById('heroCardSender');
+  var heroPhotoEl  = document.getElementById('heroPhoto');
   var heroDotsEl  = document.getElementById('heroDots');
   var heroPrevBtn = document.getElementById('heroPrevBtn');
   var heroNextBtn = document.getElementById('heroNextBtn');
@@ -462,9 +479,15 @@
     var note = HERO_NOTES[heroIndex];
     if (!heroNoteEl || !heroDayEl) return;
     heroNoteEl.classList.add('fading');
+    if (heroPhotoEl) heroPhotoEl.style.opacity = '0';
     setTimeout(function() {
       heroNoteEl.textContent = note.text;
       heroDayEl.textContent = 'Day ' + note.day;
+      if (heroSenderEl) heroSenderEl.textContent = note.sender;
+      if (heroPhotoEl) {
+        heroPhotoEl.src = note.photo;
+        heroPhotoEl.style.opacity = '1';
+      }
       heroNoteEl.classList.remove('fading');
       renderHeroDots();
     }, 180);
