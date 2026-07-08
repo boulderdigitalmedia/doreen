@@ -141,7 +141,8 @@
       box-shadow: 0 2px 16px var(--shadow);
     }
     .how-step { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); margin-bottom: 14px; }
-    .how-icon { font-size: 28px; margin-bottom: 14px; }
+    .how-icon { margin-bottom: 14px; }
+    .how-icon svg { width: 28px; height: 28px; stroke: var(--sage); }
     .how-title { font-size: 17px; font-weight: 500; margin-bottom: 10px; color: var(--ink); }
     .how-desc { font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
 
@@ -154,7 +155,8 @@
       padding: 20px; border-radius: 14px;
       background: var(--bg); border: 1px solid var(--border);
     }
-    .feature-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+    .feature-icon { flex-shrink: 0; margin-top: 2px; }
+    .feature-icon svg { width: 22px; height: 22px; stroke: var(--sage); display: block; }
     .feature-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
     .feature-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
 
@@ -253,19 +255,25 @@
   <div class="how-grid">
     <div class="how-card">
       <div class="how-step">Step 1</div>
-      <div class="how-icon">✍️</div>
+      <div class="how-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+      </div>
       <div class="how-title">Write your notes</div>
       <div class="how-desc">Add as many reasons as you like. Pair each one with a photo. They'll get one delivered each day, week, or month.</div>
     </div>
     <div class="how-card">
       <div class="how-step">Step 2</div>
-      <div class="how-icon">🔗</div>
+      <div class="how-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </div>
       <div class="how-title">Share their link</div>
       <div class="how-desc">Every gift gets a personal URL. Send it to your recipient — they open it once and choose how they want to be notified.</div>
     </div>
     <div class="how-card">
       <div class="how-step">Step 3</div>
-      <div class="how-icon">💌</div>
+      <div class="how-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>
+      </div>
       <div class="how-title">Let it run</div>
       <div class="how-desc">A Note For You handles the rest. A new note lands for them every send day, automatically. You can add more notes anytime.</div>
     </div>
@@ -279,42 +287,42 @@
     <h2 class="section-title">Built for the long game</h2>
     <div class="features-grid">
       <div class="feature-item">
-        <div class="feature-icon">📱</div>
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
         <div>
           <div class="feature-title">Push notifications</div>
           <div class="feature-desc">Recipients install the app to their home screen and get a notification each send day — no App Store required.</div>
         </div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">✉️</div>
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></div>
         <div>
           <div class="feature-title">Email delivery</div>
           <div class="feature-desc">Beautiful HTML emails with the note and photo, linking back to the full app.</div>
         </div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">💬</div>
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
         <div>
           <div class="feature-title">SMS add-on</div>
           <div class="feature-desc">Enable text message delivery for recipients who prefer it. Their number stays private — collected during setup.</div>
         </div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">🖼️</div>
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
         <div>
           <div class="feature-title">Photos with every note</div>
           <div class="feature-desc">Attach a photo to any note. A memory, a candid, a screenshot of something that made you think of them.</div>
         </div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">⟳</div>
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
         <div>
           <div class="feature-title">Your cadence, your call</div>
           <div class="feature-desc">Send daily, weekly, every two weeks, or monthly. Change it any time from your dashboard.</div>
         </div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">🎁</div>
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></div>
         <div>
           <div class="feature-title">2 gifts included, add more any time</div>
           <div class="feature-desc">Every subscription includes 2 gifts — a partner, a parent, a friend, a child. Need more people on your list? Add extra gifts for $2/mo or $20/yr, matching your plan.</div>
