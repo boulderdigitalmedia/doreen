@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#f5f2ec" />
   <title>From Your Favorite, With Love</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
@@ -43,25 +43,59 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 16px;
+      gap: 44px;
     }
-
-    .spinner {
-      width: 32px; height: 32px;
-      border: 2px solid var(--sage-light);
-      border-top-color: var(--sage);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    @keyframes ls-fly {
+      0%   { transform: translate(-16px, 10px) rotate(-6deg); opacity: 0; }
+      20%  { opacity: 1; }
+      55%  { transform: translate(0, 0) rotate(-6deg); opacity: 1; }
+      100% { transform: translate(0, 0) rotate(-6deg); opacity: 1; }
     }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .loading-text {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 18px;
-      font-weight: 300;
-      color: var(--ink-soft);
+    @keyframes ls-trail {
+      0%   { stroke-dashoffset: 44; opacity: 0; }
+      30%  { opacity: 1; }
+      70%  { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
     }
+    @keyframes ls-pop {
+      0%, 46%  { transform: scale(0); }
+      63%      { transform: scale(1.18); }
+      76%      { transform: scale(1); }
+      100%     { transform: scale(1); }
+    }
+    @keyframes ls-word {
+      0%, 40%  { opacity: 0; transform: translateY(6px); }
+      66%      { opacity: 1; transform: translateY(0); }
+      100%     { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes ls-dots {
+      0%, 100% { opacity: 0.25; }
+      50%      { opacity: 1; }
+    }
+    .ls-icon-wrap { position: relative; width: 200px; height: 160px; display: flex; align-items: center; justify-content: center; }
+    .ls-trail { position: absolute; left: 0; top: 0; overflow: visible; }
+    .ls-trail path { stroke-dasharray: 44; animation: ls-trail 3.2s ease-in-out infinite; }
+    .ls-env { position: relative; width: 148px; height: 108px; animation: ls-fly 3.2s cubic-bezier(.22,.61,.36,1) infinite; }
+    .ls-badge {
+      position: absolute; top: -13px; right: -13px;
+      width: 42px; height: 42px; border-radius: 50%;
+      background: #d08a6a;
+      border: 3.5px solid var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-family: 'Newsreader', serif; font-weight: 500; font-size: 19px;
+      transform-origin: center;
+      animation: ls-pop 3.2s cubic-bezier(.34,1.56,.64,1) infinite;
+    }
+    .ls-brand {
+      font-family: 'Newsreader', serif; font-size: 30px; color: var(--ink);
+      line-height: 1; text-align: center;
+      animation: ls-word 3.2s ease-out infinite;
+    }
+    .ls-brand em { font-style: italic; color: var(--sage); }
+    .ls-dots { display: flex; gap: 9px; }
+    .ls-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); animation: ls-dots 1.4s ease-in-out infinite; }
+    .ls-dot:nth-child(2) { animation-delay: 0.2s; }
+    .ls-dot:nth-child(3) { animation-delay: 0.4s; }
 
     /* ── NOT FOUND ── */
     #notFound {
@@ -880,8 +914,24 @@
 
 <!-- LOADING -->
 <div id="loading">
-  <div class="spinner"></div>
-  <div class="loading-text">Opening your gift…</div>
+  <div class="ls-icon-wrap">
+    <svg class="ls-trail" width="200" height="160" viewBox="0 0 200 160" fill="none">
+      <path d="M10 116 q30 -7 50 -12" stroke="#A9BBA0" stroke-width="4.5" stroke-linecap="round"></path>
+      <path d="M4 138 q34 -9 58 -15" stroke="#C7D3BF" stroke-width="4.5" stroke-linecap="round"></path>
+    </svg>
+    <div class="ls-env">
+      <svg width="148" height="108" viewBox="0 0 132 96" fill="none" style="overflow: visible;">
+        <rect x="3" y="6" width="126" height="84" rx="12" fill="#7E9576"></rect>
+        <path d="M3 18 C3 11 8 6 15 6 H117 C124 6 129 11 129 18 L72 54 C68 57 64 57 60 54 Z" fill="#93A98A"></path>
+        <path d="M66 82 c-2.3-2.1-11-7.3-11-14.4 a6.4 6.4 0 0 1 11-4.4 a6.4 6.4 0 0 1 11 4.4 c0 7.1-8.7 12.3-11 14.4 z" fill="#F6F3EA"></path>
+      </svg>
+      <div class="ls-badge">1</div>
+    </div>
+  </div>
+  <div class="ls-brand">A <em>Note</em> For You</div>
+  <div class="ls-dots">
+    <div class="ls-dot"></div><div class="ls-dot"></div><div class="ls-dot"></div>
+  </div>
 </div>
 
 <!-- NOT FOUND -->
