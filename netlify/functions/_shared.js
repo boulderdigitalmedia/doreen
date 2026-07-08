@@ -360,9 +360,11 @@ function preflight()    { return { statusCode: 204, headers: corsHeaders, body: 
 
 module.exports = {
   sb,
+  resend,
   getNoteIndex,
   shouldSendToday,
   isDeliveryWindow,
   sendGiftNotifications,
+  buildEmailHtml,
   ok, err, preflight
 };
