@@ -35,7 +35,22 @@
       background: rgba(245,242,236,0.88); backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
     }
-    .nav-brand { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 300; color: var(--ink); text-decoration: none; }
+    .nav-brand {
+      display: flex; align-items: center; gap: 9px;
+      font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 300;
+      color: var(--ink); text-decoration: none;
+    }
+    .nav-brand em { font-style: italic; color: var(--sage); }
+    .logo-mark { position: relative; width: 30px; height: 22px; flex-shrink: 0; }
+    .logo-envelope { width: 100%; height: 100%; display: block; }
+    .logo-badge {
+      position: absolute; top: -7px; right: -7px;
+      width: 15px; height: 15px; border-radius: 50%;
+      background: #d08a6a; border: 2px solid var(--bg);
+      color: #fff; font-size: 9px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Sans', sans-serif; line-height: 1;
+    }
     .nav-right { display: flex; align-items: center; gap: 20px; }
     .nav-link { font-size: 14px; color: var(--ink-mid); text-decoration: none; }
     .nav-link:hover { color: var(--ink); }
@@ -255,7 +270,17 @@
 
 <!-- NAV -->
 <nav>
-  <a class="nav-brand" href="/">A Note For You</a>
+  <a class="nav-brand" href="/">
+    <span class="logo-mark">
+      <svg class="logo-envelope" viewBox="0 0 132 96" fill="none" aria-hidden="true">
+        <rect x="3" y="6" width="126" height="84" rx="12" fill="#7E9576"></rect>
+        <path d="M3 18 C3 11 8 6 15 6 H117 C124 6 129 11 129 18 L72 54 C68 57 64 57 60 54 Z" fill="#93A98A"></path>
+        <path d="M66 82 c-2.3-2.1-11-7.3-11-14.4 a6.4 6.4 0 0 1 11-4.4 a6.4 6.4 0 0 1 11 4.4 c0 7.1-8.7 12.3-11 14.4 z" fill="#F6F3EA"></path>
+      </svg>
+      <span class="logo-badge">1</span>
+    </span>
+    A <em>Note</em> For You
+  </a>
   <div class="nav-right">
     <a class="nav-link" href="/login">Sign in</a>
     <a class="btn-nav" href="/signup">Get started</a>
