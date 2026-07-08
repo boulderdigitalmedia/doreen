@@ -114,16 +114,24 @@
       touch-action: pan-y;
       user-select: none; -webkit-user-select: none;
     }
-    .hero-photo-wrap {
+    .hero-photo-stack {
+      position: relative;
       width: 100%; aspect-ratio: 1/1;
-      background: var(--sage-pale); border-radius: 2px;
+    }
+    .stack-card {
+      position: absolute;
+      top: 11%; left: 11%;
+      width: 78%; aspect-ratio: 1/1;
+      background: var(--sage-pale);
+      border-radius: 2px;
       overflow: hidden;
+      box-shadow: 0 6px 18px rgba(44,58,46,0.22);
+      transition: transform 0.5s cubic-bezier(.4,0,.2,1), opacity 0.3s;
     }
-    .hero-photo {
-      width: 100%; height: 100%;
-      object-fit: cover; display: block;
-      transition: opacity 0.25s;
-    }
+    .stack-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .stack-card.role-front { transform: translate(0,0) rotate(-2deg) scale(1); z-index: 3; opacity: 1; }
+    .stack-card.role-right { transform: translate(11%,4%) rotate(9deg) scale(0.88); z-index: 2; opacity: 0.96; }
+    .stack-card.role-left  { transform: translate(-11%,4%) rotate(-9deg) scale(0.88); z-index: 1; opacity: 0.96; }
     .hero-card-body { padding: 18px 8px 30px; text-align: center; }
     .card-from {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
@@ -268,8 +276,16 @@
   <div class="hero-card-wrap">
     <div class="hero-day-badge" id="heroDayBadge">Day 47</div>
     <div class="hero-card" id="heroCard">
-      <div class="hero-photo-wrap">
-        <img class="hero-photo" id="heroPhoto" alt="" src="https://images.unsplash.com/photo-1758874960777-931053e0d9c6?w=500&amp;q=80&amp;auto=format&amp;fit=crop" onerror="this.style.opacity='0'" />
+      <div class="hero-photo-stack" id="heroPhotoStack">
+        <div class="stack-card role-left" data-idx="2">
+          <img src="https://images.unsplash.com/photo-1588979355313-6711a095465f?w=500&amp;q=80&amp;auto=format&amp;fit=crop" alt="" onerror="this.parentElement.style.opacity='0'" />
+        </div>
+        <div class="stack-card role-right" data-idx="1">
+          <img src="https://images.unsplash.com/photo-1478231996786-62cfbcbc63c2?w=500&amp;q=80&amp;auto=format&amp;fit=crop" alt="" onerror="this.parentElement.style.opacity='0'" />
+        </div>
+        <div class="stack-card role-front" data-idx="0">
+          <img src="https://images.unsplash.com/photo-1758874960777-931053e0d9c6?w=500&amp;q=80&amp;auto=format&amp;fit=crop" alt="" onerror="this.parentElement.style.opacity='0'" />
+        </div>
       </div>
       <div class="hero-card-body">
         <div class="card-from">From</div>
@@ -460,7 +476,7 @@
   var heroNoteEl  = document.getElementById('heroCardNote');
   var heroDayEl   = document.getElementById('heroDayBadge');
   var heroSenderEl = document.getElementById('heroCardSender');
-  var heroPhotoEl  = document.getElementById('heroPhoto');
+  var heroStackCards = document.querySelectorAll('#heroPhotoStack .stack-card');
   var heroDotsEl  = document.getElementById('heroDots');
   var heroPrevBtn = document.getElementById('heroPrevBtn');
   var heroNextBtn = document.getElementById('heroNextBtn');
@@ -473,21 +489,26 @@
     }).join('');
   }
 
+  function updateStackRoles() {
+    heroStackCards.forEach(function(card) {
+      var noteIdx = parseInt(card.getAttribute('data-idx'), 10);
+      var rel = (noteIdx - heroIndex + HERO_NOTES.length) % HERO_NOTES.length;
+      card.classList.remove('role-front', 'role-right', 'role-left');
+      card.classList.add(rel === 0 ? 'role-front' : (rel === 1 ? 'role-right' : 'role-left'));
+    });
+  }
+
   function showHeroNote(i, opts) {
     opts = opts || {};
     heroIndex = (i + HERO_NOTES.length) % HERO_NOTES.length;
     var note = HERO_NOTES[heroIndex];
     if (!heroNoteEl || !heroDayEl) return;
     heroNoteEl.classList.add('fading');
-    if (heroPhotoEl) heroPhotoEl.style.opacity = '0';
+    updateStackRoles();
     setTimeout(function() {
       heroNoteEl.textContent = note.text;
       heroDayEl.textContent = 'Day ' + note.day;
       if (heroSenderEl) heroSenderEl.textContent = note.sender;
-      if (heroPhotoEl) {
-        heroPhotoEl.src = note.photo;
-        heroPhotoEl.style.opacity = '1';
-      }
       heroNoteEl.classList.remove('fading');
       renderHeroDots();
     }, 180);
