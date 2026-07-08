@@ -97,18 +97,18 @@
     /* ── NOTE PREVIEW (three fanned full cards, mirrors the app) ── */
     .hero-card-wrap {
       margin: 60px auto 0;
-      max-width: 340px; width: 100%;
+      max-width: 470px; width: 100%;
       display: flex; flex-direction: column; align-items: center;
     }
     .hero-stack-wrap {
       position: relative;
       width: 100%;
-      height: 420px;
+      height: 440px;
     }
     .hero-full-card {
       position: absolute;
-      top: 0; left: 0;
-      width: 100%;
+      top: 0; left: 15%;
+      width: 70%;
       background: var(--surface); border: none;
       border-radius: 3px; padding: 14px 14px 20px;
       box-shadow: 0 16px 40px rgba(44,58,46,0.16), 0 3px 8px rgba(44,58,46,0.10);
@@ -118,8 +118,8 @@
       cursor: pointer;
     }
     .hero-full-card.role-front { transform: translate(0,0) rotate(-1.5deg) scale(1); z-index: 3; opacity: 1; cursor: default; }
-    .hero-full-card.role-right { transform: translate(10%,3%) rotate(8deg) scale(0.92); z-index: 2; opacity: 0.96; }
-    .hero-full-card.role-left  { transform: translate(-10%,3%) rotate(-8deg) scale(0.92); z-index: 1; opacity: 0.96; }
+    .hero-full-card.role-right { transform: translate(58%,5%) rotate(9deg) scale(0.86); z-index: 2; opacity: 0.97; }
+    .hero-full-card.role-left  { transform: translate(-58%,5%) rotate(-9deg) scale(0.86); z-index: 1; opacity: 0.97; }
     .hero-day-chip {
       position: absolute; top: -9px; right: 16px;
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
@@ -244,7 +244,10 @@
       .how-grid { grid-template-columns: 1fr; }
       .features-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
-      .hero-card-wrap { max-width: 320px; }
+      .hero-card-wrap { max-width: 340px; }
+      .hero-full-card { width: 76%; left: 12%; }
+      .hero-full-card.role-right { transform: translate(46%,4%) rotate(8deg) scale(0.85); }
+      .hero-full-card.role-left  { transform: translate(-46%,4%) rotate(-8deg) scale(0.85); }
     }
   </style>
 </head>
