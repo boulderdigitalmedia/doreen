@@ -54,6 +54,11 @@
   status = 200
 
 [[redirects]]
+  from   = "/api/update-gift-slots"
+  to     = "/.netlify/functions/update-gift-slots"
+  status = 200
+
+[[redirects]]
   from   = "/api/verify-gift-password"
   to     = "/.netlify/functions/verify-gift-password"
   status = 200
