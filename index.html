@@ -94,34 +94,61 @@
     }
     .btn-ghost:hover { border-color: var(--sage); color: var(--sage); }
 
-    /* ── NOTE PREVIEW (floating card) ── */
-    .hero-card {
+    /* ── NOTE PREVIEW (floating card, mirrors the app) ── */
+    .hero-card-wrap {
       margin: 60px auto 0;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 24px; padding: 32px 36px;
-      max-width: 420px; width: 100%;
-      box-shadow: 0 8px 48px var(--shadow);
-      position: relative;
+      max-width: 380px; width: 100%;
+      display: flex; flex-direction: column; align-items: center;
     }
+    .hero-day-badge {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--ink-soft); margin-bottom: 10px;
+    }
+    .hero-card {
+      width: 100%;
+      background: var(--surface); border: none;
+      border-radius: 3px; padding: 14px 14px 0;
+      box-shadow: 0 16px 40px rgba(44,58,46,0.16), 0 3px 8px rgba(44,58,46,0.10);
+      position: relative; overflow: hidden;
+      transform: rotate(-1.1deg);
+      touch-action: pan-y;
+      user-select: none; -webkit-user-select: none;
+    }
+    .hero-photo {
+      width: 100%; aspect-ratio: 1/1;
+      background: var(--sage-pale); border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--sage-light);
+    }
+    .hero-photo svg { width: 44px; height: 44px; }
+    .hero-card-body { padding: 18px 8px 30px; text-align: center; }
     .card-from {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--ink-soft); margin-bottom: 4px;
+      color: var(--ink-soft); margin-bottom: 2px;
     }
-    .card-sender { font-size: 20px; font-weight: 300; color: var(--ink); margin-bottom: 20px; }
-    .card-badge {
-      display: inline-block; font-size: 11px; text-transform: uppercase;
-      letter-spacing: 0.08em; padding: 3px 10px; border-radius: 20px;
-      background: var(--sage-pale); color: var(--sage); border: 1px solid var(--sage-light);
-      margin-bottom: 18px;
-    }
+    .card-sender { font-size: 18px; font-weight: 300; color: var(--ink); margin-bottom: 14px; }
     .card-note {
       font-family: 'Cormorant Garamond', serif;
-      font-size: 22px; font-weight: 300; font-style: italic;
+      font-size: 19px; font-weight: 300; font-style: italic;
       line-height: 1.55; color: var(--ink);
+      transition: opacity 0.2s;
     }
-    .card-dots { display: flex; gap: 6px; margin-top: 24px; justify-content: center; }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage-light); }
-    .dot.active { background: var(--sage); }
+    .card-note.fading { opacity: 0; }
+    .hero-card-actions {
+      display: flex; align-items: center; justify-content: center;
+      gap: 20px; margin-top: 20px;
+    }
+    .hero-nav-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--ink-mid); font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.15s;
+    }
+    .hero-nav-btn:hover { border-color: var(--sage); color: var(--sage); }
+    .card-dots { display: flex; gap: 6px; justify-content: center; }
+    .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--sage-light); transition: background 0.2s, width 0.2s; }
+    .dot.active { background: var(--sage); width: 16px; border-radius: 3px; }
 
     /* ── HOW IT WORKS ── */
     .section { padding: 100px 24px; max-width: 1000px; margin: 0 auto; }
@@ -206,7 +233,7 @@
       .how-grid { grid-template-columns: 1fr; }
       .features-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
-      .hero-card { padding: 24px 20px; }
+      .hero-card-wrap { max-width: 320px; }
     }
   </style>
 </head>
@@ -235,15 +262,22 @@
     <a class="btn-ghost" href="#how">See how it works</a>
   </div>
 
-  <div class="hero-card">
-    <div class="card-from">From</div>
-    <div class="card-sender">Jake</div>
-    <div class="card-badge">Note 47</div>
-    <div class="card-note">
-      "Thank you for always picking up the phone, no matter how many times I call in one week."
+  <div class="hero-card-wrap">
+    <div class="hero-day-badge" id="heroDayBadge">Day 47</div>
+    <div class="hero-card" id="heroCard">
+      <div class="hero-photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      </div>
+      <div class="hero-card-body">
+        <div class="card-from">From</div>
+        <div class="card-sender">Jake</div>
+        <div class="card-note" id="heroCardNote">"Thank you for always picking up the phone, no matter how many times I call in one week."</div>
+      </div>
     </div>
-    <div class="card-dots">
-      <div class="dot"></div><div class="dot active"></div><div class="dot"></div>
+    <div class="hero-card-actions">
+      <button class="hero-nav-btn" id="heroPrevBtn" aria-label="Previous note">‹</button>
+      <div class="card-dots" id="heroDots"></div>
+      <button class="hero-nav-btn" id="heroNextBtn" aria-label="Next note">›</button>
     </div>
   </div>
 </section>
@@ -398,6 +432,93 @@
         rotWordEl.classList.remove('swap');
       }, 350);
     }, 2200);
+  }
+
+  // ── Hero note card: swipeable preview ──
+  var HERO_NOTES = [
+    { day: 47, text: '"Thank you for always picking up the phone, no matter how many times I call in one week."' },
+    { day: 48, text: '"I keep thinking about the drive back from the airport last spring — we didn’t even talk much, just had the windows down and that one song on repeat. I don’t think I told you then, but that’s one of my favorite memories of us. You make ordinary days feel like something worth celebrating, and I notice it more than you know."' },
+    { day: 49, text: '"I don’t say it enough, but I notice everything you do — and I’m grateful for all of it."' }
+  ];
+  var heroIndex   = 0;
+  var heroCardEl  = document.getElementById('heroCard');
+  var heroNoteEl  = document.getElementById('heroCardNote');
+  var heroDayEl   = document.getElementById('heroDayBadge');
+  var heroDotsEl  = document.getElementById('heroDots');
+  var heroPrevBtn = document.getElementById('heroPrevBtn');
+  var heroNextBtn = document.getElementById('heroNextBtn');
+  var heroAutoTimer = null;
+
+  function renderHeroDots() {
+    if (!heroDotsEl) return;
+    heroDotsEl.innerHTML = HERO_NOTES.map(function(_, i) {
+      return '<div class="dot' + (i === heroIndex ? ' active' : '') + '"></div>';
+    }).join('');
+  }
+
+  function showHeroNote(i, opts) {
+    opts = opts || {};
+    heroIndex = (i + HERO_NOTES.length) % HERO_NOTES.length;
+    var note = HERO_NOTES[heroIndex];
+    if (!heroNoteEl || !heroDayEl) return;
+    heroNoteEl.classList.add('fading');
+    setTimeout(function() {
+      heroNoteEl.textContent = note.text;
+      heroDayEl.textContent = 'Day ' + note.day;
+      heroNoteEl.classList.remove('fading');
+      renderHeroDots();
+    }, 180);
+  }
+
+  function restartHeroAuto() {
+    if (heroAutoTimer) clearInterval(heroAutoTimer);
+    heroAutoTimer = setInterval(function() { showHeroNote(heroIndex + 1); }, 4500);
+  }
+
+  if (heroCardEl && heroNoteEl) {
+    renderHeroDots();
+    restartHeroAuto();
+
+    if (heroPrevBtn) heroPrevBtn.addEventListener('click', function() {
+      showHeroNote(heroIndex - 1); restartHeroAuto();
+    });
+    if (heroNextBtn) heroNextBtn.addEventListener('click', function() {
+      showHeroNote(heroIndex + 1); restartHeroAuto();
+    });
+
+    // Swipe support
+    var touchStartX = 0, touchStartY = 0, touching = false;
+    heroCardEl.addEventListener('touchstart', function(e) {
+      touching = true;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    heroCardEl.addEventListener('touchend', function(e) {
+      if (!touching) return;
+      touching = false;
+      var dx = e.changedTouches[0].clientX - touchStartX;
+      var dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+        showHeroNote(heroIndex + (dx < 0 ? 1 : -1));
+        restartHeroAuto();
+      }
+    }, { passive: true });
+
+    // Mouse drag support (desktop "swipe")
+    var mouseStartX = 0, dragging = false;
+    heroCardEl.addEventListener('mousedown', function(e) {
+      dragging = true;
+      mouseStartX = e.clientX;
+    });
+    window.addEventListener('mouseup', function(e) {
+      if (!dragging) return;
+      dragging = false;
+      var dx = e.clientX - mouseStartX;
+      if (Math.abs(dx) > 40) {
+        showHeroNote(heroIndex + (dx < 0 ? 1 : -1));
+        restartHeroAuto();
+      }
+    });
   }
 </script>
 
