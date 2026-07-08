@@ -79,6 +79,12 @@ CREATE TABLE IF NOT EXISTS profiles (
   stripe_status          TEXT,        -- active | trialing | past_due | canceled
   plan                   TEXT,        -- monthly | annual
   current_period_end     TIMESTAMPTZ,
+  extra_gift_slots       INTEGER     NOT NULL DEFAULT 0, -- paid add-on gift slots beyond the
+                                                          -- 2 included in the base subscription —
+                                                          -- kept in sync with a recurring Stripe
+                                                          -- subscription item by update-gift-slots.js.
+                                                          -- Priced per whichever interval (monthly/
+                                                          -- annual) the buyer's `plan` already is.
   created_at             TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -216,14 +222,23 @@ CREATE POLICY "recipient_owner_write" ON recipients
             AND   gifts.user_id = auth.uid())
   );
 
--- ── ENFORCE 4-GIFT LIMIT ──────────────────────────────────────
--- Prevent buyers from creating a 5th gift at the DB level.
+-- ── ENFORCE GIFT LIMIT ────────────────────────────────────────
+-- Every subscription includes 2 gifts. Buyers can purchase additional
+-- gift slots as a recurring add-on (see update-gift-slots.js), tracked
+-- in profiles.extra_gift_slots — the real limit is 2 + that value.
 
 CREATE OR REPLACE FUNCTION enforce_gift_limit()
 RETURNS TRIGGER AS $$
+DECLARE
+  gift_limit INTEGER;
 BEGIN
-  IF (SELECT COUNT(*) FROM gifts WHERE user_id = NEW.user_id) >= 4 THEN
-    RAISE EXCEPTION 'Gift limit reached: a subscription allows up to 4 gifts.';
+  SELECT 2 + COALESCE(extra_gift_slots, 0) INTO gift_limit
+  FROM profiles WHERE id = NEW.user_id;
+
+  gift_limit := COALESCE(gift_limit, 2); -- no profile row yet → base limit only
+
+  IF (SELECT COUNT(*) FROM gifts WHERE user_id = NEW.user_id) >= gift_limit THEN
+    RAISE EXCEPTION 'Gift limit reached: your plan currently allows % gift(s). Add another gift slot to create more.', gift_limit;
   END IF;
   RETURN NEW;
 END;
