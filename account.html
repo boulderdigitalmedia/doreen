@@ -322,7 +322,11 @@
         </p>
       </div>
       <button class="btn btn-secondary btn-sm" onclick="saveRecipientEmail()">Save email</button>
-      <button class="btn btn-secondary btn-sm" onclick="sendTestNow()">Send test now</button>
+      <button class="btn btn-secondary btn-sm" onclick="sendPreviewToMe()">Send test to me</button>
+      <button class="btn btn-secondary btn-sm" onclick="resendLatestNote()">Resend latest note</button>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:8px;">
+        "Send test to me" emails today's note to your own inbox so you can check it before your recipient sees it — it never goes to them. "Resend latest note" sends the real thing to your recipient right now, through their actual channels — handy if they missed it.
+      </p>
     </div>
 
     <div class="panel">
@@ -823,9 +827,12 @@
     }
   }
 
-  // ── SEND TEST ─────────────────────────────────────────────────
+  // ── RESEND / PREVIEW ─────────────────────────────────────────────
 
-  async function sendTestNow() {
+  // Sends the real, live note to the recipient right now, through
+  // whatever channels they've actually got set up — same delivery path
+  // as the scheduled send, just triggered on demand.
+  async function resendLatestNote() {
     try {
       var res  = await fetch('/api/send-now', {
         method: 'POST',
@@ -856,8 +863,32 @@
         // Surface the real reason instead of a false "sent" — e.g. Resend/Twilio not configured
         showToast(failed.map(function(c) { return c + ' ' + results[c]; }).join(' · '));
       } else {
-        showToast('Test sent! 💚 (' + channels.map(function(c) { return c + ': ' + results[c]; }).join(', ') + ')');
+        showToast('Resent! 💚 (' + channels.map(function(c) { return c + ': ' + results[c]; }).join(', ') + ')');
       }
+    } catch (e) {
+      showToast('Could not reach server');
+    }
+  }
+
+  // Emails today's note to the buyer's own inbox — a preview only, never
+  // touches the recipient's channels or counts as a real send.
+  async function sendPreviewToMe() {
+    try {
+      var res  = await fetch('/api/send-preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SESSION.access_token,
+        },
+        body: JSON.stringify({ slug: CURRENT_GIFT.slug }),
+      });
+      var data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        showToast('Preview failed: ' + (data.error || 'unknown'));
+        return;
+      }
+      showToast('Preview sent to ' + data.sentTo + ' 💌');
     } catch (e) {
       showToast('Could not reach server');
     }
