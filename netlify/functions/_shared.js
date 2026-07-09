@@ -18,6 +18,20 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY
 );
 
+// ── Email "From" name ────────────────────────────────────────────
+// FROM_EMAIL may be a bare address ("notes@domain.com") or already have a
+// display name on it ("Pigeon Post <notes@domain.com>"). Either way we only
+// want the address out of it — the display name is built per-email below so
+// recipient-facing notes can say "A Note For You From <sender name>".
+function fromAddress() {
+  const raw = process.env.FROM_EMAIL || 'notes@yourdomain.com';
+  const match = raw.match(/<([^>]+)>/);
+  return match ? match[1] : raw.trim();
+}
+function buildFrom(displayName) {
+  return `${displayName} <${fromAddress()}>`;
+}
+
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
@@ -221,7 +235,7 @@ async function sendNoteShortageAlert(gift, noteIndex, isAdvanceWarning = false) 
       : `<strong>${gift.display_name}</strong> was due to send Note ${noteIndex + 1} today, but no note has been written for that slot yet, so today's delivery was skipped.`;
 
     await resend.emails.send({
-      from:    process.env.FROM_EMAIL || 'notes@yourdomain.com',
+      from:    buildFrom('A Note For You'),
       to:      buyerEmail,
       subject,
       html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
@@ -312,7 +326,7 @@ async function sendGiftNotifications(gift, force = false) {
   if (recipient.channels.includes('email') && recipient.email) {
     try {
       await resend.emails.send({
-        from:    process.env.FROM_EMAIL || 'notes@yourdomain.com',
+        from:    buildFrom(`A Note For You From ${gift.sender_name || 'Your Favorite'}`),
         to:      recipient.email,
         subject: `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'} is waiting for you`,
         html:    buildEmailHtml(gift, note, noteNum, giftUrl)
@@ -366,5 +380,6 @@ module.exports = {
   isDeliveryWindow,
   sendGiftNotifications,
   buildEmailHtml,
+  buildFrom,
   ok, err, preflight
 };
