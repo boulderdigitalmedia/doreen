@@ -593,6 +593,17 @@
   var EDIT_PHOTO_FILE = null;
   var PHOTO_POS = { add: { x: 50, y: 50 }, edit: { x: 50, y: 50 } };
 
+  // Supabase auto-refreshes the access token in the background, but the
+  // SESSION variable above is only set once at boot — after the token
+  // rotates (roughly hourly), every fetch that reused the old SESSION.access_token
+  // would fail with "Unauthorized" until a page reload. Always pull a fresh
+  // token right before an authenticated call instead.
+  async function authHeader() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) SESSION = session;
+    return 'Bearer ' + (session ? session.access_token : '');
+  }
+
   // ── BOOT ──────────────────────────────────────────────────────
 
   async function boot() {
@@ -657,7 +668,7 @@
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': 'Bearer ' + SESSION.access_token,
+          'Authorization': await authHeader(),
         },
         body: JSON.stringify({ plan: SELECTED_PLAN }),
       });
@@ -685,7 +696,7 @@
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': 'Bearer ' + SESSION.access_token,
+          'Authorization': await authHeader(),
         },
       });
       var data = await res.json();
@@ -808,7 +819,7 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + SESSION.access_token,
+          'Authorization': await authHeader(),
         },
         body: JSON.stringify({ action: 'add' }),
       });
@@ -963,7 +974,7 @@
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': 'Bearer ' + SESSION.access_token,
+          'Authorization': await authHeader(),
         },
         body: JSON.stringify({ giftId: CURRENT_GIFT.id, enabled: smsEnabled }),
       });
@@ -992,7 +1003,7 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + SESSION.access_token,
+          'Authorization': await authHeader(),
         },
         body: JSON.stringify({ slug: CURRENT_GIFT.slug }),
       });
@@ -1032,7 +1043,7 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + SESSION.access_token,
+          'Authorization': await authHeader(),
         },
         body: JSON.stringify({ slug: CURRENT_GIFT.slug }),
       });
