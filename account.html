@@ -77,17 +77,17 @@
     /* ── HEADER ── */
     .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 10; }
     .header-brand {
-      display: flex; align-items: center; gap: 8px;
-      font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--ink);
+      display: flex; align-items: center; gap: 9px;
+      font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; color: var(--ink);
     }
     .header-brand em { font-style: italic; font-weight: 600; color: #5c7a60; }
-    .logo-mark { position: relative; width: 27px; height: 20px; flex-shrink: 0; }
+    .logo-mark { position: relative; width: 30px; height: 22px; flex-shrink: 0; }
     .logo-envelope { width: 100%; height: 100%; display: block; }
     .logo-badge {
-      position: absolute; top: -6px; right: -6px;
-      width: 14px; height: 14px; border-radius: 50%;
+      position: absolute; top: -7px; right: -7px;
+      width: 15px; height: 15px; border-radius: 50%;
       background: #d08a6a; border: 2px solid var(--bg);
-      color: #fff; font-size: 8px; font-weight: 600;
+      color: #fff; font-size: 9px; font-weight: 600;
       display: flex; align-items: center; justify-content: center;
       font-family: 'DM Sans', sans-serif; line-height: 1;
     }
@@ -227,6 +227,14 @@
     .empty-state-icon { font-size: 32px; margin-bottom: 12px; }
 
     @media (max-width: 500px) { .pricing-grid { grid-template-columns: 1fr; } .field-row { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) {
+      .header { padding: 0 16px; }
+      .header-brand { font-size: 17px; gap: 6px; }
+      .header-brand .logo-mark { width: 23px; height: 17px; }
+      .header-brand .logo-badge { width: 12px; height: 12px; font-size: 7px; top: -5px; right: -5px; }
+      .header-right { gap: 10px; }
+      .header-signout { font-size: 12px; }
+    }
   </style>
 </head>
 <body>
