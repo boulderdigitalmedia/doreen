@@ -3,25 +3,23 @@
 // Header: Authorization: Bearer <supabase_access_token>
 //
 // Toggles the SMS add-on for one gift and keeps Stripe billing in sync:
-// the buyer's subscription gets ONE recurring add-on line item
-// (STRIPE_SMS_ADDON_PRICE_ID), whose quantity equals how many of the
-// buyer's gifts currently have SMS enabled. Toggling a gift on/off just
-// adjusts that quantity (or creates/removes the item at 0 → 1 / 1 → 0),
-// and Stripe prorates the change automatically.
+// the buyer's subscription gets ONE recurring add-on line item, priced at
+// $2/mo or $20/yr depending on whichever interval the buyer's plan already
+// uses (same pattern as the extra-gift-slot add-on), whose quantity equals
+// how many of the buyer's gifts currently have SMS enabled. Toggling a gift
+// on/off just adjusts that quantity (or creates/removes the item at
+// 0 → 1 / 1 → 0), and Stripe prorates the change automatically.
 
 const Stripe = require('stripe');
 const { sb, ok, err, preflight } = require('./_shared');
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-const SMS_ADDON_PRICE_ID = process.env.STRIPE_SMS_ADDON_PRICE_ID;
+const SMS_ADDON_MONTHLY_PRICE_ID = process.env.STRIPE_SMS_ADDON_PRICE_ID;
+const SMS_ADDON_ANNUAL_PRICE_ID  = process.env.STRIPE_SMS_ADDON_ANNUAL_PRICE_ID;
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return preflight();
   if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
-
-  if (!SMS_ADDON_PRICE_ID) {
-    return err('SMS add-on is not configured (missing STRIPE_SMS_ADDON_PRICE_ID)', 500);
-  }
 
   // Verify Supabase session
   const authHeader = event.headers['authorization'] || event.headers['Authorization'] || '';
@@ -51,12 +49,17 @@ exports.handler = async (event) => {
   // Buyer must have an active subscription to bill an add-on against
   const { data: profile } = await sb
     .from('profiles')
-    .select('stripe_subscription_id')
+    .select('stripe_subscription_id, plan')
     .eq('id', user.id)
     .single();
 
   if (!profile?.stripe_subscription_id) {
     return err('No active subscription found for this account', 409);
+  }
+
+  const priceId = profile.plan === 'annual' ? SMS_ADDON_ANNUAL_PRICE_ID : SMS_ADDON_MONTHLY_PRICE_ID;
+  if (!priceId) {
+    return err(`SMS add-on is not configured for the ${profile.plan || 'monthly'} plan`, 500);
   }
 
   // Update the gift's flag
@@ -77,7 +80,7 @@ exports.handler = async (event) => {
       subscription: profile.stripe_subscription_id,
       limit: 100,
     });
-    const existing = items.data.find((i) => i.price.id === SMS_ADDON_PRICE_ID);
+    const existing = items.data.find((i) => i.price.id === priceId);
 
     if (smsCount > 0) {
       if (existing) {
@@ -90,7 +93,7 @@ exports.handler = async (event) => {
       } else {
         await stripe.subscriptionItems.create({
           subscription: profile.stripe_subscription_id,
-          price: SMS_ADDON_PRICE_ID,
+          price: priceId,
           quantity: smsCount,
           proration_behavior: 'create_prorations',
         });
