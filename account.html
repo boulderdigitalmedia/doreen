@@ -15,7 +15,7 @@
       --border: #dde8dd; --shadow: rgba(80,110,85,0.10); --red: #c0392b; --red-pale: #fdf0ef;
       --gold: #b8860b; --gold-pale: #fdf8e8;
     }
-    html, body { min-height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+    html, body { min-height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; overflow-x: hidden; width: 100%; }
 
     /* ── LOADING ── */
     #loading { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; }
@@ -162,13 +162,13 @@
     .panel-title { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); margin-bottom: 18px; }
 
     /* ── FORM FIELDS ── */
-    .field { margin-bottom: 16px; }
+    .field { margin-bottom: 16px; min-width: 0; }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     label { display: block; font-size: 13px; color: var(--ink-mid); margin-bottom: 5px; }
     input[type="text"], input[type="date"], input[type="time"], input[type="number"], input[type="email"], select, textarea {
-      width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+      width: 100%; min-width: 0; max-width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
       font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--ink); background: var(--bg);
-      outline: none; transition: border-color 0.15s;
+      outline: none; transition: border-color 0.15s; box-sizing: border-box;
     }
     input:focus, select:focus, textarea:focus { border-color: var(--sage); }
     textarea { resize: vertical; min-height: 90px; }
@@ -226,7 +226,13 @@
     .empty-state { text-align: center; padding: 48px 20px; color: var(--ink-soft); font-size: 14px; }
     .empty-state-icon { font-size: 32px; margin-bottom: 12px; }
 
-    @media (max-width: 500px) { .pricing-grid { grid-template-columns: 1fr; } .field-row { grid-template-columns: 1fr; } }
+    @media (max-width: 500px) {
+      .pricing-grid { grid-template-columns: 1fr; }
+      .field-row { grid-template-columns: 1fr; }
+      input[type="text"], input[type="date"], input[type="time"], input[type="number"], input[type="email"], select, textarea {
+        font-size: 16px; padding: 10px 12px;
+      }
+    }
     @media (max-width: 480px) {
       .header { padding: 0 16px; }
       .header-brand { font-size: 19px; gap: 7px; }
@@ -234,6 +240,8 @@
       .header-brand .logo-badge { width: 13px; height: 13px; font-size: 8px; top: -6px; right: -6px; }
       .header-right { gap: 10px; }
       .header-signout { font-size: 12px; }
+      .page { padding-left: 16px; padding-right: 16px; }
+      .panel { padding: 18px; }
     }
   </style>
 </head>
@@ -396,7 +404,7 @@
           <span>Enable SMS add-on for this gift</span>
         </label>
         <p style="font-size:12px;color:var(--ink-soft);margin-top:5px;margin-left:26px;">
-          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding.
+          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding. This adds <strong id="smsAddonPriceLabel">$2/mo</strong> to your subscription, matching your plan.
         </p>
       </div>
       <div class="field" style="margin-top:4px;">
@@ -835,6 +843,8 @@
     populateTimezoneSelect('dTimezone', gift.timezone || 'Pacific/Auckland');
     document.getElementById('dPlannedCount').value = gift.planned_notes_count || '';
     document.getElementById('dSmsAddon').checked = !!gift.sms_addon;
+    var smsPriceEl = document.getElementById('smsAddonPriceLabel');
+    if (smsPriceEl) smsPriceEl.textContent = extraGiftPriceLabel();
     updateSlugPreview();
 
     const [{ data: rec }, { data: notes }] = await Promise.all([
