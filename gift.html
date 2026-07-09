@@ -256,6 +256,16 @@
       margin-top: 2px;
     }
 
+    .ob-ios-note {
+      font-size: 12px;
+      color: var(--sage);
+      background: var(--sage-pale);
+      border: 1px solid var(--sage-light);
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-top: 8px;
+    }
+
     .ob-check {
       width: 20px; height: 20px;
       border: 2px solid var(--border);
@@ -972,6 +982,9 @@
         </div>
         <div class="ob-check" id="checkPush"></div>
       </div>
+      <div class="ob-ios-note" id="obIOSPushNote" style="display:none">
+        On iPhone, add this page to your Home Screen first (Share → Add to Home Screen) — push only works from the installed app, not in Safari.
+      </div>
     </div>
 
     <!-- Email -->
@@ -1139,6 +1152,12 @@
 
   const sb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const slug = window.location.pathname.replace(/^\//, '').split('/')[0];
+
+  // iOS Safari only supports web push for pages added to the Home Screen —
+  // a regular browser tab (even in iOS 16.4+) silently can't receive them.
+  // Used both by the install-banner nudge and the push-option hint below.
+  const IS_IOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches;
 
   var GIFT      = null;
   var NOTES     = [];
@@ -1325,6 +1344,8 @@
     if (gift.sms_addon) {
       document.getElementById('obSms').style.display = 'block';
     }
+
+    document.getElementById('obIOSPushNote').style.display = (IS_IOS && !IS_STANDALONE) ? 'block' : 'none';
 
     // Reset to a known state derived from the recipient record each time
     // this is shown, rather than toggling — this function can now be
@@ -1921,9 +1942,7 @@
       dismissInstallBanner();
     });
 
-    var isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    var isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isIOS && !isStandalone && !alreadyDismissed) {
+    if (IS_IOS && !IS_STANDALONE && !alreadyDismissed) {
       installMsg.textContent   = 'Tap Share → Add to Home Screen so you never miss a note';
       installBtn.style.display = 'none';
       setTimeout(function() { banner.classList.add('show'); }, 2500);
