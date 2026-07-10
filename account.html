@@ -221,9 +221,22 @@
     .editor-actions { display: flex; gap: 8px; margin-top: 10px; }
 
     /* ── DANGER ZONE ── */
-    .danger-zone { border: 1px solid #f5c6c2; border-radius: 16px; padding: 20px; background: var(--red-pale); }
-    .danger-title { font-size: 13px; font-weight: 500; color: var(--red); margin-bottom: 6px; }
-    .danger-desc { font-size: 13px; color: #a05050; margin-bottom: 16px; }
+    /* Deliberately low-key — a plain text link, not a big red box, so it
+       doesn't compete for attention with everything else on the page.
+       Still says exactly what it does; just doesn't shout it. */
+    .danger-zone-discreet { margin-top: 8px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; }
+    .link-danger {
+      background: none; border: none;
+      color: var(--ink-soft);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px 2px;
+    }
+    .link-danger:hover { color: var(--red); }
+    .link-danger-hint { font-size: 11px; color: var(--ink-soft); opacity: 0.7; margin-top: 3px; }
+
+    /* ── SITE FOOTER ── */
+    .site-footer { text-align: center; font-size: 12px; color: var(--ink-soft); padding: 28px 20px 32px; }
 
     /* ── MODAL ── */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(44,58,46,0.4); z-index: 50; align-items: center; justify-content: center; padding: 20px; }
@@ -511,13 +524,14 @@
       </div>
     </div>
 
-    <div class="danger-zone">
-      <div class="danger-title">Delete this gift</div>
-      <div class="danger-desc">Permanently removes the gift, all notes, and the recipient's access. Cannot be undone.</div>
-      <button class="btn btn-danger btn-sm" onclick="deleteGift()">Delete gift</button>
+    <div class="danger-zone-discreet">
+      <button class="link-danger" onclick="deleteGift()">Delete this gift</button>
+      <div class="link-danger-hint">Permanently removes the gift, all notes, and the recipient's access. Cannot be undone.</div>
     </div>
   </div>
 </div>
+
+<footer class="site-footer">© <span id="footerYear"></span> A Note For You. All rights reserved.</footer>
 
 <!-- CREATE GIFT MODAL -->
 <div class="modal-overlay" id="createModal">
@@ -611,6 +625,8 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iYWtodGJjanh0cWNsZ2RqcnF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTM3MjMsImV4cCI6MjA5NzU2OTcyM30.S3eUIJetWWMGZCqZ2X4nMsZeZcr5zbdbfc7LWs55yHw';
   const SITE_URL          = window.location.origin; // automatically uses current domain
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  document.getElementById('footerYear').textContent = new Date().getFullYear();
 
   var USER          = null;
   var SESSION       = null;
