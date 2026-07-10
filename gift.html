@@ -1842,11 +1842,19 @@
     slots[1].lockOverlayEl = lockOverlayEl;
     slots[1].lockDateEl    = lockDateEl;
 
-    // The front card's mount animation (fadeUp, with fill:forwards) holds
-    // its own transform value indefinitely once finished, which would
-    // block our role-based transform/transition control. Free it up right
-    // after the entrance animation completes (0.3s delay + 0.7s duration).
-    setTimeout(function() { cardEl.style.animation = 'none'; }, 1050);
+    // The mount entrance (fadeUp, with fill:forwards) holds its own
+    // opacity/transform indefinitely once finished, which would block our
+    // role-based transform control on whichever element later takes on the
+    // front role. `entranceSettled` (read inside applyRole, below) frees
+    // every card from that animation once the entrance is done — see
+    // applyRole() for why we also have to pin opacity inline right when we
+    // do that (removing `animation` reveals the base .card rule's
+    // opacity:0, which would otherwise make the card invisible).
+    var entranceSettled = false;
+    setTimeout(function() {
+      entranceSettled = true;
+      slots.forEach(function(slot) { applyRole(slot); });
+    }, 1050);
 
     // ── PHOTO LIGHTBOX ───────────────────────────────────────────
     // Tapping the (now square-cropped) photo opens the full, uncropped
@@ -2092,6 +2100,20 @@
       slot.el.setAttribute('data-role', slot.role);
       slot.el.classList.toggle('peek', slot.role !== 'front');
       slot.el.classList.toggle('hidden', !slotVisible(slot.noteIndex));
+
+      // Once the one-time mount entrance has played out, permanently
+      // detach every card from the fadeUp animation — otherwise a peek
+      // card that later rotates into the front role would pick the
+      // animation back up (it only avoided it via the .card.peek CSS
+      // rule, which stops applying the moment 'peek' is removed above),
+      // restarting an invisible-then-fade-in cycle every time. Pinning
+      // opacity inline is required too: once `animation` is cleared, the
+      // base .card rule's static opacity:0 (the animation's un-started
+      // state) would otherwise show through with nothing to override it.
+      if (entranceSettled) {
+        slot.el.style.animation = 'none';
+        slot.el.style.opacity   = slot.role === 'front' ? '1' : '';
+      }
     }
 
     function syncControls() {
