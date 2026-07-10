@@ -495,6 +495,7 @@
       transform: rotate(-1.1deg);
       opacity: 0;
       animation: fadeUp 0.7s ease 0.3s forwards;
+      transition: transform 0.5s cubic-bezier(.4,0,.2,1);
     }
 
     .card.locked { filter: none; }
@@ -523,7 +524,10 @@
     .card.peek[data-role="left"]  { transform: translate(-58%,4%) rotate(-9deg) scale(0.86); }
     .card.peek[data-role="right"] { transform: translate(58%,4%) rotate(9deg) scale(0.86); }
 
-    .card[data-role="front"] { z-index: 3; }
+    /* Explicit resting transform for whichever physical card currently
+       holds the front role — roles rotate between all 3 elements, so this
+       can't rely on the (one-time, entrance-only) fadeUp animation. */
+    .card[data-role="front"] { transform: translate(0,0) rotate(-1.1deg) scale(1); z-index: 3; }
 
     .photo-placeholder {
       width: 100%;
@@ -1774,23 +1778,37 @@
     var phHintEl       = document.getElementById('phHint');
     var cardImgEl      = document.getElementById('cardImg');
 
-    // Peek cards (previous/next unlocked note, fanned behind the front
-    // card). Keyed by suffix so renderPeekSlot() can look up each one's
-    // elements generically.
-    var peekEls = {
-      left: {
-        cardEl:        document.getElementById('cardLeft'),
-        placeholderEl: document.getElementById('photoPlaceholderLeft'),
-        imgEl:         document.getElementById('cardImgLeft'),
-        quoteEl:       document.getElementById('cardQuoteLeft'),
-      },
-      right: {
-        cardEl:        document.getElementById('cardRight'),
-        placeholderEl: document.getElementById('photoPlaceholderRight'),
-        imgEl:         document.getElementById('cardImgRight'),
-        quoteEl:       document.getElementById('cardQuoteRight'),
-      },
-    };
+    // The 3 physical carousel elements. Each "slot" keeps its own DOM
+    // element permanently (identity never changes — cardLeftEl is always
+    // cardLeftEl) but its ROLE (front/left/right) and noteIndex rotate as
+    // the recipient navigates, which is what produces the physical
+    // rotate/slide feel: on advance, the role-front element becomes
+    // role-left (sliding out) and the role-right element becomes
+    // role-front (sliding in) — no content change needed for either, only
+    // their CSS transform animates. Only the element that "wraps" from one
+    // side to the other needs a fresh note rendered into it, and that
+    // happens instantly (no transition) since it's not meant to visibly
+    // slide across the whole stack.
+    var cardLeftEl          = document.getElementById('cardLeft');
+    var photoPlaceholderLeftEl = document.getElementById('photoPlaceholderLeft');
+    var cardImgLeftEl       = document.getElementById('cardImgLeft');
+    var cardQuoteLeftEl     = document.getElementById('cardQuoteLeft');
+    var cardRightEl         = document.getElementById('cardRight');
+    var photoPlaceholderRightEl = document.getElementById('photoPlaceholderRight');
+    var cardImgRightEl      = document.getElementById('cardImgRight');
+    var cardQuoteRightEl    = document.getElementById('cardQuoteRight');
+
+    var slots = [
+      { el: cardLeftEl,  role: 'left',  noteIndex: currentIndex - 1,
+        placeholderEl: photoPlaceholderLeftEl, imgEl: cardImgLeftEl, quoteEl: cardQuoteLeftEl,
+        lockOverlayEl: null, lockDateEl: null, phHintEl: null },
+      { el: cardEl,      role: 'front', noteIndex: currentIndex,
+        placeholderEl: placeholderEl, imgEl: cardImgEl, quoteEl: null /* set below */,
+        lockOverlayEl: null /* set below */, lockDateEl: null /* set below */, phHintEl: phHintEl },
+      { el: cardRightEl, role: 'right', noteIndex: currentIndex + 1,
+        placeholderEl: photoPlaceholderRightEl, imgEl: cardImgRightEl, quoteEl: cardQuoteRightEl,
+        lockOverlayEl: null, lockDateEl: null, phHintEl: null },
+    ];
 
     var photoLightbox  = document.getElementById('photoLightbox');
     var lightboxImg    = document.getElementById('lightboxImg');
@@ -1818,6 +1836,17 @@
     var favList        = document.getElementById('favList');
     var favEmpty       = document.getElementById('favEmpty');
     var favCountEl     = document.getElementById('favCount');
+
+    // Finish wiring the front slot now that its elements exist.
+    slots[1].quoteEl      = cardQuoteEl;
+    slots[1].lockOverlayEl = lockOverlayEl;
+    slots[1].lockDateEl    = lockDateEl;
+
+    // The front card's mount animation (fadeUp, with fill:forwards) holds
+    // its own transform value indefinitely once finished, which would
+    // block our role-based transform/transition control. Free it up right
+    // after the entrance animation completes (0.3s delay + 0.7s duration).
+    setTimeout(function() { cardEl.style.animation = 'none'; }, 1050);
 
     // ── PHOTO LIGHTBOX ───────────────────────────────────────────
     // Tapping the (now square-cropped) photo opens the full, uncropped
@@ -1863,8 +1892,7 @@
       renderLightbox();
       // Keep the main card in sync with whatever note the recipient is
       // now looking at in the gallery.
-      currentIndex = target;
-      showNote(currentIndex);
+      goTo(target);
     }
 
     cardImgEl.addEventListener('click', function() { openLightbox(currentIndex); });
@@ -1988,7 +2016,7 @@
         });
         item.appendChild(h);
 
-        item.addEventListener('click', function() { currentIndex = idx; showNote(currentIndex); closeDrawer(); });
+        item.addEventListener('click', function() { goTo(idx); closeDrawer(); });
         favList.appendChild(item);
       });
     }
@@ -2009,96 +2037,71 @@
       }
     }
 
-    // ── PEEK CARDS (carousel) ────────────────────────────────────
-    // Populates (or hides) the left/right fanned cards behind the front
-    // note, bounded to the same [0, todayNoteIndex] range as prev/next —
-    // recipients never get a peek preview of a still-locked note.
+    // ── CAROUSEL (rotating slots) ─────────────────────────────────
+    // See the `slots` setup above for the overall idea: 3 fixed DOM
+    // elements, each carrying a mutable role + noteIndex. Advancing by one
+    // note rotates roles (which animates via CSS transition, giving the
+    // physical slide/rotate feel); jumping more than one note at a time
+    // (e.g. from the favourites list) just resets all 3 slots in place.
 
-    function renderPeekSlot(suffix, index) {
-      var els = peekEls[suffix];
-      if (index < 0 || index > todayNoteIndex) {
-        els.cardEl.classList.add('hidden');
-        return;
+    function slotVisible(idx) { return idx >= 0 && idx <= todayNoteIndex; }
+
+    function setSlotContent(slot) {
+      var idx  = slot.noteIndex;
+      var note = notes[idx];
+      var locked = idx > todayNoteIndex; // bound-checked by callers; kept for parity/safety
+
+      if (slot.quoteEl) slot.quoteEl.textContent = note.text || '';
+
+      if (slot.lockOverlayEl) {
+        if (locked) {
+          slot.el.classList.add('locked');
+          slot.lockDateEl.textContent      = unlockDate(gift, idx);
+          slot.lockOverlayEl.style.display = 'flex';
+        } else {
+          slot.el.classList.remove('locked');
+          slot.lockOverlayEl.style.display = 'none';
+        }
       }
-      els.cardEl.classList.remove('hidden');
-
-      var note = notes[index];
-      els.quoteEl.textContent = note.text || '';
 
       var src = note.photo_url || '';
       if (src) {
-        els.placeholderEl.style.display = 'none';
-        els.imgEl.style.display         = 'block';
+        slot.placeholderEl.style.display = 'none';
+        slot.imgEl.style.display         = 'block';
+        slot.imgEl.classList.add('loading');
         var tmp = new Image();
         tmp.onload = function() {
-          els.imgEl.src = src;
-          els.imgEl.style.objectPosition = note.photo_position || '50% 50%';
+          slot.imgEl.src = src;
+          slot.imgEl.style.objectPosition = note.photo_position || '50% 50%';
+          requestAnimationFrame(function() { slot.imgEl.classList.remove('loading'); });
         };
         tmp.onerror = function() {
-          els.imgEl.style.display         = 'none';
-          els.placeholderEl.style.display = 'flex';
+          slot.imgEl.style.display         = 'none';
+          slot.placeholderEl.style.display = 'flex';
+          if (slot.phHintEl) slot.phHintEl.textContent = 'photo unavailable';
         };
         tmp.src = src;
       } else {
-        els.imgEl.style.display         = 'none';
-        els.placeholderEl.style.display = 'flex';
+        slot.imgEl.style.display         = 'none';
+        slot.placeholderEl.style.display = 'flex';
+        if (slot.phHintEl) slot.phHintEl.textContent = '';
       }
     }
 
-    // ── SHOW NOTE ──────────────────────────────────────────────
+    function applyRole(slot) {
+      slot.el.setAttribute('data-role', slot.role);
+      slot.el.classList.toggle('peek', slot.role !== 'front');
+      slot.el.classList.toggle('hidden', !slotVisible(slot.noteIndex));
+    }
 
-    function showNote(index, animate) {
-      if (animate === undefined) animate = true;
-      var note    = notes[index];
-      var isToday = index === todayNoteIndex;
-      var locked  = index > todayNoteIndex;
+    function syncControls() {
+      updateHeartBtn(currentIndex);
+      var isToday = currentIndex === todayNoteIndex;
+      todayRibbonEl.style.display = isToday ? 'block' : 'none';
+      dayBadgeEl.textContent      = isToday ? 'Today · Note ' + (currentIndex+1) : 'Note ' + (currentIndex+1);
 
-      if (animate) cardQuoteEl.classList.add('fading');
-
-      setTimeout(function() {
-        cardQuoteEl.textContent = note.text;
-        if (animate) cardQuoteEl.classList.remove('fading');
-
-        dayBadgeEl.textContent      = isToday ? 'Today · Note ' + (index+1) : 'Note ' + (index+1);
-        todayRibbonEl.style.display = isToday ? 'block' : 'none';
-
-        if (locked) {
-          cardEl.classList.add('locked');
-          lockDateEl.textContent         = unlockDate(gift, index);
-          lockOverlayEl.style.display    = 'flex';
-        } else {
-          cardEl.classList.remove('locked');
-          lockOverlayEl.style.display    = 'none';
-        }
-
-        var src = note.photo_url || '';
-        if (src) {
-          placeholderEl.style.display = 'none';
-          cardImgEl.style.display     = 'block';
-          cardImgEl.classList.add('loading');
-          var tmp = new Image();
-          tmp.onload = function() {
-            cardImgEl.src = src;
-            cardImgEl.style.objectPosition = note.photo_position || '50% 50%';
-            requestAnimationFrame(function() { cardImgEl.classList.remove('loading'); });
-          };
-          tmp.onerror = function() {
-            cardImgEl.style.display     = 'none';
-            placeholderEl.style.display = 'flex';
-            phHintEl.textContent        = 'photo unavailable';
-          };
-          tmp.src = src;
-        } else {
-          cardImgEl.style.display     = 'none';
-          placeholderEl.style.display = 'flex';
-          phHintEl.textContent        = '';
-        }
-
-        updateHeartBtn(index);
-      }, animate ? 200 : 0);
-
-      prevBtn.disabled = index <= 0;
-      nextBtn.disabled = index >= todayNoteIndex;
+      prevBtn.disabled = currentIndex <= 0;
+      nextBtn.disabled = currentIndex >= todayNoteIndex;
 
       // Use the buyer's declared total (if they set one) instead of however
       // many notes happen to be written so far, so the recipient sees an
@@ -2109,27 +2112,82 @@
       progressLblEl.textContent  = (todayNoteIndex+1) + ' of ' + total + ' unlocked';
 
       renderDots();
-      renderPeekSlot('left',  index - 1);
-      renderPeekSlot('right', index + 1);
     }
 
-    showNote(currentIndex, false);
+    // Hard reset: reassigns each element back to its canonical role and
+    // repositions/re-renders instantly (no transition). Used for the
+    // initial mount and for non-adjacent jumps (favourites).
+    function resetSlots() {
+      var canonicalRole = ['left', 'front', 'right'];
+      slots.forEach(function(slot, i) {
+        slot.role = canonicalRole[i];
+        slot.noteIndex = slot.role === 'front' ? currentIndex
+                        : slot.role === 'left'  ? currentIndex - 1
+                        : currentIndex + 1;
+        slot.el.style.transition = 'none';
+        applyRole(slot);
+        if (slotVisible(slot.noteIndex)) setSlotContent(slot);
+      });
+      void slots[0].el.offsetWidth; // force reflow before re-enabling transitions
+      slots.forEach(function(slot) { slot.el.style.transition = ''; });
+    }
+
+    // Smooth step: rotates each element's role by one position. The two
+    // elements moving between adjacent slots (front↔left, front↔right)
+    // keep their existing content and simply transition their transform —
+    // that's the physical slide/rotate. The element wrapping from one side
+    // to the other gets fresh content instantly, with no transition, since
+    // it's not meant to visibly fly across the stack.
+    function rotateSlots(dir) {
+      slots.forEach(function(slot) {
+        var oldRole = slot.role;
+        var newRole = dir === 1
+          ? (oldRole === 'front' ? 'left'  : oldRole === 'right' ? 'front' : 'right')
+          : (oldRole === 'front' ? 'right' : oldRole === 'left'  ? 'front' : 'left');
+        var wraps = (dir === 1 && oldRole === 'left') || (dir === -1 && oldRole === 'right');
+
+        slot.role = newRole;
+        slot.noteIndex = newRole === 'front' ? currentIndex
+                        : newRole === 'left'  ? currentIndex - 1
+                        : currentIndex + 1;
+
+        if (wraps) {
+          slot.el.style.transition = 'none';
+          applyRole(slot);
+          if (slotVisible(slot.noteIndex)) setSlotContent(slot);
+          void slot.el.offsetWidth;
+          slot.el.style.transition = '';
+        } else {
+          applyRole(slot);
+        }
+      });
+    }
+
+    function goTo(newIndex) {
+      if (newIndex < 0 || newIndex > todayNoteIndex || newIndex === currentIndex) return;
+      var dir = newIndex - currentIndex;
+      currentIndex = newIndex;
+      if (Math.abs(dir) === 1) rotateSlots(dir > 0 ? 1 : -1);
+      else resetSlots();
+      syncControls();
+    }
+
+    resetSlots();
+    syncControls();
 
     // ── NAVIGATION ─────────────────────────────────────────────
 
-    prevBtn.addEventListener('click', function() {
-      if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
-    });
-    nextBtn.addEventListener('click', function() {
-      if (currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
-    });
+    prevBtn.addEventListener('click', function() { goTo(currentIndex - 1); });
+    nextBtn.addEventListener('click', function() { goTo(currentIndex + 1); });
 
-    // Tapping a peek card brings it to the front, same bound as prev/next.
-    peekEls.left.cardEl.addEventListener('click', function() {
-      if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
-    });
-    peekEls.right.cardEl.addEventListener('click', function() {
-      if (currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
+    // Tapping a peek card brings it to the front. Roles rotate between the
+    // 3 elements, so check each slot's *current* role at click time rather
+    // than assuming a fixed element is always "left" or "right".
+    slots.forEach(function(slot) {
+      slot.el.addEventListener('click', function() {
+        if (slot.role === 'left')       goTo(currentIndex - 1);
+        else if (slot.role === 'right') goTo(currentIndex + 1);
+      });
     });
 
     var tx = 0;
@@ -2137,8 +2195,8 @@
     document.addEventListener('touchend',   function(e) {
       var dx = e.changedTouches[0].clientX - tx;
       if (Math.abs(dx) > 44) {
-        if (dx < 0 && currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
-        else if (dx > 0 && currentIndex > 0)          { currentIndex--; showNote(currentIndex); }
+        if (dx < 0) goTo(currentIndex + 1);
+        else        goTo(currentIndex - 1);
       }
     }, { passive:true });
 
