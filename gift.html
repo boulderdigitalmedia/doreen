@@ -34,6 +34,8 @@
       font-family: 'DM Sans', sans-serif;
       color: var(--ink);
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      width: 100%;
     }
 
     /* ── LOADING ── */
@@ -475,9 +477,14 @@
       margin-bottom: 9px;
     }
 
-    .card {
+    .card-stack {
+      position: relative;
       width: 100%;
       max-width: 473px;
+    }
+
+    .card {
+      width: 100%;
       background: #fff;
       border-radius: 3px;
       border: none;
@@ -491,6 +498,32 @@
     }
 
     .card.locked { filter: none; }
+
+    /* PEEK CARDS — the previous/next unlocked note, fanned out behind the
+       front card, carousel-style (same idea as the homepage hero). Tapping
+       one brings it to the front. */
+    .card.peek {
+      position: absolute;
+      top: 0;
+      left: 11%;
+      width: 78%;
+      z-index: 1;
+      cursor: pointer;
+      opacity: 0.97;
+      animation: none;
+      transition: transform 0.5s cubic-bezier(.4,0,.2,1), opacity 0.3s, visibility 0.3s;
+    }
+
+    .card.peek.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .card.peek[data-role="left"]  { transform: translate(-58%,4%) rotate(-9deg) scale(0.86); }
+    .card.peek[data-role="right"] { transform: translate(58%,4%) rotate(9deg) scale(0.86); }
+
+    .card[data-role="front"] { z-index: 3; }
 
     .photo-placeholder {
       width: 100%;
@@ -890,6 +923,12 @@
       .lightbox-prev { left: 8px; }
       .lightbox-next { right: 8px; }
       .lightbox-caption { font-size: 16px; padding: 0 8px; }
+
+      /* Tighter fan spread for the gift-page carousel peek cards on small
+         screens, so they stay closer to the front card instead of running
+         off the edges. */
+      .card.peek[data-role="left"]  { transform: translate(-46%,4%) rotate(-8deg) scale(0.85); }
+      .card.peek[data-role="right"] { transform: translate(46%,4%) rotate(8deg) scale(0.85); }
     }
 
     /* PUSH NOTIFICATION CONSENT */
@@ -1123,17 +1162,39 @@
     <div class="today-ribbon" id="todayRibbon">✦ Today's note</div>
     <div class="day-badge" id="dayBadge">Day 1</div>
 
-    <div class="card" id="card">
-      <div class="photo-placeholder" id="photoPlaceholder">
-        🌿 <span class="photo-hint" id="phHint"></span>
+    <div class="card-stack">
+      <div class="card peek hidden" id="cardLeft" data-role="left">
+        <div class="photo-placeholder" id="photoPlaceholderLeft">
+          🌿 <span class="photo-hint"></span>
+        </div>
+        <img class="card-img" id="cardImgLeft" alt="" style="display:none" />
+        <div class="card-body">
+          <div class="card-quote" id="cardQuoteLeft"></div>
+        </div>
       </div>
-      <img class="card-img" id="cardImg" alt="" style="display:none" />
-      <div class="card-body">
-        <div class="card-quote" id="cardQuote"></div>
+
+      <div class="card peek hidden" id="cardRight" data-role="right">
+        <div class="photo-placeholder" id="photoPlaceholderRight">
+          🌿 <span class="photo-hint"></span>
+        </div>
+        <img class="card-img" id="cardImgRight" alt="" style="display:none" />
+        <div class="card-body">
+          <div class="card-quote" id="cardQuoteRight"></div>
+        </div>
       </div>
-      <div class="lock-overlay" id="lockOverlay">
-        <div class="lock-icon">🔒</div>
-        <div class="lock-date" id="lockDate"></div>
+
+      <div class="card" id="card" data-role="front">
+        <div class="photo-placeholder" id="photoPlaceholder">
+          🌿 <span class="photo-hint" id="phHint"></span>
+        </div>
+        <img class="card-img" id="cardImg" alt="" style="display:none" />
+        <div class="card-body">
+          <div class="card-quote" id="cardQuote"></div>
+        </div>
+        <div class="lock-overlay" id="lockOverlay">
+          <div class="lock-icon">🔒</div>
+          <div class="lock-date" id="lockDate"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1712,6 +1773,25 @@
     var placeholderEl  = document.getElementById('photoPlaceholder');
     var phHintEl       = document.getElementById('phHint');
     var cardImgEl      = document.getElementById('cardImg');
+
+    // Peek cards (previous/next unlocked note, fanned behind the front
+    // card). Keyed by suffix so renderPeekSlot() can look up each one's
+    // elements generically.
+    var peekEls = {
+      left: {
+        cardEl:        document.getElementById('cardLeft'),
+        placeholderEl: document.getElementById('photoPlaceholderLeft'),
+        imgEl:         document.getElementById('cardImgLeft'),
+        quoteEl:       document.getElementById('cardQuoteLeft'),
+      },
+      right: {
+        cardEl:        document.getElementById('cardRight'),
+        placeholderEl: document.getElementById('photoPlaceholderRight'),
+        imgEl:         document.getElementById('cardImgRight'),
+        quoteEl:       document.getElementById('cardQuoteRight'),
+      },
+    };
+
     var photoLightbox  = document.getElementById('photoLightbox');
     var lightboxImg    = document.getElementById('lightboxImg');
     var lightboxCaption = document.getElementById('lightboxCaption');
@@ -1929,6 +2009,42 @@
       }
     }
 
+    // ── PEEK CARDS (carousel) ────────────────────────────────────
+    // Populates (or hides) the left/right fanned cards behind the front
+    // note, bounded to the same [0, todayNoteIndex] range as prev/next —
+    // recipients never get a peek preview of a still-locked note.
+
+    function renderPeekSlot(suffix, index) {
+      var els = peekEls[suffix];
+      if (index < 0 || index > todayNoteIndex) {
+        els.cardEl.classList.add('hidden');
+        return;
+      }
+      els.cardEl.classList.remove('hidden');
+
+      var note = notes[index];
+      els.quoteEl.textContent = note.text || '';
+
+      var src = note.photo_url || '';
+      if (src) {
+        els.placeholderEl.style.display = 'none';
+        els.imgEl.style.display         = 'block';
+        var tmp = new Image();
+        tmp.onload = function() {
+          els.imgEl.src = src;
+          els.imgEl.style.objectPosition = note.photo_position || '50% 50%';
+        };
+        tmp.onerror = function() {
+          els.imgEl.style.display         = 'none';
+          els.placeholderEl.style.display = 'flex';
+        };
+        tmp.src = src;
+      } else {
+        els.imgEl.style.display         = 'none';
+        els.placeholderEl.style.display = 'flex';
+      }
+    }
+
     // ── SHOW NOTE ──────────────────────────────────────────────
 
     function showNote(index, animate) {
@@ -1993,6 +2109,8 @@
       progressLblEl.textContent  = (todayNoteIndex+1) + ' of ' + total + ' unlocked';
 
       renderDots();
+      renderPeekSlot('left',  index - 1);
+      renderPeekSlot('right', index + 1);
     }
 
     showNote(currentIndex, false);
@@ -2003,6 +2121,14 @@
       if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
     });
     nextBtn.addEventListener('click', function() {
+      if (currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
+    });
+
+    // Tapping a peek card brings it to the front, same bound as prev/next.
+    peekEls.left.cardEl.addEventListener('click', function() {
+      if (currentIndex > 0) { currentIndex--; showNote(currentIndex); }
+    });
+    peekEls.right.cardEl.addEventListener('click', function() {
       if (currentIndex < todayNoteIndex) { currentIndex++; showNote(currentIndex); }
     });
 
