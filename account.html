@@ -193,6 +193,20 @@
     .note-editor { background: var(--sage-pale); border: 1px solid var(--sage-light); border-radius: 12px; padding: 16px; }
     .photo-upload-area { border: 2px dashed var(--sage-light); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; margin-bottom: 12px; font-size: 13px; color: var(--ink-soft); transition: border-color 0.15s; }
     .photo-upload-area:hover { border-color: var(--sage); }
+    .bulk-photo-order {
+      list-style: decimal;
+      margin: -4px 0 12px;
+      padding-left: 22px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      max-height: 160px;
+      overflow-y: auto;
+      background: var(--bg);
+      border-radius: 8px;
+      padding-top: 10px;
+      padding-bottom: 10px;
+    }
+    .bulk-photo-order li { padding: 2px 8px 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .photo-reposition-wrap { margin-bottom: 12px; }
     .photo-reposition-box {
       /* Matches the square crop recipients now see on the gift page —
@@ -440,9 +454,10 @@
     <div class="panel">
       <div class="panel-title">Notes <span id="noteCountBadge" style="font-weight:400;color:var(--ink-soft)"></span></div>
       <div class="notes-list" id="notesList"></div>
-      <div style="margin-top:14px;display:flex;gap:8px;">
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="showAddNote()">+ Add note</button>
         <button class="btn btn-secondary btn-sm" onclick="showBulkAdd()">+ Bulk add</button>
+        <button class="btn btn-secondary btn-sm" onclick="showBulkPhotoAdd()">+ Bulk photos</button>
       </div>
       <div id="addNoteEditor" style="display:none;margin-top:16px;">
         <div class="note-editor">
@@ -475,6 +490,22 @@
           <div class="editor-actions">
             <button class="btn btn-primary btn-sm" onclick="saveBulkNotes()">Add notes</button>
             <button class="btn btn-ghost btn-sm" onclick="cancelBulkAdd()">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div id="bulkPhotoEditor" style="display:none;margin-top:16px;">
+        <div class="note-editor">
+          <p style="font-size:13px;color:var(--ink-mid);margin-bottom:10px;">
+            Select as many photos as you like — they're matched, in the order you select them, to your notes that don't have a photo yet, starting from the earliest. Handy right after a Bulk add. Check the order below before uploading — most file pickers follow click order, but it can vary.
+          </p>
+          <div class="photo-upload-area" id="bulkPhotoUploadArea" onclick="document.getElementById('bulkPhotoInput').click()">
+            <span id="bulkPhotoLabel">📷 Click to choose photos</span>
+          </div>
+          <ol class="bulk-photo-order" id="bulkPhotoOrderList" style="display:none;"></ol>
+          <input type="file" id="bulkPhotoInput" accept="image/*" multiple style="display:none" onchange="handleBulkPhotoSelect()" />
+          <div class="editor-actions">
+            <button class="btn btn-primary btn-sm" id="saveBulkPhotosBtn" onclick="saveBulkPhotos()">Upload photos</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelBulkPhotoAdd()">Cancel</button>
           </div>
         </div>
       </div>
@@ -1063,6 +1094,7 @@
 
   function showAddNote() {
     document.getElementById('bulkAddEditor').style.display = 'none';
+    document.getElementById('bulkPhotoEditor').style.display = 'none';
     document.getElementById('addNoteEditor').style.display = 'block';
     document.getElementById('addNoteText').focus();
     ADD_PHOTO_FILE = null;
@@ -1079,6 +1111,7 @@
 
   function showBulkAdd() {
     document.getElementById('addNoteEditor').style.display = 'none';
+    document.getElementById('bulkPhotoEditor').style.display = 'none';
     ADD_PHOTO_FILE = null;
     document.getElementById('bulkAddEditor').style.display = 'block';
     document.getElementById('bulkNoteText').value = '';
@@ -1086,6 +1119,98 @@
   }
   function cancelBulkAdd() {
     document.getElementById('bulkAddEditor').style.display = 'none';
+  }
+
+  // ── BULK ADD PHOTOS ───────────────────────────────────────────
+  // Matches a batch of photo files, in the order they were selected, to
+  // the notes that don't have a photo yet (earliest order_index first) —
+  // the natural follow-up to Bulk add, which creates text-only notes.
+
+  var BULK_PHOTO_FILES = [];
+
+  function showBulkPhotoAdd() {
+    document.getElementById('addNoteEditor').style.display = 'none';
+    document.getElementById('bulkAddEditor').style.display = 'none';
+    BULK_PHOTO_FILES = [];
+    document.getElementById('bulkPhotoInput').value = '';
+    document.getElementById('bulkPhotoLabel').textContent = '📷 Click to choose photos';
+    document.getElementById('bulkPhotoOrderList').style.display = 'none';
+    document.getElementById('bulkPhotoOrderList').innerHTML = '';
+    document.getElementById('bulkPhotoEditor').style.display = 'block';
+  }
+  function cancelBulkPhotoAdd() {
+    document.getElementById('bulkPhotoEditor').style.display = 'none';
+    BULK_PHOTO_FILES = [];
+  }
+
+  function handleBulkPhotoSelect() {
+    // Kept in whatever order the browser reports the selection in — on
+    // most platforms that's the order the buyer clicked/tapped the files
+    // in, which is what lets them control which photo lands on which
+    // note. The preview list below lets them double-check before uploading.
+    var files = Array.from(document.getElementById('bulkPhotoInput').files || []);
+    BULK_PHOTO_FILES = files;
+    document.getElementById('bulkPhotoLabel').textContent = files.length
+      ? files.length + ' photo' + (files.length === 1 ? '' : 's') + ' selected'
+      : '📷 Click to choose photos';
+
+    var orderList = document.getElementById('bulkPhotoOrderList');
+    orderList.innerHTML = '';
+    if (files.length) {
+      files.forEach(function(f) {
+        var li = document.createElement('li');
+        li.textContent = f.name;
+        orderList.appendChild(li);
+      });
+      orderList.style.display = 'block';
+    } else {
+      orderList.style.display = 'none';
+    }
+  }
+
+  async function saveBulkPhotos() {
+    if (!BULK_PHOTO_FILES.length) { showToast('Choose at least one photo first'); return; }
+
+    var targets = NOTES.filter(function(n) { return !n.photo_url; })
+                        .sort(function(a, b) { return a.order_index - b.order_index; });
+
+    if (!targets.length) { showToast('Every note already has a photo — add more notes first'); return; }
+
+    var pairs = BULK_PHOTO_FILES.slice(0, targets.length).map(function(file, i) {
+      return { file: file, note: targets[i] };
+    });
+    var leftover = BULK_PHOTO_FILES.length - pairs.length;
+
+    var btn = document.getElementById('saveBulkPhotosBtn');
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+
+    var uploaded = 0, failed = 0;
+    try {
+      for (var i = 0; i < pairs.length; i++) {
+        btn.textContent = 'Uploading ' + (i + 1) + ' of ' + pairs.length + '…';
+        var photoUrl = await uploadPhoto(pairs[i].file, CURRENT_GIFT.id);
+        if (!photoUrl) { failed++; continue; }
+        var { error } = await sb.from('notes').update({
+          photo_url: photoUrl, photo_position: '50% 50%',
+        }).eq('id', pairs[i].note.id);
+        if (error) { failed++; continue; }
+        uploaded++;
+      }
+
+      cancelBulkPhotoAdd();
+      const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
+      NOTES = notes || [];
+      renderNotes();
+
+      var msg = uploaded + ' photo' + (uploaded === 1 ? '' : 's') + ' added ✓';
+      if (leftover > 0) msg += ' · ' + leftover + ' left over (not enough notes without a photo)';
+      if (failed > 0)   msg += ' · ' + failed + ' failed';
+      showToast(msg);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   }
 
   async function saveBulkNotes() {
