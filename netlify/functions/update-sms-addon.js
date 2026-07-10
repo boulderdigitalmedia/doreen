@@ -8,7 +8,11 @@
 // uses (same pattern as the extra-gift-slot add-on), whose quantity equals
 // how many of the buyer's gifts currently have SMS enabled. Toggling a gift
 // on/off just adjusts that quantity (or creates/removes the item at
-// 0 → 1 / 1 → 0), and Stripe prorates the change automatically.
+// 0 → 1 / 1 → 0). Uses proration_behavior: 'always_invoice' rather than the
+// default 'create_prorations' — the buyer is charged (or credited) for the
+// prorated amount immediately, in its own invoice, instead of it silently
+// sitting as a pending line item until whatever their next renewal happens
+// to be.
 
 const Stripe = require('stripe');
 const { sb, ok, err, preflight } = require('./_shared');
@@ -87,7 +91,7 @@ exports.handler = async (event) => {
         if (existing.quantity !== smsCount) {
           await stripe.subscriptionItems.update(existing.id, {
             quantity: smsCount,
-            proration_behavior: 'create_prorations',
+            proration_behavior: 'always_invoice',
           });
         }
       } else {
@@ -95,11 +99,11 @@ exports.handler = async (event) => {
           subscription: profile.stripe_subscription_id,
           price: priceId,
           quantity: smsCount,
-          proration_behavior: 'create_prorations',
+          proration_behavior: 'always_invoice',
         });
       }
     } else if (existing) {
-      await stripe.subscriptionItems.del(existing.id, { proration_behavior: 'create_prorations' });
+      await stripe.subscriptionItems.del(existing.id, { proration_behavior: 'always_invoice' });
     }
   } catch (stripeErr) {
     // Roll the DB flag back so it doesn't drift from what's actually billed
