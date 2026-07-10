@@ -226,13 +226,16 @@
        Still says exactly what it does; just doesn't shout it. */
     .danger-zone-discreet { margin-top: 8px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; }
     .link-danger {
-      background: none; border: none;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
       color: var(--ink-soft);
       font-size: 12px;
       cursor: pointer;
-      padding: 4px 2px;
+      padding: 6px 14px;
+      transition: border-color 0.15s, color 0.15s;
     }
-    .link-danger:hover { color: var(--red); }
+    .link-danger:hover { color: var(--red); border-color: #f5c6c2; }
     .link-danger-hint { font-size: 11px; color: var(--ink-soft); opacity: 0.7; margin-top: 3px; }
 
     /* ── SITE FOOTER ── */
