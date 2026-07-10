@@ -515,8 +515,11 @@
       </div>
       <div id="bulkPhotoEditor" style="display:none;margin-top:16px;">
         <div class="note-editor">
-          <p style="font-size:13px;color:var(--ink-mid);margin-bottom:10px;">
+          <p style="font-size:13px;color:var(--ink-mid);margin-bottom:4px;">
             Select as many photos as you like, then choose what to do with them:
+          </p>
+          <p style="font-size:11px;color:var(--ink-soft);margin-bottom:10px;">
+            For best results, upload around 20–30 at a time — larger batches take longer and are more likely to hit a slow connection mid-upload.
           </p>
           <div class="bulk-photo-mode">
             <label class="bulk-photo-mode-option">
@@ -532,7 +535,6 @@
             <span id="bulkPhotoLabel">📷 Click to choose photos</span>
           </div>
           <ol class="bulk-photo-order" id="bulkPhotoOrderList" style="display:none;"></ol>
-          <p style="font-size:11px;color:var(--ink-soft);margin:-6px 0 10px;">Check the order above before uploading — most file pickers follow click order, but it can vary.</p>
           <input type="file" id="bulkPhotoInput" accept="image/*" multiple style="display:none" onchange="handleBulkPhotoSelect()" />
           <div class="editor-actions">
             <button class="btn btn-primary btn-sm" id="saveBulkPhotosBtn" onclick="saveBulkPhotos()">Upload photos</button>
