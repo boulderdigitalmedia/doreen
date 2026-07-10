@@ -207,6 +207,10 @@
       padding-bottom: 10px;
     }
     .bulk-photo-order li { padding: 2px 8px 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bulk-photo-mode { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+    .bulk-photo-mode-option { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; color: var(--ink); cursor: pointer; }
+    .bulk-photo-mode-option input { accent-color: var(--sage); width: 15px; height: 15px; margin-top: 2px; flex-shrink: 0; }
+    .bulk-photo-mode-hint { display: block; font-size: 11px; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
     .photo-reposition-wrap { margin-bottom: 12px; }
     .photo-reposition-box {
       /* Matches the square crop recipients now see on the gift page —
@@ -512,12 +516,23 @@
       <div id="bulkPhotoEditor" style="display:none;margin-top:16px;">
         <div class="note-editor">
           <p style="font-size:13px;color:var(--ink-mid);margin-bottom:10px;">
-            Select as many photos as you like — they're matched, in the order you select them, to your notes that don't have a photo yet, starting from the earliest. Handy right after a Bulk add. Check the order below before uploading — most file pickers follow click order, but it can vary.
+            Select as many photos as you like, then choose what to do with them:
           </p>
+          <div class="bulk-photo-mode">
+            <label class="bulk-photo-mode-option">
+              <input type="radio" name="bulkPhotoMode" value="attach" checked />
+              <span>Attach to notes without a photo yet<span class="bulk-photo-mode-hint">Matched in the order you select them, starting from your earliest note. Handy right after a Bulk add.</span></span>
+            </label>
+            <label class="bulk-photo-mode-option">
+              <input type="radio" name="bulkPhotoMode" value="create" />
+              <span>Create a new note for each photo<span class="bulk-photo-mode-hint">Added to the end of your list, photo only — write the text later with Edit if you want.</span></span>
+            </label>
+          </div>
           <div class="photo-upload-area" id="bulkPhotoUploadArea" onclick="document.getElementById('bulkPhotoInput').click()">
             <span id="bulkPhotoLabel">📷 Click to choose photos</span>
           </div>
           <ol class="bulk-photo-order" id="bulkPhotoOrderList" style="display:none;"></ol>
+          <p style="font-size:11px;color:var(--ink-soft);margin:-6px 0 10px;">Check the order above before uploading — most file pickers follow click order, but it can vary.</p>
           <input type="file" id="bulkPhotoInput" accept="image/*" multiple style="display:none" onchange="handleBulkPhotoSelect()" />
           <div class="editor-actions">
             <button class="btn btn-primary btn-sm" id="saveBulkPhotosBtn" onclick="saveBulkPhotos()">Upload photos</button>
@@ -1141,9 +1156,13 @@
   }
 
   // ── BULK ADD PHOTOS ───────────────────────────────────────────
-  // Matches a batch of photo files, in the order they were selected, to
-  // the notes that don't have a photo yet (earliest order_index first) —
-  // the natural follow-up to Bulk add, which creates text-only notes.
+  // Two modes, picked via radio buttons in the editor:
+  //  - "attach": matches photos, in the order they were selected, to the
+  //    notes that don't have one yet (earliest order_index first) — the
+  //    natural follow-up to Bulk add, which creates text-only notes.
+  //  - "create": makes a brand-new, photo-only note for every photo,
+  //    appended to the end — for when there's no existing text to match
+  //    them to at all.
 
   var BULK_PHOTO_FILES = [];
 
@@ -1155,6 +1174,7 @@
     document.getElementById('bulkPhotoLabel').textContent = '📷 Click to choose photos';
     document.getElementById('bulkPhotoOrderList').style.display = 'none';
     document.getElementById('bulkPhotoOrderList').innerHTML = '';
+    document.querySelector('input[name="bulkPhotoMode"][value="attach"]').checked = true;
     document.getElementById('bulkPhotoEditor').style.display = 'block';
   }
   function cancelBulkPhotoAdd() {
@@ -1190,31 +1210,55 @@
   async function saveBulkPhotos() {
     if (!BULK_PHOTO_FILES.length) { showToast('Choose at least one photo first'); return; }
 
-    var targets = NOTES.filter(function(n) { return !n.photo_url; })
-                        .sort(function(a, b) { return a.order_index - b.order_index; });
-
-    if (!targets.length) { showToast('Every note already has a photo — add more notes first'); return; }
-
-    var pairs = BULK_PHOTO_FILES.slice(0, targets.length).map(function(file, i) {
-      return { file: file, note: targets[i] };
-    });
-    var leftover = BULK_PHOTO_FILES.length - pairs.length;
+    var modeInput = document.querySelector('input[name="bulkPhotoMode"]:checked');
+    var mode = modeInput ? modeInput.value : 'attach';
 
     var btn = document.getElementById('saveBulkPhotosBtn');
     var originalLabel = btn.textContent;
     btn.disabled = true;
 
-    var uploaded = 0, failed = 0;
+    var uploaded = 0, failed = 0, leftover = 0;
     try {
-      for (var i = 0; i < pairs.length; i++) {
-        btn.textContent = 'Uploading ' + (i + 1) + ' of ' + pairs.length + '…';
-        var photoUrl = await uploadPhoto(pairs[i].file, CURRENT_GIFT.id);
-        if (!photoUrl) { failed++; continue; }
-        var { error } = await sb.from('notes').update({
-          photo_url: photoUrl, photo_position: '50% 50%',
-        }).eq('id', pairs[i].note.id);
-        if (error) { failed++; continue; }
-        uploaded++;
+      if (mode === 'attach') {
+        var targets = NOTES.filter(function(n) { return !n.photo_url; })
+                            .sort(function(a, b) { return a.order_index - b.order_index; });
+
+        if (!targets.length) {
+          showToast('Every note already has a photo — try "Create a new note for each photo" instead');
+          return;
+        }
+
+        var pairs = BULK_PHOTO_FILES.slice(0, targets.length).map(function(file, i) {
+          return { file: file, note: targets[i] };
+        });
+        leftover = BULK_PHOTO_FILES.length - pairs.length;
+
+        for (var i = 0; i < pairs.length; i++) {
+          btn.textContent = 'Uploading ' + (i + 1) + ' of ' + pairs.length + '…';
+          var photoUrl = await uploadPhoto(pairs[i].file, CURRENT_GIFT.id);
+          if (!photoUrl) { failed++; continue; }
+          var { error } = await sb.from('notes').update({
+            photo_url: photoUrl, photo_position: '50% 50%',
+          }).eq('id', pairs[i].note.id);
+          if (error) { failed++; continue; }
+          uploaded++;
+        }
+      } else {
+        // "create" mode — every photo becomes its own new, text-less note,
+        // appended after whatever's already in the list.
+        var nextIndex = NOTES.length;
+        for (var j = 0; j < BULK_PHOTO_FILES.length; j++) {
+          btn.textContent = 'Uploading ' + (j + 1) + ' of ' + BULK_PHOTO_FILES.length + '…';
+          var url = await uploadPhoto(BULK_PHOTO_FILES[j], CURRENT_GIFT.id);
+          if (!url) { failed++; continue; }
+          var { error: insertErr } = await sb.from('notes').insert({
+            gift_id: CURRENT_GIFT.id, order_index: nextIndex, text: '',
+            photo_url: url, photo_position: '50% 50%',
+          });
+          if (insertErr) { failed++; continue; }
+          nextIndex++;
+          uploaded++;
+        }
       }
 
       cancelBulkPhotoAdd();
@@ -1222,7 +1266,7 @@
       NOTES = notes || [];
       renderNotes();
 
-      var msg = uploaded + ' photo' + (uploaded === 1 ? '' : 's') + ' added ✓';
+      var msg = uploaded + ' photo' + (uploaded === 1 ? '' : 's') + (mode === 'create' ? ' added as new notes ✓' : ' added ✓');
       if (leftover > 0) msg += ' · ' + leftover + ' left over (not enough notes without a photo)';
       if (failed > 0)   msg += ' · ' + failed + ' failed';
       showToast(msg);
