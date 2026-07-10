@@ -223,6 +223,11 @@
     .photo-reposition-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
     .reposition-hint { font-size: 12px; color: var(--ink-soft); }
     .editor-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .recipient-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+    @media (max-width: 480px) {
+      .recipient-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+      .recipient-actions .btn { width: 100%; }
+    }
 
     /* ── DANGER ZONE ── */
     /* Deliberately low-key — a plain text link, not a big red box, so it
@@ -463,9 +468,11 @@
           Setting this yourself will enable email delivery for this gift. Your recipient can still add push or SMS themselves via their gift link.
         </p>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="saveRecipientEmail()">Save email</button>
-      <button class="btn btn-secondary btn-sm" onclick="sendPreviewToMe()">Send test to me</button>
-      <button class="btn btn-secondary btn-sm" onclick="resendLatestNote()">Resend latest note</button>
+      <div class="recipient-actions">
+        <button class="btn btn-secondary btn-sm" onclick="saveRecipientEmail()">Save email</button>
+        <button class="btn btn-secondary btn-sm" onclick="sendPreviewToMe()">Send test to me</button>
+        <button class="btn btn-secondary btn-sm" onclick="resendLatestNote()">Resend latest note</button>
+      </div>
       <p style="font-size:12px;color:var(--ink-soft);margin-top:8px;">
         "Send test to me" emails today's note to your own inbox so you can check it before your recipient sees it — it never goes to them. "Resend latest note" sends the real thing to your recipient right now, through their actual channels — handy if they missed it.
       </p>
