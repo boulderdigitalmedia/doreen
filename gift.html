@@ -15,6 +15,10 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
+      /* Recipient-controlled reading size (Settings → Text size). Applied
+         via calc() on the note text + related labels so it works without
+         needing browser-level zoom. */
+      --text-scale: 1;
       --bg:        #f5f2ec;
       --surface:   #ffffff;
       --sage:      #7a9e7e;
@@ -317,6 +321,30 @@
     .ob-time-row .ob-input { width: auto; flex: 1; }
     .ob-time-row select.ob-input { min-width: 0; }
 
+    /* TEXT SIZE — reading-accessibility control, affects the note text
+       (and related labels) throughout the gift page via --text-scale. */
+    .ob-textsize-section { margin-bottom: 28px; }
+    .ob-textsize-row { display: flex; gap: 8px; }
+
+    .ob-textsize-btn {
+      flex: 1;
+      padding: 10px 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--ink-mid);
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .ob-textsize-btn.active {
+      border-color: var(--sage);
+      background: var(--sage-pale);
+      color: var(--sage);
+      font-weight: 500;
+    }
+
     .ob-btn {
       width: 100%;
       margin-top: 24px;
@@ -455,7 +483,7 @@
     }
 
     .day-badge {
-      font-size: 13px;
+      font-size: calc(13px * var(--text-scale));
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--ink-soft);
@@ -468,7 +496,7 @@
       display: none;
       background: var(--sage);
       color: #fff;
-      font-size: 12px;
+      font-size: calc(12px * var(--text-scale));
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -561,7 +589,7 @@
 
     .card-quote {
       font-family: 'Cormorant Garamond', serif;
-      font-size: 20px;
+      font-size: calc(20px * var(--text-scale));
       font-weight: 300;
       font-style: italic;
       line-height: 1.5;
@@ -591,7 +619,7 @@
 
     .lock-date {
       font-family: 'Cormorant Garamond', serif;
-      font-size: 19px;
+      font-size: calc(19px * var(--text-scale));
       font-weight: 300;
       color: var(--ink-mid);
     }
@@ -856,7 +884,7 @@
     }
 
     .fav-item-quote {
-      font-size: 13px; color: var(--ink);
+      font-size: calc(13px * var(--text-scale)); color: var(--ink);
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -931,17 +959,17 @@
     }
 
     .fav-grid-overlay-day {
-      font-size: 9px;
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: rgba(255,255,255,0.7);
-      margin-bottom: 4px;
+      margin-bottom: 5px;
     }
 
     .fav-grid-overlay-quote {
       font-family: 'Cormorant Garamond', serif;
       font-style: italic;
-      font-size: 12px;
+      font-size: calc(15px * var(--text-scale));
       line-height: 1.35;
       color: #fff;
       display: -webkit-box;
@@ -989,7 +1017,7 @@
       font-family: 'Cormorant Garamond', serif;
       font-style: italic;
       font-weight: 300;
-      font-size: 18px;
+      font-size: calc(18px * var(--text-scale));
       line-height: 1.5;
       color: #fff;
       text-align: center;
@@ -1040,7 +1068,7 @@
       .lightbox-nav { width: 38px; height: 38px; font-size: 19px; }
       .lightbox-prev { left: 8px; }
       .lightbox-next { right: 8px; }
-      .lightbox-caption { font-size: 16px; padding: 0 8px; }
+      .lightbox-caption { font-size: calc(16px * var(--text-scale)); padding: 0 8px; }
 
       /* Tighter fan spread for the gift-page carousel peek cards on small
          screens, so they stay closer to the front card instead of running
@@ -1180,6 +1208,15 @@
     <div class="ob-heart">💚</div>
     <h1 class="ob-title" id="obTitle">You have a gift</h1>
     <p class="ob-sub" id="obSub">How would you like to be notified<br>when a new note is ready for you?</p>
+
+    <div class="ob-textsize-section">
+      <div class="ob-section-label">Text size</div>
+      <div class="ob-textsize-row">
+        <button type="button" class="ob-textsize-btn" data-scale="1" style="font-size:14px">Aa</button>
+        <button type="button" class="ob-textsize-btn" data-scale="1.15" style="font-size:17px">Aa</button>
+        <button type="button" class="ob-textsize-btn" data-scale="1.35" style="font-size:20px">Aa</button>
+      </div>
+    </div>
 
     <div class="ob-section-label">Choose your notifications (pick any)</div>
 
@@ -1416,6 +1453,33 @@
   // used for the lock screen itself) so the recipient's own "change
   // password" option in Settings knows whether to show at all.
   var giftPasswordEnabled = false;
+
+  // ── TEXT SIZE (ACCESSIBILITY) ──────────────────────────────────
+  // Recipient-controlled reading size — remembered per device (not tied to
+  // this particular gift, same pattern as the favourites view toggle) and
+  // applied via a CSS custom property so it works on the lock screen and
+  // onboarding too, not just the note card itself. Applied immediately
+  // below, before anything else renders.
+  var TEXT_SCALE_STEPS = [1, 1.15, 1.35];
+  var textScale = TEXT_SCALE_STEPS[0];
+  try {
+    var savedScale = parseFloat(localStorage.getItem('gift-text-scale'));
+    if (TEXT_SCALE_STEPS.indexOf(savedScale) !== -1) textScale = savedScale;
+  } catch {}
+
+  function applyTextScale(scale) {
+    textScale = scale;
+    document.documentElement.style.setProperty('--text-scale', scale);
+    document.querySelectorAll('.ob-textsize-btn').forEach(function(btn) {
+      btn.classList.toggle('active', parseFloat(btn.dataset.scale) === scale);
+    });
+    try { localStorage.setItem('gift-text-scale', scale); } catch {}
+  }
+  applyTextScale(textScale);
+
+  document.querySelectorAll('.ob-textsize-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyTextScale(parseFloat(btn.dataset.scale)); });
+  });
 
   // ── BOOT ────────────────────────────────────────────────────
   //
@@ -2043,6 +2107,20 @@
       else if (e.key === 'ArrowRight') stepLightbox(1);
     });
 
+    // Swipe left/right through the gallery, same gesture as the main card.
+    // Scoped to the lightbox itself (rather than document) so it only
+    // fires while it's actually open, and never double-fires alongside
+    // the card-stack's own swipe handler below.
+    var lbTx = 0;
+    photoLightbox.addEventListener('touchstart', function(e) { lbTx = e.touches[0].clientX; }, { passive:true });
+    photoLightbox.addEventListener('touchend', function(e) {
+      var dx = e.changedTouches[0].clientX - lbTx;
+      if (Math.abs(dx) > 44) {
+        if (dx < 0) stepLightbox(1);
+        else        stepLightbox(-1);
+      }
+    }, { passive:true });
+
     // ── FAVOURITES ─────────────────────────────────────────────
 
     var FAVS_KEY = 'gift-favs-' + slug;
@@ -2411,9 +2489,25 @@
       });
     });
 
+    // Swiping the card advances/goes back a note, same gesture recipients
+    // already use in the photo lightbox. Skipped while another overlay
+    // (lightbox, favourites drawer, push prompt, settings) is open, both
+    // because a swipe there means something else and so this doesn't
+    // double-fire alongside e.g. the lightbox's own swipe handler.
+    function cardSwipeBlocked() {
+      return photoLightbox.classList.contains('open') ||
+             favDrawer.classList.contains('open') ||
+             document.getElementById('pushOverlay').classList.contains('open') ||
+             document.getElementById('onboarding').style.display === 'block';
+    }
+
     var tx = 0;
-    document.addEventListener('touchstart', function(e) { tx = e.touches[0].clientX; }, { passive:true });
+    document.addEventListener('touchstart', function(e) {
+      if (cardSwipeBlocked()) return;
+      tx = e.touches[0].clientX;
+    }, { passive:true });
     document.addEventListener('touchend',   function(e) {
+      if (cardSwipeBlocked()) return;
       var dx = e.changedTouches[0].clientX - tx;
       if (Math.abs(dx) > 44) {
         if (dx < 0) goTo(currentIndex + 1);
