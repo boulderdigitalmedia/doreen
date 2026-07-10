@@ -51,7 +51,7 @@ exports.handler = async (event) => {
           stripe_subscription_id: sub.id,
           stripe_status:          sub.status,
           plan:                   getPlan(sub),
-          current_period_end:     new Date(sub.current_period_end * 1000).toISOString(),
+          current_period_end:     periodEndISO(sub),
         });
         break;
       }
@@ -62,7 +62,7 @@ exports.handler = async (event) => {
           stripe_subscription_id: sub.id,
           stripe_status:          sub.status,
           plan:                   getPlan(sub),
-          current_period_end:     new Date(sub.current_period_end * 1000).toISOString(),
+          current_period_end:     periodEndISO(sub),
         });
         break;
       }
@@ -72,7 +72,7 @@ exports.handler = async (event) => {
         await upsertProfile(sub.customer, {
           stripe_subscription_id: sub.id,
           stripe_status:          'canceled',
-          current_period_end:     new Date(sub.current_period_end * 1000).toISOString(),
+          current_period_end:     periodEndISO(sub),
         });
         break;
       }
@@ -131,4 +131,21 @@ function getPlan(sub) {
   if (interval === 'year') return 'annual';
   if (interval === 'month') return 'monthly';
   return null;
+}
+
+// Newer Stripe API versions moved current_period_end off the Subscription
+// object and onto each subscription item instead (since a subscription can
+// now have items on different billing cycles) — sub.current_period_end can
+// be undefined there. That turned `new Date(undefined * 1000).toISOString()`
+// into a thrown RangeError ("Invalid time value"), which is what was making
+// every customer.subscription.updated delivery fail with a 500: the crash
+// happened before upsertProfile ever got called, so nothing after it in the
+// handler ran either. This checks both shapes and never throws — falls back
+// to null if a period end genuinely isn't available anywhere.
+function periodEndISO(sub) {
+  let raw = sub.current_period_end;
+  if (raw == null) raw = sub.items?.data?.[0]?.current_period_end;
+  if (raw == null) return null;
+  const d = new Date(raw * 1000);
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
