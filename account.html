@@ -1407,12 +1407,35 @@
     var { error } = await sb.from('notes').delete().eq('id', noteId);
     if (error) { showToast('Error: ' + error.message); return; }
     NOTES = NOTES.filter(function(n) { return n.id !== noteId; });
-    var updates = NOTES.map(function(n, i) { return sb.from('notes').update({ order_index: i }).eq('id', n.id); });
-    await Promise.all(updates);
+
+    // Renumber everything after the gap back to a contiguous 0..N-1, so
+    // "today's note" and the on-page numbering never drift apart. Only
+    // touch rows that actually need to move — and check every result,
+    // because Promise.all doesn't reject on a Supabase {error} response,
+    // it only rejects on a thrown/network error. Silently swallowing a
+    // partial-failure here is exactly what leaves a gap in order_index
+    // with no indication anything went wrong.
+    var toFix = NOTES.filter(function(n, i) { return n.order_index !== i; });
+    var renumberFailed = 0;
+    if (toFix.length) {
+      var results = await Promise.all(
+        toFix.map(function(n) {
+          var newIndex = NOTES.indexOf(n);
+          return sb.from('notes').update({ order_index: newIndex }).eq('id', n.id);
+        })
+      );
+      renumberFailed = results.filter(function(r) { return r.error; }).length;
+    }
+
     const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
     NOTES = notes || [];
     renderNotes();
-    showToast('Note deleted');
+
+    if (renumberFailed) {
+      showToast('Note deleted, but renumbering ' + renumberFailed + ' note' + (renumberFailed === 1 ? '' : 's') + ' failed — numbers may be off until you retry');
+    } else {
+      showToast('Note deleted');
+    }
   }
 
   // ── PHOTO UPLOAD ──────────────────────────────────────────────
