@@ -6,6 +6,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#f5f2ec" />
+  <!-- Every gift page (any /:slug URL) renders from this one template, so
+       this single tag keeps all of them out of search results — personal
+       notes and photos shouldn't be crawlable or show up in search,
+       regardless of whether a password gate is also enabled. -->
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
   <title>From Your Favorite, With Love</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
