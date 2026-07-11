@@ -30,6 +30,7 @@
     .btn:disabled { opacity: 0.5; cursor: default; }
     .error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
     .success { color: var(--sage); font-size: 13px; margin-top: 10px; display: none; text-align: center; }
+    .site-footer { text-align: center; font-size: 12px; color: var(--ink-soft); margin-top: 28px; }
   </style>
 </head>
 <body>
@@ -57,6 +58,8 @@
       <button class="btn" id="signupBtn" onclick="doSignup()">Create account</button>
     </div>
   </div>
+
+  <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
 
 <script>
   const SUPABASE_URL      = 'https://nbakhtbcjxtqclgdjrqy.supabase.co';
@@ -121,6 +124,8 @@
       else doSignup();
     }
   });
+
+  document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });
 </script>
 </body>
 </html>
