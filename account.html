@@ -361,6 +361,7 @@
       </button>
       <p style="font-size:12px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Cancel any time.</p>
     </div>
+    <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
   </div>
 
   <!-- VIEW: GIFT LIST -->
@@ -379,6 +380,7 @@
       </div>
     </div>
     <div class="gift-grid" id="giftGrid"></div>
+    <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
   </div>
 
   <!-- VIEW: GIFT DETAIL -->
@@ -551,14 +553,14 @@
       </div>
     </div>
 
+    <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
+
     <div class="danger-zone-discreet">
       <button class="link-danger" onclick="deleteGift()">Delete this gift</button>
       <div class="link-danger-hint">Permanently removes the gift, all notes, and the recipient's access. Cannot be undone.</div>
     </div>
   </div>
 </div>
-
-<footer class="site-footer">© <span id="footerYear"></span> A Note For You. All rights reserved.</footer>
 
 <!-- CREATE GIFT MODAL -->
 <div class="modal-overlay" id="createModal">
@@ -653,7 +655,7 @@
   const SITE_URL          = window.location.origin; // automatically uses current domain
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  document.getElementById('footerYear').textContent = new Date().getFullYear();
+  document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });
 
   var USER          = null;
   var SESSION       = null;
