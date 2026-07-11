@@ -535,13 +535,15 @@
 
 <!-- FOOTER -->
 <footer>
-  <span>© 2026 A Note For You</span>
+  <span>© <span class="footerYear">2026</span> A Note For You. All rights reserved.</span>
   <a href="/login">Sign in</a>
   <a href="/signup">Get started</a>
   <a href="mailto:hello@anoteforyou.app">hello@anoteforyou.app</a>
 </footer>
 
 <script>
+  document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });
+
   var ROT_WORDS = ['love', 'admire', 'appreciate', 'respect', 'miss', 'cherish'];
   var rotWordEl = document.getElementById('rotWord');
   var rotIndex  = 0;
