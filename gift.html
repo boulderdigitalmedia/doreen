@@ -1262,6 +1262,84 @@
       padding: 10px 6px 0;
     }
 
+    /* PLATFORM SHARE PICKER */
+    .platform-share-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(44,58,46,0.45);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .platform-share-overlay.open { display: flex; }
+    .platform-share-modal {
+      background: var(--surface);
+      border-radius: 20px;
+      max-width: 340px;
+      width: 100%;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .platform-share-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 300;
+      color: var(--ink);
+      margin-bottom: 18px;
+    }
+    .platform-share-grid { display: flex; justify-content: center; gap: 18px; margin-bottom: 18px; }
+    .platform-share-option {
+      background: none;
+      border: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 4px;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .platform-share-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s;
+    }
+    .platform-share-icon svg { width: 26px; height: 26px; }
+    .platform-share-option:active .platform-share-icon { transform: scale(0.92); }
+    .platform-ig { background: linear-gradient(135deg,#f9ce34,#ee2a7b,#6228d7); }
+    .platform-fb { background: #1877f2; }
+    .platform-tt { background: #000; }
+    .platform-share-label { font-size: 12px; color: var(--ink-soft); }
+    .platform-share-more {
+      display: block;
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      color: var(--ink);
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .platform-share-close {
+      background: none;
+      border: none;
+      color: var(--ink-soft);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 6px;
+    }
+
     /* ANIMATIONS */
     @keyframes fadeDown {
       from { opacity: 0; transform: translateY(-8px); }
@@ -1577,6 +1655,40 @@
   </div>
 </div>
 
+<!-- PLATFORM SHARE PICKER — shown first when the share icon is tapped.
+     Instagram/Facebook get a real attempt at opening Stories with the
+     image pre-loaded (see tryOpenStoriesApp); TikTok and "more options"
+     go straight to the same share-sheet/fallback flow as before. -->
+<div class="platform-share-overlay" id="platformShareOverlay">
+  <div class="platform-share-modal">
+    <div class="platform-share-title">Share to</div>
+    <div class="platform-share-grid">
+      <button class="platform-share-option" id="shareToInstagramBtn">
+        <span class="platform-share-icon platform-ig">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1.1" fill="#fff" stroke="none"/>
+          </svg>
+        </span>
+        <span class="platform-share-label">Instagram</span>
+      </button>
+      <button class="platform-share-option" id="shareToFacebookBtn">
+        <span class="platform-share-icon platform-fb">
+          <svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13.5 21v-7.2h2.4l.4-2.8h-2.8V9.1c0-.8.2-1.3 1.4-1.3h1.5V5.3c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2h-2.5v2.8h2.5V21h3z"/></svg>
+        </span>
+        <span class="platform-share-label">Facebook</span>
+      </button>
+      <button class="platform-share-option" id="shareToTiktokBtn">
+        <span class="platform-share-icon platform-tt">
+          <svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M16.5 3c.4 2 1.9 3.6 4 3.9v2.9c-1.5 0-2.9-.5-4-1.3v6.6c0 3.3-2.7 6-6 6s-6-2.7-6-6 2.7-6 6-6c.3 0 .7 0 1 .1v3c-.3-.1-.6-.2-1-.2-1.7 0-3 1.3-3 3s1.3 3 3 3 3-1.3 3-3V3h3z"/></svg>
+        </span>
+        <span class="platform-share-label">TikTok</span>
+      </button>
+    </div>
+    <button class="platform-share-more" id="shareMoreBtn">More sharing options…</button>
+    <button class="platform-share-close" id="platformShareCloseBtn">Cancel</button>
+  </div>
+</div>
+
 <script>
   // ════════════════════════════════════════════════
   // CONFIG — fill these in from your Supabase project
@@ -1585,6 +1697,12 @@
   const SUPABASE_URL      = 'https://nbakhtbcjxtqclgdjrqy.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iYWtodGJjanh0cWNsZ2RqcnF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTM3MjMsImV4cCI6MjA5NzU2OTcyM30.S3eUIJetWWMGZCqZ2X4nMsZeZcr5zbdbfc7LWs55yHw';
   const VAPID_PUBLIC_KEY  = 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg';
+  // Meta Developer App ID — required for the "share to Instagram/Facebook
+  // Stories with the image pre-loaded" attempt. Get one free at
+  // developers.facebook.com > My Apps > Create App (any app type works;
+  // no review needed just to use this ID as source_application). Leave
+  // blank and those two buttons just fall back to the normal share flow.
+  const META_APP_ID = '';
   // ════════════════════════════════════════════════
 
   const sb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1599,6 +1717,14 @@
   var GIFT      = null;
   var NOTES     = [];
   var RECIPIENT = null;
+
+  // There's no platform-level way to force Instagram/Facebook to
+  // auto-attach an @mention tag to someone else's post — that's a
+  // deliberate restriction on their end, not something a website can work
+  // around. What we *can* do reliably is make sure our handle is already
+  // sitting in the caption text before they post, so it just needs pasting
+  // rather than typing.
+  var SHARE_HANDLE = '@anoteforyouapp';
 
   // Whether the buyer currently has a password gate turned on for this
   // gift — resolved once at boot (via the same verify-gift-password check
@@ -2167,7 +2293,7 @@
 
   async function shareNote(note) {
     if (!note) return;
-    var text = note.text || '';
+    var text = (note.text || '') + (SHARE_HANDLE ? '\n\n' + SHARE_HANDLE : '');
     var blob = null;
 
     try {
@@ -2203,6 +2329,77 @@
     }
 
     openShareFallback(blob, text);
+  }
+
+  // ── PLATFORM-SPECIFIC SHARE (Instagram / Facebook Stories, TikTok) ──
+  //
+  // Opening Instagram/Facebook's Stories composer with an image already
+  // loaded is a real, documented mechanism (instagram-stories://share and
+  // facebook-stories://share, via source_application=<Meta App ID>) — but
+  // it's designed for native apps that write to the OS pasteboard using
+  // Instagram/Facebook's own proprietary data format. A website can only
+  // write standard image data to the clipboard, so this sometimes gets
+  // picked up as the Stories background and sometimes doesn't — it
+  // depends on OS/app version. Either way it's worth attempting: best case
+  // the recipient lands in Stories with the image ready to post, worst
+  // case it's exactly as good as the fallback already in place.
+  //
+  // TikTok has no equivalent unauthenticated web mechanism at all — its
+  // real "open with content ready" API requires a reviewed developer app
+  // — so its button just runs the same share-sheet/fallback flow as
+  // everything else, with TikTok as one of the apps a recipient can pick.
+
+  async function tryOpenStoriesApp(scheme, note) {
+    if (!META_APP_ID) return false;
+
+    var blob = null;
+    try { blob = await buildShareImage(note); }
+    catch (e) {
+      if (note.photo_url) { try { blob = await (await fetch(note.photo_url)).blob(); } catch (e2) {} }
+    }
+
+    if (blob && navigator.clipboard && window.ClipboardItem) {
+      try {
+        var item = {};
+        item[blob.type || 'image/png'] = blob;
+        await navigator.clipboard.write([new ClipboardItem(item)]);
+      } catch (e) { /* clipboard write blocked — still worth trying to open the app */ }
+    }
+
+    var leftPage = false;
+    function onHide() { leftPage = true; }
+    document.addEventListener('visibilitychange', onHide, { once: true });
+
+    window.location.href = scheme + '://share?source_application=' + META_APP_ID;
+
+    await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+    document.removeEventListener('visibilitychange', onHide);
+    return leftPage;
+  }
+
+  async function shareToInstagramStories(note) {
+    var opened = await tryOpenStoriesApp('instagram-stories', note);
+    if (!opened) await shareNote(note); // not installed, no App ID set, or on desktop
+  }
+
+  async function shareToFacebookStories(note) {
+    var opened = await tryOpenStoriesApp('facebook-stories', note);
+    if (!opened) await shareNote(note);
+  }
+
+  async function shareToTikTok(note) {
+    await shareNote(note);
+  }
+
+  var PLATFORM_SHARE_NOTE = null;
+
+  function openPlatformSharePicker(note) {
+    PLATFORM_SHARE_NOTE = note;
+    document.getElementById('platformShareOverlay').classList.add('open');
+  }
+  function closePlatformSharePicker() {
+    document.getElementById('platformShareOverlay').classList.remove('open');
+    PLATFORM_SHARE_NOTE = null;
   }
 
   // ── PUSH REGISTRATION ────────────────────────────────────────
@@ -2470,10 +2667,7 @@
     photoLightbox.addEventListener('click', closeLightbox);
     lightboxShareBtn.addEventListener('click', function(e) {
       e.stopPropagation();
-      lightboxShareBtn.classList.add('sharing');
-      Promise.resolve(shareNote(notes[lightboxIndex])).finally(function() {
-        lightboxShareBtn.classList.remove('sharing');
-      });
+      openPlatformSharePicker(notes[lightboxIndex]);
     });
     lightboxCloseBtn.addEventListener('click', function(e) { e.stopPropagation(); closeLightbox(); });
     document.querySelector('.lightbox-img-wrap').addEventListener('click', function(e) { e.stopPropagation(); });
@@ -2551,10 +2745,32 @@
     });
 
     shareBtn.addEventListener('click', function() {
-      shareBtn.classList.add('sharing');
-      Promise.resolve(shareNote(notes[currentIndex])).finally(function() {
-        shareBtn.classList.remove('sharing');
-      });
+      openPlatformSharePicker(notes[currentIndex]);
+    });
+
+    var platformShareOverlay  = document.getElementById('platformShareOverlay');
+    var shareToInstagramBtn   = document.getElementById('shareToInstagramBtn');
+    var shareToFacebookBtn    = document.getElementById('shareToFacebookBtn');
+    var shareToTiktokBtn      = document.getElementById('shareToTiktokBtn');
+    var shareMoreBtn          = document.getElementById('shareMoreBtn');
+    var platformShareCloseBtn = document.getElementById('platformShareCloseBtn');
+
+    function runPlatformShare(fn) {
+      return function() {
+        var note = PLATFORM_SHARE_NOTE;
+        closePlatformSharePicker();
+        if (!note) return;
+        Promise.resolve(fn(note));
+      };
+    }
+
+    shareToInstagramBtn.addEventListener('click', runPlatformShare(shareToInstagramStories));
+    shareToFacebookBtn.addEventListener('click', runPlatformShare(shareToFacebookStories));
+    shareToTiktokBtn.addEventListener('click', runPlatformShare(shareToTikTok));
+    shareMoreBtn.addEventListener('click', runPlatformShare(shareNote));
+    platformShareCloseBtn.addEventListener('click', closePlatformSharePicker);
+    platformShareOverlay.addEventListener('click', function(e) {
+      if (e.target === platformShareOverlay) closePlatformSharePicker();
     });
 
     function openDrawer()  { renderFavDrawer(); favOverlay.classList.add('open'); favDrawer.classList.add('open'); }
@@ -2891,6 +3107,7 @@
              favDrawer.classList.contains('open') ||
              document.getElementById('pushOverlay').classList.contains('open') ||
              document.getElementById('shareOverlay').classList.contains('open') ||
+             document.getElementById('platformShareOverlay').classList.contains('open') ||
              document.getElementById('onboarding').style.display === 'block';
     }
 
