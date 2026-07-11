@@ -1454,7 +1454,64 @@
     };
     reader.readAsDataURL(file);
   }
+  // Phone photos routinely come in at 3-10MB and 3000-4000px wide — miles
+  // more than a card that never displays larger than the screen it's on.
+  // Downscaling + re-encoding client-side, before upload, is what actually
+  // fixes load speed everywhere the photo appears (card, grid, favourites,
+  // lightbox, shared image) — a CDN or lazy-loading can only mask a big
+  // file, not shrink it. Skips anything already small or already a
+  // non-photo format (gif, svg) where re-encoding would only lose quality
+  // or animation for no size benefit; falls back to the original file on
+  // any decode error (e.g. a format the browser can't open) rather than
+  // blocking the upload.
+  async function compressImage(file, maxDim, quality) {
+    maxDim  = maxDim  || 1600;
+    quality = quality || 0.82;
+
+    if (!file.type || !/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) return file;
+    if (file.size < 300 * 1024) return file; // already small — not worth the round-trip
+
+    var objectUrl = null;
+    try {
+      var bitmap;
+      if (window.createImageBitmap) {
+        try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+        catch (e) { bitmap = await createImageBitmap(file); }
+      } else {
+        objectUrl = URL.createObjectURL(file);
+        bitmap = await new Promise(function(resolve, reject) {
+          var img = new Image();
+          img.onload  = function() { resolve(img); };
+          img.onerror = reject;
+          img.src = objectUrl;
+        });
+      }
+
+      var w = bitmap.width, h = bitmap.height;
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var outW = Math.max(1, Math.round(w * scale));
+      var outH = Math.max(1, Math.round(h * scale));
+
+      var canvas = document.createElement('canvas');
+      canvas.width = outW; canvas.height = outH;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, outW, outH);
+
+      var blob = await new Promise(function(resolve) {
+        canvas.toBlob(function(b) { resolve(b); }, 'image/jpeg', quality);
+      });
+
+      if (!blob || blob.size >= file.size) return file; // didn't actually help — keep the original
+      var newName = file.name.replace(/\.\w+$/, '') + '.jpg';
+      return new File([blob], newName, { type: 'image/jpeg' });
+    } catch (e) {
+      return file; // any failure — just upload what we were given
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   async function uploadPhoto(file, giftId) {
+    file = await compressImage(file);
     var ext      = file.name.split('.').pop();
     var filename = USER.id + '/' + giftId + '/' + Date.now() + '.' + ext;
     var { error } = await sb.storage.from('photos').upload(filename, file, { upsert: true });
