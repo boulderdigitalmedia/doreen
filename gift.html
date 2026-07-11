@@ -1340,6 +1340,78 @@
       padding: 6px;
     }
 
+    /* SHARE STEPS */
+    .share-steps-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(44,58,46,0.45);
+      z-index: 210;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .share-steps-overlay.open { display: flex; }
+    .share-steps-modal {
+      background: var(--surface);
+      border-radius: 20px;
+      max-width: 360px;
+      width: 100%;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .share-steps-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .share-steps-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .share-steps-icon svg { width: 18px; height: 18px; }
+    .share-steps-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 300;
+      color: var(--ink);
+    }
+    .share-step { display: flex; gap: 12px; margin-bottom: 18px; }
+    .share-step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--sage-pale);
+      color: var(--sage);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .share-step-body { flex: 1; min-width: 0; }
+    .share-step-label {
+      font-size: 13px;
+      color: var(--ink);
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+    .share-step-btn {
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .share-step-btn-primary { background: var(--sage); color: #fff; border-color: var(--sage); }
+
     /* ANIMATIONS */
     @keyframes fadeDown {
       from { opacity: 0; transform: translateY(-8px); }
@@ -1656,9 +1728,8 @@
 </div>
 
 <!-- PLATFORM SHARE PICKER — shown first when the share icon is tapped.
-     Instagram/Facebook get a real attempt at opening Stories with the
-     image pre-loaded (see tryOpenStoriesApp); TikTok and "more options"
-     go straight to the same share-sheet/fallback flow as before. -->
+     Picking a platform opens the guided share-steps panel below with
+     instructions tailored to that app. -->
 <div class="platform-share-overlay" id="platformShareOverlay">
   <div class="platform-share-modal">
     <div class="platform-share-title">Share to</div>
@@ -1689,6 +1760,46 @@
   </div>
 </div>
 
+<!-- SHARE STEPS — guided walkthrough shown after choosing a platform.
+     Posting directly into another app's composer from a website isn't
+     something any of these platforms allow, so instead: copy the caption,
+     download the image, then a couple of plain-English steps for what to
+     do inside that specific app. -->
+<div class="share-steps-overlay" id="shareStepsOverlay">
+  <div class="share-steps-modal">
+    <div class="share-steps-header">
+      <span class="share-steps-icon" id="shareStepsIcon"></span>
+      <div class="share-steps-title" id="shareStepsTitle">Share to Instagram</div>
+    </div>
+
+    <div class="share-step">
+      <div class="share-step-num">1</div>
+      <div class="share-step-body">
+        <div class="share-step-label">Copy the caption</div>
+        <button class="share-step-btn" id="shareStepsCopyBtn">Copy caption</button>
+      </div>
+    </div>
+
+    <div class="share-step">
+      <div class="share-step-num">2</div>
+      <div class="share-step-body">
+        <div class="share-step-label">Download the image</div>
+        <button class="share-step-btn" id="shareStepsDownloadBtn">Download image</button>
+      </div>
+    </div>
+
+    <div class="share-step">
+      <div class="share-step-num">3</div>
+      <div class="share-step-body">
+        <div class="share-step-label" id="shareStepsInstructions">Open Instagram, start a new post or story, choose the photo you just downloaded, then paste your caption.</div>
+        <button class="share-step-btn share-step-btn-primary" id="shareStepsOpenBtn">Open Instagram</button>
+      </div>
+    </div>
+
+    <button class="share-modal-close" id="shareStepsCloseBtn">Done</button>
+  </div>
+</div>
+
 <script>
   // ════════════════════════════════════════════════
   // CONFIG — fill these in from your Supabase project
@@ -1697,12 +1808,6 @@
   const SUPABASE_URL      = 'https://nbakhtbcjxtqclgdjrqy.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iYWtodGJjanh0cWNsZ2RqcnF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTM3MjMsImV4cCI6MjA5NzU2OTcyM30.S3eUIJetWWMGZCqZ2X4nMsZeZcr5zbdbfc7LWs55yHw';
   const VAPID_PUBLIC_KEY  = 'BFJ82UKXOvphp1uCUkCck0U_vCkUZte1GLifyRHei241MNaD71dUrDpPDtz0B34l3Ou3Ln51xIUKTwlvJfWmZkg';
-  // Meta Developer App ID — required for the "share to Instagram/Facebook
-  // Stories with the image pre-loaded" attempt. Get one free at
-  // developers.facebook.com > My Apps > Create App (any app type works;
-  // no review needed just to use this ID as source_application). Leave
-  // blank and those two buttons just fall back to the normal share flow.
-  const META_APP_ID = '';
   // ════════════════════════════════════════════════
 
   const sb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -2331,64 +2436,73 @@
     openShareFallback(blob, text);
   }
 
-  // ── PLATFORM-SPECIFIC SHARE (Instagram / Facebook Stories, TikTok) ──
+  // ── PLATFORM-SPECIFIC SHARE (guided steps) ──────────────────────
   //
-  // Opening Instagram/Facebook's Stories composer with an image already
-  // loaded is a real, documented mechanism (instagram-stories://share and
-  // facebook-stories://share, via source_application=<Meta App ID>) — but
-  // it's designed for native apps that write to the OS pasteboard using
-  // Instagram/Facebook's own proprietary data format. A website can only
-  // write standard image data to the clipboard, so this sometimes gets
-  // picked up as the Stories background and sometimes doesn't — it
-  // depends on OS/app version. Either way it's worth attempting: best case
-  // the recipient lands in Stories with the image ready to post, worst
-  // case it's exactly as good as the fallback already in place.
-  //
-  // TikTok has no equivalent unauthenticated web mechanism at all — its
-  // real "open with content ready" API requires a reviewed developer app
-  // — so its button just runs the same share-sheet/fallback flow as
-  // everything else, with TikTok as one of the apps a recipient can pick.
+  // None of these platforms let a website hand off directly into their
+  // post composer with everything pre-filled — that's a hard restriction
+  // on their end, not something any implementation can route around. The
+  // honest, reliable version: copy the caption, download the image, then
+  // plain-English steps for what to do inside that specific app.
 
-  async function tryOpenStoriesApp(scheme, note) {
-    if (!META_APP_ID) return false;
+  var SHARE_STEPS_CONFIG = {
+    instagram: {
+      label: 'Instagram',
+      scheme: 'instagram://app',
+      iconClass: 'platform-ig',
+      iconHtml: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1.1" fill="#fff" stroke="none"/></svg>',
+      instructions: 'Open Instagram, tap the + to start a new post or story, choose the photo you just downloaded, then paste your caption.'
+    },
+    facebook: {
+      label: 'Facebook',
+      scheme: 'fb://',
+      iconClass: 'platform-fb',
+      iconHtml: '<svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13.5 21v-7.2h2.4l.4-2.8h-2.8V9.1c0-.8.2-1.3 1.4-1.3h1.5V5.3c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2h-2.5v2.8h2.5V21h3z"/></svg>',
+      instructions: 'Open Facebook, tap + to create a post or story, choose the photo you just downloaded, then paste your caption.'
+    },
+    tiktok: {
+      label: 'TikTok',
+      scheme: 'tiktok://',
+      iconClass: 'platform-tt',
+      iconHtml: '<svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M16.5 3c.4 2 1.9 3.6 4 3.9v2.9c-1.5 0-2.9-.5-4-1.3v6.6c0 3.3-2.7 6-6 6s-6-2.7-6-6 2.7-6 6-6c.3 0 .7 0 1 .1v3c-.3-.1-.6-.2-1-.2-1.7 0-3 1.3-3 3s1.3 3 3 3 3-1.3 3-3V3h3z"/></svg>',
+      instructions: 'Open TikTok, tap + to upload, choose the photo you just downloaded, then paste your caption as the description.'
+    }
+  };
 
-    var blob = null;
-    try { blob = await buildShareImage(note); }
+  var SHARE_STEPS_NOTE = null;
+  var SHARE_STEPS_BLOB = null;
+
+  async function openShareSteps(platformKey, note) {
+    var cfg = SHARE_STEPS_CONFIG[platformKey];
+    if (!cfg || !note) return;
+    SHARE_STEPS_NOTE = note;
+    SHARE_STEPS_BLOB = null;
+
+    document.getElementById('shareStepsTitle').textContent = 'Share to ' + cfg.label;
+    document.getElementById('shareStepsInstructions').textContent = cfg.instructions;
+    document.getElementById('shareStepsOpenBtn').textContent = 'Open ' + cfg.label;
+    document.getElementById('shareStepsCopyBtn').textContent = 'Copy caption';
+    document.getElementById('shareStepsDownloadBtn').textContent = 'Download image';
+    var iconEl = document.getElementById('shareStepsIcon');
+    iconEl.className = 'share-steps-icon ' + cfg.iconClass;
+    iconEl.innerHTML = cfg.iconHtml;
+
+    var overlay = document.getElementById('shareStepsOverlay');
+    overlay.dataset.scheme = cfg.scheme;
+    overlay.classList.add('open');
+
+    // Build the image in the background so it's ready the moment they tap
+    // "Download image" — the canvas render takes a beat and shouldn't make
+    // them wait after tapping.
+    try { SHARE_STEPS_BLOB = await buildShareImage(note); }
     catch (e) {
-      if (note.photo_url) { try { blob = await (await fetch(note.photo_url)).blob(); } catch (e2) {} }
+      if (note.photo_url) { try { SHARE_STEPS_BLOB = await (await fetch(note.photo_url)).blob(); } catch (e2) {} }
     }
-
-    if (blob && navigator.clipboard && window.ClipboardItem) {
-      try {
-        var item = {};
-        item[blob.type || 'image/png'] = blob;
-        await navigator.clipboard.write([new ClipboardItem(item)]);
-      } catch (e) { /* clipboard write blocked — still worth trying to open the app */ }
-    }
-
-    var leftPage = false;
-    function onHide() { leftPage = true; }
-    document.addEventListener('visibilitychange', onHide, { once: true });
-
-    window.location.href = scheme + '://share?source_application=' + META_APP_ID;
-
-    await new Promise(function(resolve) { setTimeout(resolve, 1500); });
-    document.removeEventListener('visibilitychange', onHide);
-    return leftPage;
   }
 
-  async function shareToInstagramStories(note) {
-    var opened = await tryOpenStoriesApp('instagram-stories', note);
-    if (!opened) await shareNote(note); // not installed, no App ID set, or on desktop
-  }
-
-  async function shareToFacebookStories(note) {
-    var opened = await tryOpenStoriesApp('facebook-stories', note);
-    if (!opened) await shareNote(note);
-  }
-
-  async function shareToTikTok(note) {
-    await shareNote(note);
+  function closeShareSteps() {
+    document.getElementById('shareStepsOverlay').classList.remove('open');
+    SHARE_STEPS_NOTE = null;
+    SHARE_STEPS_BLOB = null;
   }
 
   var PLATFORM_SHARE_NOTE = null;
@@ -2764,13 +2878,55 @@
       };
     }
 
-    shareToInstagramBtn.addEventListener('click', runPlatformShare(shareToInstagramStories));
-    shareToFacebookBtn.addEventListener('click', runPlatformShare(shareToFacebookStories));
-    shareToTiktokBtn.addEventListener('click', runPlatformShare(shareToTikTok));
+    shareToInstagramBtn.addEventListener('click', runPlatformShare(function(note) { return openShareSteps('instagram', note); }));
+    shareToFacebookBtn.addEventListener('click', runPlatformShare(function(note) { return openShareSteps('facebook', note); }));
+    shareToTiktokBtn.addEventListener('click', runPlatformShare(function(note) { return openShareSteps('tiktok', note); }));
     shareMoreBtn.addEventListener('click', runPlatformShare(shareNote));
     platformShareCloseBtn.addEventListener('click', closePlatformSharePicker);
     platformShareOverlay.addEventListener('click', function(e) {
       if (e.target === platformShareOverlay) closePlatformSharePicker();
+    });
+
+    var shareStepsOverlay      = document.getElementById('shareStepsOverlay');
+    var shareStepsCopyBtn      = document.getElementById('shareStepsCopyBtn');
+    var shareStepsDownloadBtn  = document.getElementById('shareStepsDownloadBtn');
+    var shareStepsOpenBtn      = document.getElementById('shareStepsOpenBtn');
+    var shareStepsCloseBtn     = document.getElementById('shareStepsCloseBtn');
+
+    shareStepsCopyBtn.addEventListener('click', function() {
+      var text = (SHARE_STEPS_NOTE && SHARE_STEPS_NOTE.text || '') + (SHARE_HANDLE ? '\n\n' + SHARE_HANDLE : '');
+      navigator.clipboard.writeText(text).then(function() {
+        shareStepsCopyBtn.textContent = 'Copied!';
+        setTimeout(function() { shareStepsCopyBtn.textContent = 'Copy caption'; }, 1500);
+      }).catch(function() {});
+    });
+
+    shareStepsDownloadBtn.addEventListener('click', async function() {
+      if (!SHARE_STEPS_BLOB && SHARE_STEPS_NOTE) {
+        shareStepsDownloadBtn.textContent = 'Preparing…';
+        try { SHARE_STEPS_BLOB = await buildShareImage(SHARE_STEPS_NOTE); } catch (e) {}
+      }
+      if (!SHARE_STEPS_BLOB) { shareStepsDownloadBtn.textContent = 'Download image'; return; }
+      var url = URL.createObjectURL(SHARE_STEPS_BLOB);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'a-note-for-you.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function() { URL.revokeObjectURL(url); }, 4000);
+      shareStepsDownloadBtn.textContent = 'Downloaded ✓';
+      setTimeout(function() { shareStepsDownloadBtn.textContent = 'Download image'; }, 1500);
+    });
+
+    shareStepsOpenBtn.addEventListener('click', function() {
+      var scheme = shareStepsOverlay.dataset.scheme;
+      if (scheme) window.location.href = scheme; // no-op if the app isn't installed
+    });
+
+    shareStepsCloseBtn.addEventListener('click', closeShareSteps);
+    shareStepsOverlay.addEventListener('click', function(e) {
+      if (e.target === shareStepsOverlay) closeShareSteps();
     });
 
     function openDrawer()  { renderFavDrawer(); favOverlay.classList.add('open'); favDrawer.classList.add('open'); }
@@ -3108,6 +3264,7 @@
              document.getElementById('pushOverlay').classList.contains('open') ||
              document.getElementById('shareOverlay').classList.contains('open') ||
              document.getElementById('platformShareOverlay').classList.contains('open') ||
+             document.getElementById('shareStepsOverlay').classList.contains('open') ||
              document.getElementById('onboarding').style.display === 'block';
     }
 
