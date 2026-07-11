@@ -26,6 +26,7 @@
     .step-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
     .btn { display: inline-flex; align-items: center; justify-content: center; padding: 14px 32px; border-radius: 12px; border: none; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; background: var(--sage); color: #fff; transition: opacity 0.15s; }
     .btn:hover { opacity: 0.85; }
+    .site-footer { text-align: center; font-size: 12px; color: var(--ink-soft); margin-top: 40px; }
   </style>
 </head>
 <body>
@@ -58,5 +59,7 @@
     </div>
     <a class="btn" href="/account">Go to my dashboard →</a>
   </div>
+  <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
+  <script>document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });</script>
 </body>
 </html>
