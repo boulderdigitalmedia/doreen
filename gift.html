@@ -3066,8 +3066,17 @@
       item.appendChild(h);
 
       item.addEventListener('click', function() {
-        setMainView('card');
+        // Keep the (hidden) card in sync so switching back to card view
+        // later lands on this note, then open the actual gallery — the
+        // grid's whole job is browsing, the lightbox is where you read.
         goTo(idx);
+        if (note.photo_url) {
+          openLightbox(idx);
+        } else {
+          // No photo to show in a photo gallery — fall back to the card,
+          // which can display a text-only note.
+          setMainView('card');
+        }
       });
 
       return item;
