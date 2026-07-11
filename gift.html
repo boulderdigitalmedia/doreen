@@ -985,7 +985,7 @@
     .fav-grid-overlay-quote {
       font-family: 'Cormorant Garamond', serif;
       font-style: italic;
-      font-size: calc(15px * var(--text-scale));
+      font-size: calc(20px * var(--text-scale)); /* matches .card-quote's base so the text-size setting looks the same size everywhere, not just scaled proportionally */
       line-height: 1.35;
       color: #fff;
       display: -webkit-box;
@@ -1092,7 +1092,7 @@
     .main-grid-overlay-quote {
       font-family: 'Cormorant Garamond', serif;
       font-style: italic;
-      font-size: calc(15px * var(--text-scale));
+      font-size: calc(20px * var(--text-scale)); /* matches .card-quote's base so the text-size setting looks the same size everywhere, not just scaled proportionally */
       line-height: 1.35;
       color: #fff;
       display: -webkit-box;
@@ -1292,7 +1292,7 @@
       position: fixed;
       inset: 0;
       background: rgba(44,58,46,0.45);
-      z-index: 200;
+      z-index: 350; /* above .photo-lightbox (300) — share can be triggered from inside the lightbox */
       align-items: center;
       justify-content: center;
       padding: 24px;
@@ -1375,7 +1375,7 @@
       position: fixed;
       inset: 0;
       background: rgba(44,58,46,0.45);
-      z-index: 200;
+      z-index: 360; /* above .photo-lightbox (300) — share can be triggered from inside the lightbox */
       align-items: center;
       justify-content: center;
       padding: 24px;
@@ -1453,7 +1453,7 @@
       position: fixed;
       inset: 0;
       background: rgba(44,58,46,0.45);
-      z-index: 210;
+      z-index: 370; /* above .photo-lightbox (300) and .platform-share-overlay (360) — this opens on top of the picker */
       align-items: center;
       justify-content: center;
       padding: 24px;
