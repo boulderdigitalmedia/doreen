@@ -3036,6 +3036,8 @@
 
       if (note.photo_url) {
         var img = document.createElement('img');
+        img.loading  = 'lazy';
+        img.decoding = 'async';
         img.className = 'main-grid-thumb';
         img.src = note.photo_url;
         img.style.objectPosition = note.photo_position || '50% 50%';
@@ -3212,6 +3214,8 @@
 
       if (note.photo_url) {
         var img = document.createElement('img');
+        img.loading  = 'lazy';
+        img.decoding = 'async';
         img.className = 'fav-thumb';
         img.src = note.photo_url;
         img.style.objectPosition = note.photo_position || '50% 50%';
@@ -3248,6 +3252,8 @@
 
       if (note.photo_url) {
         var img = document.createElement('img');
+        img.loading  = 'lazy';
+        img.decoding = 'async';
         img.className = 'fav-grid-thumb';
         img.src = note.photo_url;
         img.style.objectPosition = note.photo_position || '50% 50%';
