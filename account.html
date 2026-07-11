@@ -996,8 +996,14 @@
         ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" style="object-position:' + esc(note.photo_position || '50% 50%') + '" />'
         : '<div class="note-thumb-ph">🌿</div>';
 
+      // Label by the note's actual order_index, not its position in this
+      // array. They usually match, but if order_index ever has a gap (a
+      // note removed outside the normal delete flow, a bulk-upload race,
+      // etc.), position and order_index disagree — and this label is what
+      // you use to judge "is today's note right", so it has to reflect the
+      // same order_index the site and emails actually deliver by.
       row.innerHTML =
-        '<div class="note-num">#' + (i+1) + '</div>' +
+        '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
         thumb +
         '<div class="note-text-preview">' + esc(note.text) + '</div>' +
         '<div class="note-actions">' +
