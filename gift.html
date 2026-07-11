@@ -373,6 +373,16 @@
       text-underline-offset: 3px;
     }
 
+    .ob-legal {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--ink-soft);
+      opacity: 0.85;
+    }
+    .ob-legal a { color: var(--ink-soft); text-decoration: underline; }
+
     /* ── MAIN APP ── */
     #app {
       display: none;
@@ -725,7 +735,8 @@
 
     .cta-footer a:hover { text-decoration: underline; }
 
-    .site-footer { text-align: center; font-size: 11px; color: var(--ink-soft); padding: 0 20px 20px; opacity: 0.8; }
+    .site-footer { text-align: center; font-size: 11px; color: var(--ink-soft); padding: 0 20px 20px; opacity: 0.8; line-height: 1.7; }
+    .site-footer a { color: var(--ink-soft); margin: 0 4px; }
 
     /* INSTALL BANNER */
     .install-banner {
@@ -1663,6 +1674,7 @@
     <button class="ob-btn" id="obBtn" onclick="submitOnboarding()">Open my gift</button>
     <span class="ob-skip" id="obSkip" onclick="skipOnboarding()">Skip for now</span>
     <span class="ob-skip" id="obCancel" style="display:none" onclick="cancelPrefsEdit()">Cancel</span>
+    <div class="ob-legal">By continuing, you agree to our <a href="/terms" target="_blank">Terms</a>, <a href="/privacy" target="_blank">Privacy Policy</a>, and <a href="/conduct" target="_blank">Code of Conduct</a>.</div>
   </div>
 </div>
 
@@ -1765,7 +1777,10 @@
     <a href="/">Send your own note to someone you care about →</a>
   </div>
 
-  <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
+  <footer class="site-footer">
+    © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
+    <br><a href="/terms" target="_blank">Terms</a>·<a href="/privacy" target="_blank">Privacy</a>·<a href="/conduct" target="_blank">Code of Conduct</a>
+  </footer>
 
   <div class="install-banner" id="installBanner">
     <span class="install-icon">💚</span>
