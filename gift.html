@@ -994,6 +994,113 @@
       overflow: hidden;
     }
 
+    /* MAIN GRID VIEW — an alternate to the card-stack, toggled from the
+       topbar. Same idea as the favourites thumbnail view (hover/focus
+       reveals the quote), but covers every note including locked future
+       ones, which show as a lock instead of a thumbnail so nothing about
+       an unwritten day's photo leaks early. */
+    .main-view-toggle {
+      display: flex;
+      gap: 2px;
+      background: var(--sage-pale);
+      border-radius: 10px;
+      padding: 2px;
+    }
+    .main-view-btn {
+      background: none;
+      border: none;
+      color: var(--ink-soft);
+      padding: 6px 7px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    .main-view-btn.active { background: var(--surface); color: var(--sage); }
+
+    .main-grid {
+      display: none;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 4px 20px 24px;
+    }
+    .main-grid.open { display: grid; }
+
+    .main-grid-item {
+      position: relative;
+      aspect-ratio: 1/1;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--sage-pale);
+    }
+    .main-grid-item.locked { cursor: default; background: var(--bg); border: 1px solid var(--border); }
+
+    .main-grid-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .main-grid-ph {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+
+    .main-grid-lock {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px;
+      color: var(--ink-soft);
+    }
+    .main-grid-lock-icon { font-size: 18px; opacity: 0.6; }
+    .main-grid-lock-date { font-size: 9px; text-align: center; padding: 0 6px; line-height: 1.3; }
+
+    .main-grid-heart {
+      position: absolute;
+      top: 6px; right: 6px;
+      color: #fff;
+      font-size: 14px;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      padding: 2px;
+      z-index: 2;
+      cursor: pointer;
+    }
+    .main-grid-heart.favourited { color: #e05c6f; }
+
+    .main-grid-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(20,26,20,0.75);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .main-grid-item:hover .main-grid-overlay,
+    .main-grid-item:focus-visible .main-grid-overlay {
+      opacity: 1;
+    }
+    .main-grid-overlay-day {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 5px;
+    }
+    .main-grid-overlay-quote {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: calc(15px * var(--text-scale));
+      line-height: 1.35;
+      color: #fff;
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
     /* PHOTO LIGHTBOX — tap the (now-square) photo to see the full,
        uncropped image, like tapping a photo in a social feed. Gallery-style:
        caption underneath + arrows to move to the next/previous unlocked note. */
@@ -1567,6 +1674,14 @@
     </div>
     <div class="topbar-right">
       <div class="date-badge" id="dateBadge"></div>
+      <div class="main-view-toggle" role="group" aria-label="Note display">
+        <button class="main-view-btn" id="mainViewCardBtn" aria-label="Card view" title="Card view">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2"/></svg>
+        </button>
+        <button class="main-view-btn" id="mainViewGridBtn" aria-label="Grid view" title="Grid view">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </button>
+      </div>
       <button class="fav-btn" id="prefsOpenBtn" title="Notification preferences">
         <svg class="icon-svg icon-gear" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
       </button>
@@ -1584,7 +1699,7 @@
     <div class="progress-label" id="progressLabel"></div>
   </div>
 
-  <div class="card-wrap">
+  <div class="card-wrap" id="cardWrap">
     <div class="today-ribbon" id="todayRibbon">✦ Today's note</div>
     <div class="day-badge" id="dayBadge">Day 1</div>
 
@@ -1625,7 +1740,9 @@
     </div>
   </div>
 
-  <div class="card-actions">
+  <div class="main-grid" id="mainGrid"></div>
+
+  <div class="card-actions" id="cardActions">
     <button class="nav-btn" id="prevBtn">‹</button>
     <button class="heart-btn" id="heartBtn">
       <svg class="icon-svg icon-heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>
@@ -2856,7 +2973,117 @@
       heartBtn.classList.add('pop');
       heartBtn.classList.toggle('favourited', added);
       updateFavCount();
+      if (mainView === 'grid') renderMainGrid();
     });
+
+    // ── MAIN DISPLAY VIEW (card / grid) ────────────────────────
+    // Same idea as the favourites list/grid toggle, but for the primary
+    // reading view. Locked (future) notes still show up as a lock icon +
+    // unlock date rather than being hidden — consistent with how the card
+    // view already treats them — so the grid never reveals a photo before
+    // its day arrives.
+
+    var mainView = 'card';
+    try { mainView = localStorage.getItem('gift-main-view') || 'card'; } catch {}
+
+    var mainViewCardBtn = document.getElementById('mainViewCardBtn');
+    var mainViewGridBtn = document.getElementById('mainViewGridBtn');
+    var mainGridEl      = document.getElementById('mainGrid');
+    var cardWrapEl      = document.getElementById('cardWrap');
+    var cardActionsEl   = document.getElementById('cardActions');
+
+    function applyMainViewUI() {
+      var isGrid = mainView === 'grid';
+      mainViewCardBtn.classList.toggle('active', !isGrid);
+      mainViewGridBtn.classList.toggle('active', isGrid);
+      cardWrapEl.style.display    = isGrid ? 'none' : '';
+      cardActionsEl.style.display = isGrid ? 'none' : '';
+      dotsEl.style.display        = isGrid ? 'none' : '';
+      mainGridEl.classList.toggle('open', isGrid);
+    }
+
+    function setMainView(view) {
+      if (view === mainView) return;
+      mainView = view;
+      try { localStorage.setItem('gift-main-view', view); } catch {}
+      applyMainViewUI();
+      if (view === 'grid') renderMainGrid();
+    }
+
+    function buildMainGridItem(idx, note) {
+      var locked = idx > todayNoteIndex;
+      var item = document.createElement('div');
+      item.className = 'main-grid-item' + (locked || !note ? ' locked' : '');
+
+      if (locked) {
+        var lockWrap = document.createElement('div'); lockWrap.className = 'main-grid-lock';
+        var lockIcon = document.createElement('div'); lockIcon.className = 'main-grid-lock-icon'; lockIcon.textContent = '🔒';
+        var lockDate = document.createElement('div'); lockDate.className = 'main-grid-lock-date'; lockDate.textContent = unlockDate(gift, idx);
+        lockWrap.appendChild(lockIcon); lockWrap.appendChild(lockDate);
+        item.appendChild(lockWrap);
+        return item;
+      }
+
+      if (!note) {
+        // A genuinely unwritten slot before today's — shouldn't normally
+        // happen, but fail safe rather than break the grid.
+        var ph0 = document.createElement('div'); ph0.className = 'main-grid-ph'; ph0.textContent = '🌿';
+        item.appendChild(ph0);
+        return item;
+      }
+
+      item.tabIndex = 0;
+
+      if (note.photo_url) {
+        var img = document.createElement('img');
+        img.className = 'main-grid-thumb';
+        img.src = note.photo_url;
+        img.style.objectPosition = note.photo_position || '50% 50%';
+        img.alt = '';
+        item.appendChild(img);
+      } else {
+        var ph = document.createElement('div'); ph.className = 'main-grid-ph'; ph.textContent = '🌿';
+        item.appendChild(ph);
+      }
+
+      var overlay = document.createElement('div');
+      overlay.className = 'main-grid-overlay';
+      var overlayDay = document.createElement('div'); overlayDay.className = 'main-grid-overlay-day'; overlayDay.textContent = 'Note ' + (idx + 1);
+      var overlayQuote = document.createElement('div'); overlayQuote.className = 'main-grid-overlay-quote'; overlayQuote.textContent = note.text;
+      overlay.appendChild(overlayDay); overlay.appendChild(overlayQuote);
+      item.appendChild(overlay);
+
+      var h = document.createElement('div');
+      h.className = 'main-grid-heart' + (isFavourited(idx) ? ' favourited' : '');
+      h.textContent = '♥';
+      h.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var added = toggleFavourite(idx);
+        h.classList.toggle('favourited', added);
+        updateFavCount();
+        if (idx === currentIndex) updateHeartBtn(currentIndex);
+      });
+      item.appendChild(h);
+
+      item.addEventListener('click', function() {
+        setMainView('card');
+        goTo(idx);
+      });
+
+      return item;
+    }
+
+    function renderMainGrid() {
+      mainGridEl.innerHTML = '';
+      for (var i = 0; i < notes.length; i++) {
+        mainGridEl.appendChild(buildMainGridItem(i, notes[i]));
+      }
+    }
+
+    mainViewCardBtn.addEventListener('click', function() { setMainView('card'); });
+    mainViewGridBtn.addEventListener('click', function() { setMainView('grid'); });
+    applyMainViewUI();
+    if (mainView === 'grid') renderMainGrid();
 
     shareBtn.addEventListener('click', function() {
       openPlatformSharePicker(notes[currentIndex]);
@@ -3259,7 +3486,8 @@
     // because a swipe there means something else and so this doesn't
     // double-fire alongside e.g. the lightbox's own swipe handler.
     function cardSwipeBlocked() {
-      return photoLightbox.classList.contains('open') ||
+      return mainView === 'grid' ||
+             photoLightbox.classList.contains('open') ||
              favDrawer.classList.contains('open') ||
              document.getElementById('pushOverlay').classList.contains('open') ||
              document.getElementById('shareOverlay').classList.contains('open') ||
