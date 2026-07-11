@@ -248,7 +248,8 @@
     .link-danger-hint { font-size: 11px; color: var(--ink-soft); opacity: 0.7; margin-top: 3px; }
 
     /* ── SITE FOOTER ── */
-    .site-footer { text-align: center; font-size: 12px; color: var(--ink-soft); padding: 28px 20px 32px; }
+    .site-footer { text-align: center; font-size: 12px; color: var(--ink-soft); padding: 28px 20px 32px; line-height: 1.8; }
+    .site-footer a { color: var(--ink-soft); margin: 0 4px; }
 
     /* ── MODAL ── */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(44,58,46,0.4); z-index: 50; align-items: center; justify-content: center; padding: 20px; }
@@ -361,7 +362,10 @@
       </button>
       <p style="font-size:12px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Cancel any time.</p>
     </div>
-    <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
+    <footer class="site-footer">
+      © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
+      <br><a href="/terms">Terms</a>·<a href="/privacy">Privacy</a>·<a href="/conduct">Code of Conduct</a>
+    </footer>
   </div>
 
   <!-- VIEW: GIFT LIST -->
@@ -380,7 +384,10 @@
       </div>
     </div>
     <div class="gift-grid" id="giftGrid"></div>
-    <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
+    <footer class="site-footer">
+      © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
+      <br><a href="/terms">Terms</a>·<a href="/privacy">Privacy</a>·<a href="/conduct">Code of Conduct</a>
+    </footer>
   </div>
 
   <!-- VIEW: GIFT DETAIL -->
@@ -553,7 +560,10 @@
       </div>
     </div>
 
-    <footer class="site-footer">© <span class="footerYear"></span> A Note For You. All rights reserved.</footer>
+    <footer class="site-footer">
+      © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
+      <br><a href="/terms">Terms</a>·<a href="/privacy">Privacy</a>·<a href="/conduct">Code of Conduct</a>
+    </footer>
 
     <div class="danger-zone-discreet">
       <button class="link-danger" onclick="deleteGift()">Delete this gift</button>
