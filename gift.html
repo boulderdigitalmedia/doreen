@@ -134,7 +134,7 @@
     }
 
     /* ── PASSWORD LOCK ── */
-    #lockScreen {
+    #lockScreen, #requirePasswordScreen {
       display: none;
       min-height: 100svh;
       flex-direction: column;
@@ -1670,6 +1670,23 @@
   </div>
 </div>
 
+<!-- Shown once, before anything else, whenever this gift doesn't have a
+     password set yet — set-up is mandatory so a link that's been shared,
+     guessed, or leaked isn't enough on its own to read someone's private
+     notes. Uses the same update-gift-password endpoint recipients already
+     use to change their password later, just with no current password. -->
+<div id="requirePasswordScreen">
+  <div class="lock-icon-big">🔒</div>
+  <h1>A note from <span id="reqPwSenderName">Your Favorite</span></h1>
+  <p>To keep these notes private, set a password before continuing.<br>You'll need it (and can change it anytime) whenever you come back.</p>
+  <div class="lock-form">
+    <input class="ob-input" type="password" id="reqPwNewInput" placeholder="Choose a password" autocomplete="new-password" />
+    <input class="ob-input" type="password" id="reqPwConfirmInput" placeholder="Confirm password" autocomplete="new-password" style="margin-top:8px;" />
+    <div class="lock-error" id="reqPwError" style="display:none"></div>
+    <button class="ob-btn" id="reqPwSubmitBtn">Set password &amp; continue</button>
+  </div>
+</div>
+
 <!-- ONBOARDING -->
 <div id="onboarding">
   <div class="ob-inner">
@@ -2249,6 +2266,18 @@
       return;
     }
 
+    // No password set on this gift at all — require the recipient to set
+    // one before they can see any notes, so a link that's been shared,
+    // guessed, or leaked isn't enough on its own to read someone's private
+    // notes. Skipped on a genuine check failure (checkFailed) rather than a
+    // confirmed "no password" — fail open on a network hiccup instead of
+    // blocking access or risking a confusing password mix-up.
+    if (!giftPasswordEnabled && !check.checkFailed) {
+      document.getElementById('loading').style.display = 'none';
+      showRequirePasswordScreen(gift);
+      return;
+    }
+
     await loadGiftContents(gift);
   }
 
@@ -2259,10 +2288,16 @@
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ slug: slug, password: password })
       });
-      return await res.json();
+      var data = await res.json();
+      data.checkFailed = false;
+      return data;
     } catch (e) {
       console.error('Password check failed:', e);
-      return { requiresPassword: false, valid: true }; // fail open on a network hiccup rather than locking someone out
+      // fail open on a network hiccup rather than locking someone out or
+      // wrongly forcing the "set a password" screen when one might already
+      // exist and we just couldn't confirm it — checkFailed lets callers
+      // tell this apart from a confirmed "no password set".
+      return { requiresPassword: false, valid: true, checkFailed: true };
     }
   }
 
@@ -2316,6 +2351,59 @@
       input.value = '';
       input.focus();
     }
+  }
+
+  function showRequirePasswordScreen(gift) {
+    document.getElementById('reqPwSenderName').textContent = gift.sender_name || 'Your Favorite';
+    document.getElementById('requirePasswordScreen').style.display = 'flex';
+    document.getElementById('reqPwNewInput').focus();
+  }
+
+  async function submitRequirePassword() {
+    var newInput     = document.getElementById('reqPwNewInput');
+    var confirmInput = document.getElementById('reqPwConfirmInput');
+    var btn          = document.getElementById('reqPwSubmitBtn');
+    var errEl        = document.getElementById('reqPwError');
+    var pwd          = newInput.value;
+    var confirmPwd   = confirmInput.value;
+
+    errEl.style.display = 'none';
+
+    if (pwd.length < 4) {
+      errEl.textContent = 'Password needs to be at least 4 characters.';
+      errEl.style.display = 'block';
+      newInput.focus();
+      return;
+    }
+    if (pwd !== confirmPwd) {
+      errEl.textContent = "Those passwords don't match.";
+      errEl.style.display = 'block';
+      confirmInput.value = '';
+      confirmInput.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Setting up…';
+
+    // No current password exists yet for this gift, so this is a create,
+    // not a change — same endpoint recipients already use from Settings.
+    var result = await updateGiftPassword('', pwd);
+
+    btn.disabled = false;
+    btn.textContent = 'Set password & continue';
+
+    if (!result.success) {
+      errEl.textContent = result.error || 'Something went wrong — try again.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    giftPasswordEnabled = true;
+    try { localStorage.setItem('gift-unlocked-' + slug, '1'); } catch {}
+    document.getElementById('requirePasswordScreen').style.display = 'none';
+    document.getElementById('loading').style.display = 'flex';
+    await loadGiftContents(GIFT);
   }
 
   async function loadGiftContents(gift) {
@@ -3849,6 +3937,14 @@
   document.getElementById('lockSubmitBtn').addEventListener('click', submitLockPassword);
   document.getElementById('lockPasswordInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') submitLockPassword();
+  });
+
+  document.getElementById('reqPwSubmitBtn').addEventListener('click', submitRequirePassword);
+  document.getElementById('reqPwNewInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('reqPwConfirmInput').focus();
+  });
+  document.getElementById('reqPwConfirmInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitRequirePassword();
   });
 
   // ── RUN ─────────────────────────────────────────────────────
