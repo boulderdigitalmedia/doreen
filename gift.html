@@ -1537,6 +1537,67 @@
     }
     .share-step-btn-primary { background: var(--sage); color: #fff; border-color: var(--sage); }
 
+    /* REPORT A CONCERN */
+    .report-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(44,58,46,0.45);
+      z-index: 400;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    .report-overlay.open { display: flex; }
+    .report-modal {
+      background: var(--surface);
+      border-radius: 20px;
+      max-width: 400px;
+      width: 100%;
+      padding: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      margin: auto;
+      text-align: left;
+    }
+    .report-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .report-body { font-size: 13px; color: var(--ink-soft); line-height: 1.6; margin-bottom: 20px; }
+    .report-field { margin-bottom: 14px; }
+    .report-field label { display: block; font-size: 12px; color: var(--ink-mid); margin-bottom: 6px; }
+    textarea.ob-input { resize: vertical; font-family: 'DM Sans', sans-serif; }
+    .report-error { color: #c0392b; font-size: 13px; margin-bottom: 10px; }
+    .report-actions { display: flex; gap: 10px; margin-top: 6px; }
+    .report-submit {
+      flex: 1;
+      background: var(--sage);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .report-submit:disabled { opacity: 0.6; cursor: default; }
+    .report-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: var(--ink-soft);
+      cursor: pointer;
+    }
+    .report-success { text-align: center; font-size: 14px; color: var(--ink); line-height: 1.6; }
+
     /* ANIMATIONS */
     @keyframes fadeDown {
       from { opacity: 0; transform: translateY(-8px); }
@@ -1784,7 +1845,7 @@
 
   <footer class="site-footer">
     © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
-    <br><a href="/terms" target="_blank">Terms</a>·<a href="/privacy" target="_blank">Privacy</a>·<a href="/conduct" target="_blank">Code of Conduct</a>
+    <br><a href="/terms" target="_blank">Terms</a>·<a href="/privacy" target="_blank">Privacy</a>·<a href="/conduct" target="_blank">Code of Conduct</a>·<a href="#" id="reportOpenLink">Report a concern</a>
   </footer>
 
   <div class="install-banner" id="installBanner">
@@ -1941,6 +2002,57 @@
   </div>
 </div>
 
+<!-- REPORT A CONCERN — reachable from the footer on every gift page.
+     Submits to /api/report-abuse, which saves the report and emails our
+     team immediately (see netlify/functions/report-abuse.js). -->
+<div class="report-overlay" id="reportOverlay">
+  <div class="report-modal">
+    <div id="reportFormWrap">
+      <div class="report-title">Report a concern</div>
+      <div class="report-body">
+        If something here doesn't feel right — inappropriate content, harassment, or anything else — let us know.
+        Reports are reviewed by our team, and content involving a minor is reported to the appropriate authorities.
+      </div>
+
+      <div class="report-field">
+        <label>What's the issue?</label>
+        <select class="ob-input" id="reportReason">
+          <option value="">Choose one…</option>
+          <option value="nudity">Nude or sexually explicit content</option>
+          <option value="minor">Content involving a minor</option>
+          <option value="harassment">Harassment or threats</option>
+          <option value="impersonation">Impersonation</option>
+          <option value="spam">Spam or scam</option>
+          <option value="other">Something else</option>
+        </select>
+      </div>
+
+      <div class="report-field">
+        <label>Details (optional)</label>
+        <textarea class="ob-input" id="reportDetails" rows="3" placeholder="Anything else that would help us look into this"></textarea>
+      </div>
+
+      <div class="report-field">
+        <label>Your email (optional, if you'd like a reply)</label>
+        <input class="ob-input" type="email" id="reportEmail" placeholder="you@example.com" />
+      </div>
+
+      <div class="report-error" id="reportError" style="display:none"></div>
+
+      <div class="report-actions">
+        <button class="report-submit" id="reportSubmitBtn">Submit report</button>
+        <button class="report-cancel" id="reportCancelBtn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="report-success" id="reportSuccess" style="display:none">
+      <div style="font-size:28px;margin-bottom:10px;">✓</div>
+      Thank you — your report has been submitted. We take these seriously and will follow up if you left an email.
+      <button class="report-submit" id="reportDoneBtn" style="margin-top:18px;">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // ════════════════════════════════════════════════
   // CONFIG — fill these in from your Supabase project
@@ -1973,6 +2085,86 @@
   var SHARE_HANDLE = '@anoteforyouapp';
 
   document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });
+
+  // ── REPORT A CONCERN ─────────────────────────────────────────
+  // Independent of gift/notes loading — reachable even if the gift page
+  // itself fails to load, since someone might want to report a broken or
+  // suspicious link. Submits to /api/report-abuse, which stores the report
+  // and emails our team right away.
+
+  (function() {
+    var overlay    = document.getElementById('reportOverlay');
+    var formWrap   = document.getElementById('reportFormWrap');
+    var successEl  = document.getElementById('reportSuccess');
+    var openLink   = document.getElementById('reportOpenLink');
+    var cancelBtn  = document.getElementById('reportCancelBtn');
+    var submitBtn  = document.getElementById('reportSubmitBtn');
+    var doneBtn    = document.getElementById('reportDoneBtn');
+    var errorEl    = document.getElementById('reportError');
+    var reasonEl   = document.getElementById('reportReason');
+    var detailsEl  = document.getElementById('reportDetails');
+    var emailEl    = document.getElementById('reportEmail');
+    if (!overlay || !openLink) return;
+
+    function resetForm() {
+      formWrap.style.display  = 'block';
+      successEl.style.display = 'none';
+      errorEl.style.display   = 'none';
+      reasonEl.value  = '';
+      detailsEl.value = '';
+      emailEl.value   = '';
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Submit report';
+    }
+
+    function openReport(e) {
+      if (e) e.preventDefault();
+      resetForm();
+      overlay.classList.add('open');
+    }
+    function closeReport() { overlay.classList.remove('open'); }
+
+    async function submitReport() {
+      if (!reasonEl.value) {
+        errorEl.textContent = 'Please choose a reason.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
+      submitBtn.disabled    = true;
+      submitBtn.textContent = 'Submitting…';
+
+      try {
+        var res = await fetch('/api/report-abuse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            giftSlug: slug,
+            pageUrl: window.location.href,
+            reason: reasonEl.value,
+            details: detailsEl.value.trim(),
+            reporterEmail: emailEl.value.trim(),
+          }),
+        });
+        var data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Something went wrong');
+
+        formWrap.style.display  = 'none';
+        successEl.style.display = 'block';
+      } catch (e) {
+        errorEl.textContent = 'Could not submit your report — please try again, or email support@anoteforyou.app directly.';
+        errorEl.style.display = 'block';
+        submitBtn.disabled    = false;
+        submitBtn.textContent = 'Submit report';
+      }
+    }
+
+    openLink.addEventListener('click', openReport);
+    cancelBtn.addEventListener('click', closeReport);
+    doneBtn.addEventListener('click', closeReport);
+    submitBtn.addEventListener('click', submitReport);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeReport(); });
+  })();
 
   // Whether the buyer currently has a password gate turned on for this
   // gift — resolved once at boot (via the same verify-gift-password check
