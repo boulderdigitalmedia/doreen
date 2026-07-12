@@ -2628,6 +2628,26 @@
     });
   }
 
+  // Rewrites a Supabase Storage photo_url to go through our own
+  // /api/photo-proxy instead, so the browser's fetch()/canvas access to it
+  // is always same-origin. <img> display never needs this (cross-origin
+  // images always render fine) — this is only for the share feature, which
+  // needs the actual bytes client-side (to composite the branded share
+  // image on canvas, and to build a File/Blob for navigator.share or a
+  // download). Both of those ARE subject to CORS, unlike plain <img>
+  // display, and if Supabase Storage doesn't send the right
+  // Access-Control-Allow-Origin header, they fail silently — which is
+  // exactly what was happening: sharing quietly fell back to text-only
+  // with no image ever offered, no error shown.
+  function proxiedPhotoUrl(photoUrl) {
+    if (!photoUrl) return photoUrl;
+    var marker = '/object/public/photos/';
+    var i = photoUrl.indexOf(marker);
+    if (i === -1) return photoUrl; // not a recognizable Supabase Storage URL — use as-is
+    var path = photoUrl.slice(i + marker.length);
+    return '/api/photo-proxy?path=' + encodeURIComponent(path);
+  }
+
   // Mirrors the CSS `object-fit: cover` + `object-position` behaviour the
   // card itself uses, so the shared image is framed the same way.
   function drawCoverImage(ctx, img, x, y, w, h, photoPosition) {
@@ -2650,7 +2670,7 @@
     var ctx = canvas.getContext('2d');
 
     if (note.photo_url) {
-      var img = await loadImageEl(note.photo_url, 'anonymous');
+      var img = await loadImageEl(proxiedPhotoUrl(note.photo_url), 'anonymous');
       drawCoverImage(ctx, img, 0, 0, size, size, note.photo_position);
 
       var grad = ctx.createLinearGradient(0, size * 0.42, 0, size);
@@ -2756,11 +2776,13 @@
     try {
       blob = await buildShareImage(note);
     } catch (e) {
-      // Composing the branded image failed — most likely a CORS-tainted
-      // canvas from the photo host. Fall back to sharing the raw photo
-      // file directly, which sidesteps canvas entirely.
+      console.error('buildShareImage failed, falling back to raw photo fetch:', e);
+      // Composing the branded image failed. Fall back to sharing the raw
+      // photo file directly, which sidesteps canvas entirely. Goes through
+      // the same-origin proxy for the same CORS reasons as buildShareImage.
       if (note.photo_url) {
-        try { blob = await (await fetch(note.photo_url)).blob(); } catch (e2) {}
+        try { blob = await (await fetch(proxiedPhotoUrl(note.photo_url))).blob(); }
+        catch (e2) { console.error('Raw photo fetch also failed — sharing text-only:', e2); }
       }
     }
 
@@ -2862,7 +2884,11 @@
     // them wait after tapping.
     try { SHARE_STEPS_BLOB = await buildShareImage(note); }
     catch (e) {
-      if (note.photo_url) { try { SHARE_STEPS_BLOB = await (await fetch(note.photo_url)).blob(); } catch (e2) {} }
+      console.error('buildShareImage failed in openShareSteps, falling back to raw photo fetch:', e);
+      if (note.photo_url) {
+        try { SHARE_STEPS_BLOB = await (await fetch(proxiedPhotoUrl(note.photo_url))).blob(); }
+        catch (e2) { console.error('Raw photo fetch also failed in openShareSteps:', e2); }
+      }
     }
   }
 
@@ -3392,7 +3418,13 @@
     shareStepsDownloadBtn.addEventListener('click', async function() {
       if (!SHARE_STEPS_BLOB && SHARE_STEPS_NOTE) {
         shareStepsDownloadBtn.textContent = 'Preparing…';
-        try { SHARE_STEPS_BLOB = await buildShareImage(SHARE_STEPS_NOTE); } catch (e) {}
+        try { SHARE_STEPS_BLOB = await buildShareImage(SHARE_STEPS_NOTE); }
+        catch (e) {
+          if (SHARE_STEPS_NOTE.photo_url) {
+            try { SHARE_STEPS_BLOB = await (await fetch(proxiedPhotoUrl(SHARE_STEPS_NOTE.photo_url))).blob(); }
+            catch (e2) { console.error('Download-image retry also failed:', e2); }
+          }
+        }
       }
       if (!SHARE_STEPS_BLOB) { shareStepsDownloadBtn.textContent = 'Download image'; return; }
       var url = URL.createObjectURL(SHARE_STEPS_BLOB);
