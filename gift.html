@@ -2167,6 +2167,13 @@
   // rather than typing.
   var SHARE_HANDLE = '@anoteforyouapp';
 
+  // Used when sharing a note directly (e.g. texting it to someone) rather
+  // than posting it as a caption on social — the note's own text is already
+  // baked into the shared image itself as an overlay, so repeating it in
+  // the message body would be redundant. This is a little promo for us
+  // instead, since that's the one thing the image itself can't carry.
+  var SHARE_PROMO_TEXT = 'Send a gift of memories to someone you care about — https://anoteforyou.app';
+
   document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });
 
   // ── REPORT A CONCERN ─────────────────────────────────────────
@@ -2907,7 +2914,10 @@
 
   async function shareNote(note) {
     if (!note) return;
-    var text = (note.text || '') + (SHARE_HANDLE ? '\n\n' + SHARE_HANDLE : '');
+    // The note's own text is already overlaid on the composed share image
+    // itself, so it'd be redundant to repeat it here — use this space for a
+    // small promo + link back to the site instead, for whoever receives it.
+    var text = SHARE_PROMO_TEXT;
     var blob = null;
 
     try {
