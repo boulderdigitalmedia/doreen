@@ -2731,6 +2731,11 @@
     overlay.addEventListener('click', onOverlayClick);
   }
 
+  function isIOSDevice() {
+    return /iP(hone|od|ad)/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
   async function shareNote(note) {
     if (!note) return;
     var text = (note.text || '') + (SHARE_HANDLE ? '\n\n' + SHARE_HANDLE : '');
@@ -2747,23 +2752,20 @@
       }
     }
 
-    if (blob && navigator.canShare && navigator.share) {
+    // iOS Safari has a long-standing, still-unresolved bug where sharing a
+    // file through navigator.share() silently drops the image for certain
+    // target apps (Messages especially) — it isn't just a `text`+`files`
+    // conflict, it happens even with files alone, and there's no reliable
+    // way to detect the failure since the share Promise still resolves.
+    // Android and desktop handle file sharing fine. Rather than gamble on
+    // it, send iOS straight to our own fallback (download image + copy
+    // caption) — the same reliable, manual pattern already used for the
+    // Instagram/Facebook/TikTok guided flow.
+    if (blob && !isIOSDevice() && navigator.canShare && navigator.share) {
       var file = new File([blob], 'a-note-for-you.png', { type: blob.type || 'image/png' });
       if (navigator.canShare({ files: [file] })) {
         try {
-          // iOS Safari has a known bug where combining `files` and `text` in
-          // a single share silently drops the image — especially when the
-          // person picks Messages as the target, they end up with just the
-          // caption and no photo. Android and desktop handle the combo fine.
-          // Since the composed image already has the caption baked in as a
-          // text overlay, omitting `text` on iOS loses nothing and fixes
-          // the attachment.
-          var isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
-            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-          var shareData = isIOS
-            ? { files: [file], title: 'A Note For You' }
-            : { files: [file], text: text, title: 'A Note For You' };
-          await navigator.share(shareData);
+          await navigator.share({ files: [file], text: text, title: 'A Note For You' });
           return;
         } catch (e) {
           if (e && e.name === 'AbortError') return; // recipient cancelled — don't fall through
