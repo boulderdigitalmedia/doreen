@@ -271,3 +271,37 @@ CREATE POLICY "public_read_photos" ON storage.objects
 CREATE POLICY "buyers_delete_photos" ON storage.objects
   FOR DELETE TO authenticated
   USING (bucket_id = 'photos' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ── ABUSE REPORTS ─────────────────────────────────────────────
+-- Submitted via the "Report a concern" link on gift.html, written
+-- by netlify/functions/report-abuse.js using the service role key.
+-- No auth required to submit — reporters may not have an account.
+
+CREATE TABLE IF NOT EXISTS abuse_reports (
+  id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  gift_slug       TEXT,                              -- the gift page being reported, if any
+  page_url        TEXT,                              -- full window.location.href at time of report,
+                                                       -- captured automatically (not typed by the reporter)
+  reason          TEXT        NOT NULL
+                              CHECK (reason IN ('nudity','minor','harassment','impersonation','spam','other')),
+  details         TEXT,                              -- free-text description from the reporter
+  reporter_email  TEXT,                               -- optional, for follow-up
+  status          TEXT        NOT NULL DEFAULT 'open'
+                              CHECK (status IN ('open','reviewing','resolved','dismissed')),
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Safe to re-run even if abuse_reports already existed without this column
+-- (e.g. if you ran the migration before page_url was added here).
+ALTER TABLE abuse_reports ADD COLUMN IF NOT EXISTS page_url TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_gift_slug ON abuse_reports(gift_slug);
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_status    ON abuse_reports(status);
+
+ALTER TABLE abuse_reports ENABLE ROW LEVEL SECURITY;
+
+-- No policies for anon or authenticated — this table is only ever
+-- written to or read from by report-abuse.js using the service role
+-- key, which bypasses RLS entirely. That's intentional: reports may
+-- contain sensitive details, so nothing here should be reachable by
+-- a logged-in buyer or the public, only by whoever has server access.
