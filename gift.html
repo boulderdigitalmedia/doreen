@@ -1150,11 +1150,14 @@
     .photo-lightbox.open { display: flex; }
 
     .lightbox-img-wrap {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
       max-width: 100%;
       max-height: 78vh;
+      min-height: 120px; /* keeps the spinner/error state from collapsing to nothing before the image has a size */
+      min-width: 120px;
     }
 
     .photo-lightbox img {
@@ -1164,6 +1167,52 @@
       border-radius: 4px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.4);
       cursor: default;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .photo-lightbox img.loaded { opacity: 1; }
+
+    /* Shown while the full-resolution photo is still downloading — without
+       this, a slow connection just looks like a blank/frozen lightbox with
+       no feedback that anything is happening. */
+    .lightbox-spinner {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 34px; height: 34px;
+      border: 3px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: lightboxSpin 0.8s linear infinite;
+    }
+
+    @keyframes lightboxSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+    .lightbox-error {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: rgba(255,255,255,0.85);
+      font-size: 14px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: max-content;
+      max-width: 240px;
+    }
+
+    .lightbox-retry-btn {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 18px;
+      border-radius: 20px;
+      cursor: pointer;
     }
 
     .lightbox-caption {
@@ -1923,6 +1972,11 @@
   <button class="lightbox-nav lightbox-prev" id="lightboxPrevBtn" aria-label="Previous note">‹</button>
   <button class="lightbox-nav lightbox-next" id="lightboxNextBtn" aria-label="Next note">›</button>
   <div class="lightbox-img-wrap">
+    <div class="lightbox-spinner" id="lightboxSpinner"></div>
+    <div class="lightbox-error" id="lightboxError" style="display:none">
+      Couldn't load this photo.
+      <button class="lightbox-retry-btn" id="lightboxRetryBtn">Try again</button>
+    </div>
     <img id="lightboxImg" src="" alt="" />
   </div>
   <div class="lightbox-caption" id="lightboxCaption"></div>
@@ -3156,6 +3210,9 @@
 
     var photoLightbox  = document.getElementById('photoLightbox');
     var lightboxImg    = document.getElementById('lightboxImg');
+    var lightboxSpinner = document.getElementById('lightboxSpinner');
+    var lightboxError   = document.getElementById('lightboxError');
+    var lightboxRetryBtn = document.getElementById('lightboxRetryBtn');
     var lightboxCaption = document.getElementById('lightboxCaption');
     var lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
     var lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
@@ -3221,10 +3278,36 @@
 
     function renderLightbox() {
       var note = notes[lightboxIndex];
-      lightboxImg.src = note.photo_url;
       lightboxCaption.textContent = note.text || '';
       lightboxPrevBtn.disabled = findAdjacentPhotoIndex(lightboxIndex, -1) === -1;
       lightboxNextBtn.disabled = findAdjacentPhotoIndex(lightboxIndex, 1) === -1;
+
+      // Show a spinner while the full-resolution photo downloads instead of
+      // just leaving a blank frame — on a slow connection that previously
+      // looked identical to the lightbox being broken. onload/onerror below
+      // swap in the actual image or a retry prompt.
+      lightboxImg.classList.remove('loaded');
+      lightboxError.style.display = 'none';
+      lightboxSpinner.style.display = 'block';
+      lightboxImg.onload = function() {
+        lightboxSpinner.style.display = 'none';
+        lightboxImg.classList.add('loaded');
+      };
+      lightboxImg.onerror = function() {
+        lightboxSpinner.style.display = 'none';
+        lightboxError.style.display = 'flex';
+      };
+      lightboxImg.src = note.photo_url;
+
+      // Warm the browser cache for the neighbouring photos so tapping
+      // prev/next inside the lightbox feels instant instead of starting a
+      // fresh download each time.
+      [-1, 1].forEach(function(dir) {
+        var adjIdx = findAdjacentPhotoIndex(lightboxIndex, dir);
+        if (adjIdx === -1) return;
+        var adjNote = notes[adjIdx];
+        if (adjNote && adjNote.photo_url) { (new Image()).src = adjNote.photo_url; }
+      });
     }
 
     function openLightbox(index) {
@@ -3238,6 +3321,7 @@
     function closeLightbox() {
       photoLightbox.classList.remove('open');
       lightboxImg.src = '';
+      lightboxImg.classList.remove('loaded');
       lightboxIndex = null;
     }
 
@@ -3258,6 +3342,10 @@
       openPlatformSharePicker(notes[lightboxIndex]);
     });
     lightboxCloseBtn.addEventListener('click', function(e) { e.stopPropagation(); closeLightbox(); });
+    lightboxRetryBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      renderLightbox(); // re-runs the same load with a fresh spinner/error state
+    });
     document.querySelector('.lightbox-img-wrap').addEventListener('click', function(e) { e.stopPropagation(); });
     lightboxCaption.addEventListener('click', function(e) { e.stopPropagation(); });
     lightboxPrevBtn.addEventListener('click', function(e) { e.stopPropagation(); stepLightbox(-1); });
