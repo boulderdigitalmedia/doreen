@@ -12,6 +12,21 @@
        regardless of whether a password gate is also enabled. -->
   <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
   <title>From Your Favorite, With Love</title>
+
+  <!-- Same generic (non-personalized) preview on every gift page — link
+       unfurlers don't run this page's JS, so this can't reflect the actual
+       sender/notes even if we wanted it to, and noindex above is about
+       search engines specifically, not link-preview bots, so this is safe
+       to have. Needs social-preview.jpg to actually exist at the repo
+       root — see the same note in index.html. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="A Note For You" />
+  <meta property="og:description" content="Someone sent you a gift of daily notes. Open it to see what's waiting." />
+  <meta property="og:image" content="https://anoteforyou.app/social-preview.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="A Note For You" />
+  <meta name="twitter:description" content="Someone sent you a gift of daily notes. Open it to see what's waiting." />
+  <meta name="twitter:image" content="https://anoteforyou.app/social-preview.jpg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2923,9 +2938,13 @@
       var img = await withTimeout(loadImageEl(proxiedPhotoUrl(note.photo_url), 'anonymous'), 10000);
       drawCoverImage(ctx, img, 0, 0, size, size, note.photo_position);
 
+      // Canvas can't reference CSS custom properties, so this is --ink
+      // (#2c3a2e) hardcoded as rgb(44,58,46) — the near-black used before
+      // this had too little green in it to read as on-brand, especially
+      // over warm/sandy photos where it just looked brown.
       var grad = ctx.createLinearGradient(0, size * 0.42, 0, size);
-      grad.addColorStop(0, 'rgba(20,26,20,0)');
-      grad.addColorStop(1, 'rgba(20,26,20,0.75)');
+      grad.addColorStop(0, 'rgba(44,58,46,0)');
+      grad.addColorStop(1, 'rgba(44,58,46,0.8)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, size * 0.42, size, size * 0.58);
 
