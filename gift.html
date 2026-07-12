@@ -428,16 +428,7 @@
 
     .topbar-right { display: flex; align-items: center; gap: 12px; }
 
-    .date-badge {
-      font-size: 13px;
-      color: var(--ink-soft);
-      background: var(--sage-pale);
-      border: 1px solid var(--sage-light);
-      border-radius: 20px;
-      padding: 4px 12px;
-    }
-
-    .fav-btn {
+.fav-btn {
       position: relative;
       background: none;
       border: none;
@@ -533,6 +524,13 @@
       padding: 4px 12px;
       border-radius: 20px;
       margin-bottom: 9px;
+    }
+
+    .today-ribbon-date {
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      opacity: 0.85;
     }
 
     .card-stack {
@@ -1919,7 +1917,6 @@
       <span class="brand-name" id="senderName">Your Favorite</span>
     </div>
     <div class="topbar-right">
-      <div class="date-badge" id="dateBadge"></div>
       <div class="main-view-toggle" role="group" aria-label="Note display">
         <button class="main-view-btn" id="mainViewCardBtn" aria-label="Card view" title="Card view">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2"/></svg>
@@ -1946,7 +1943,7 @@
   </div>
 
   <div class="card-wrap" id="cardWrap">
-    <div class="today-ribbon" id="todayRibbon">✦ Today's note</div>
+    <div class="today-ribbon" id="todayRibbon">✦ Today's note <span class="today-ribbon-date" id="todayRibbonDate"></span></div>
     <div class="day-badge" id="dayBadge">Day 1</div>
 
     <div class="card-stack">
@@ -3331,8 +3328,8 @@
 
     document.getElementById('app').style.display = 'flex';
     document.getElementById('senderName').textContent  = gift.sender_name || 'Your Favorite';
-    document.getElementById('dateBadge').textContent   =
-      new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+    document.getElementById('todayRibbonDate').textContent =
+      '· ' + new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
 
     var todayNoteIndex = Math.min(getNoteIndex(gift), notes.length - 1);
     var currentIndex   = todayNoteIndex;
