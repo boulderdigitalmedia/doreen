@@ -2,6 +2,20 @@
   publish = "."
   functions = "netlify/functions"
 
+# Never let the browser/CDN cache HTML pages — a service worker is already
+# registered on this site (sw.js, for push notifications), and stale HTML
+# served underneath it is very hard to notice ("hard refresh" doesn't
+# reliably clear it). Force revalidation on every load instead.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
 # ── API routes ────────────────────────────────────────────────────────────────
 [[redirects]]
   from   = "/api/report-abuse"
