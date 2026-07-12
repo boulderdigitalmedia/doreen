@@ -2759,7 +2759,13 @@
       }
     }
 
-    if (navigator.share) {
+    // Only fall back to a text-only native share when there's no image to
+    // offer at all. If we DO have an image but this browser can't do
+    // file-based sharing (canShare({files}) failed above), firing off a
+    // text-only share would silently drop the photo — go to our own
+    // fallback modal instead, which always includes the image (with its
+    // own download button) alongside the caption.
+    if (!blob && navigator.share) {
       try {
         await navigator.share({ text: text, title: 'A Note For You' });
         return;
