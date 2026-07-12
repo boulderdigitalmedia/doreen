@@ -4,6 +4,11 @@
 
 # ── API routes ────────────────────────────────────────────────────────────────
 [[redirects]]
+  from   = "/api/report-abuse"
+  to     = "/.netlify/functions/report-abuse"
+  status = 200
+
+[[redirects]]
   from   = "/api/subscribe"
   to     = "/.netlify/functions/subscribe"
   status = 200
