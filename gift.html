@@ -663,11 +663,17 @@
     .card-quick-actions .share-btn {
       width: 36px; height: 36px;
       border-radius: 50%;
-      background: rgba(255,255,255,0.85);
-      box-shadow: 0 2px 8px rgba(44,58,46,0.18);
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 2px 8px rgba(20,26,20,0.35);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
     }
+
+    /* The default (non-favourited) heart uses --sage-light elsewhere, which
+       is much too pale against this circle's near-white background —
+       darken it here specifically. .heart-btn.favourited's red still wins
+       once favourited (equal specificity, declared later). */
+    .card-quick-actions .heart-btn { color: var(--ink-mid); }
 
     .card-quick-actions .icon-heart { width: 17px; height: 17px; }
     .card-quick-actions .icon-share { width: 15px; height: 15px; }
@@ -3035,12 +3041,21 @@
     // real image to work with on both iOS and Android.
     if (blob && navigator.canShare && navigator.share) {
       var file = new File([blob], 'a-note-for-you.png', { type: blob.type || 'image/png' });
-      if (navigator.canShare({ files: [file] })) {
+      var canShareFiles = false;
+      try { canShareFiles = navigator.canShare({ files: [file] }); }
+      catch (e) { console.error('canShare({files}) threw:', e); }
+
+      if (canShareFiles) {
         try {
-          await navigator.share({ files: [file], text: text, title: 'A Note For You' });
+          // Some desktop browsers' Web Share implementations can just hang
+          // (no resolve, no reject, no OS share sheet ever visibly opens) —
+          // without this timeout that reads as "nothing happens at all"
+          // with no way out except reloading the page.
+          await withTimeout(navigator.share({ files: [file], text: text, title: 'A Note For You' }), 8000);
           return;
         } catch (e) {
           if (e && e.name === 'AbortError') return; // recipient cancelled — don't fall through
+          console.error('navigator.share({files}) failed or timed out:', e);
         }
       }
     }
@@ -3053,10 +3068,11 @@
     // own download button) alongside the caption.
     if (!blob && navigator.share) {
       try {
-        await navigator.share({ text: text, title: 'A Note For You' });
+        await withTimeout(navigator.share({ text: text, title: 'A Note For You' }), 8000);
         return;
       } catch (e) {
         if (e && e.name === 'AbortError') return;
+        console.error('navigator.share(text-only) failed or timed out:', e);
       }
     }
 
