@@ -3335,7 +3335,24 @@
       goTo(target);
     }
 
-    cardImgEl.addEventListener('click', function() { openLightbox(currentIndex); });
+    // Tapping a photo opens the lightbox — but the 3-card carousel rotates
+    // note content between three physical DOM elements (cardImgLeftEl,
+    // cardImgEl, cardImgRightEl) as the recipient navigates, reassigning
+    // which one currently plays "front". A listener on just cardImgEl only
+    // ever worked for whichever note happened to be front when the page
+    // first loaded — every other note's photo became unclickable the
+    // moment its slot rotated onto a different element. Attaching to all
+    // three and checking the slot's live role at click-time fixes that.
+    slots.forEach(function(slot) {
+      if (!slot.imgEl) return;
+      slot.imgEl.addEventListener('click', function(e) {
+        if (slot.role !== 'front') return; // peek cards: let this bubble to
+                                            // slot.el's own handler instead,
+                                            // which brings them to the front
+        e.stopPropagation();
+        openLightbox(currentIndex);
+      });
+    });
     photoLightbox.addEventListener('click', closeLightbox);
     lightboxShareBtn.addEventListener('click', function(e) {
       e.stopPropagation();
