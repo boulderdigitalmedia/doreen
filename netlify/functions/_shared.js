@@ -201,12 +201,17 @@ function buildSmsBody(gift, note, noteNum, giftUrl) {
   return `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'}: "${preview}" — ${giftUrl}`;
 }
 
-async function sendSms(phone, body) {
-  await twilioClient.messages.create({
+async function sendSms(phone, body, mediaUrl) {
+  const payload = {
     body,
     from: process.env.TWILIO_PHONE_NUMBER,
     to:   phone,
-  });
+  };
+  // Attaching mediaUrl turns this into an MMS (Twilio auto-detects based on
+  // presence of media). The photo is already a public Supabase Storage URL,
+  // so Twilio can fetch it directly — no extra upload/signing needed.
+  if (mediaUrl) payload.mediaUrl = [mediaUrl];
+  await twilioClient.messages.create(payload);
 }
 
 // ── Low-notes alert (to the buyer, not the recipient) ─────────────
@@ -341,7 +346,7 @@ async function sendGiftNotifications(gift, force = false) {
   if (recipient.channels.includes('sms') && gift.sms_addon && recipient.phone) {
     try {
       const body = buildSmsBody(gift, note, noteNum, giftUrl);
-      await sendSms(recipient.phone, body);
+      await sendSms(recipient.phone, body, note.photo_url || null);
       results.sms = 'sent';
     } catch (err) {
       results.sms = `error: ${err.message}`;
