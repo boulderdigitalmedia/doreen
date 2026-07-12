@@ -524,6 +524,12 @@
       position: relative;
       width: 100%;
       max-width: 473px;
+      /* The peek cards below are rotated + offset via transform, which is
+         purely visual — it doesn't add to this element's layout height. At
+         steeper rotation angles their corners can swing down far enough to
+         overlap the actions row (nav/heart/share buttons) that follows.
+         This margin reserves real clearance so that never happens. */
+      margin-bottom: 48px;
     }
 
     .card {
