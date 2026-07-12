@@ -1162,7 +1162,7 @@
 
     .photo-lightbox img {
       max-width: 100%;
-      max-height: 78vh;
+      max-height: 62vh; /* leaves headroom for a long caption below without the two together overflowing the viewport */
       object-fit: contain;
       border-radius: 4px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.4);
@@ -1226,6 +1226,16 @@
       max-width: 560px;
       margin-top: 20px;
       cursor: default;
+      /* A long note used to just overflow straight past the fixed-position
+         lightbox with no way to reach the rest of it — worse, since nothing
+         clipped the overflow, it rendered on top of whatever page content
+         was underneath instead of the lightbox's dark backdrop, looking
+         like garbled double-exposed text. Capping the height and scrolling
+         internally keeps it fully readable and contained. */
+      max-height: 22vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 4px;
     }
 
     .photo-lightbox-close {
