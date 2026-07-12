@@ -9,6 +9,11 @@
   status = 200
 
 [[redirects]]
+  from   = "/api/photo-proxy"
+  to     = "/.netlify/functions/photo-proxy"
+  status = 200
+
+[[redirects]]
   from   = "/api/subscribe"
   to     = "/.netlify/functions/subscribe"
   status = 200
