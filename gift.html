@@ -2963,11 +2963,19 @@
   }
 
   function openShareFallback(blob, text) {
+    console.log('[share] openShareFallback() entered, blob:', blob);
     var overlay  = document.getElementById('shareOverlay');
     var preview  = document.getElementById('shareModalPreview');
     var dlBtn    = document.getElementById('shareDownloadBtn');
     var copyBtn  = document.getElementById('shareCopyBtn');
     var closeBtn = document.getElementById('shareModalCloseBtn');
+
+    if (!overlay || !preview || !dlBtn || !copyBtn || !closeBtn) {
+      console.error('[share] openShareFallback: one or more elements missing from the page', {
+        overlay: !!overlay, preview: !!preview, dlBtn: !!dlBtn, copyBtn: !!copyBtn, closeBtn: !!closeBtn
+      });
+      return;
+    }
 
     var url = blob ? URL.createObjectURL(blob) : null;
     if (url) {
@@ -2980,6 +2988,7 @@
     }
 
     overlay.classList.add('open');
+    console.log('[share] overlay classes now:', overlay.className, '| computed display:', getComputedStyle(overlay).display);
 
     function cleanup() {
       overlay.classList.remove('open');
@@ -3012,15 +3021,18 @@
   }
 
   async function shareNote(note) {
-    if (!note) return;
+    console.log('[share] shareNote() entered');
+    if (!note) { console.log('[share] shareNote() aborting: no note'); return; }
     // The note's own text is already overlaid on the composed share image
     // itself, so it'd be redundant to repeat it here — use this space for a
     // small promo + link back to the site instead, for whoever receives it.
     var text = SHARE_PROMO_TEXT;
     var blob = null;
 
+    console.log('[share] building share image...');
     try {
       blob = await buildShareImage(note);
+      console.log('[share] buildShareImage succeeded, blob:', blob);
     } catch (e) {
       console.error('buildShareImage failed, falling back to raw photo fetch:', e);
       // Composing the branded image failed. Fall back to sharing the raw
@@ -3031,6 +3043,7 @@
         catch (e2) { console.error('Raw photo fetch also failed — sharing text-only:', e2); }
       }
     }
+    console.log('[share] navigator.share:', typeof navigator.share, '| navigator.canShare:', typeof navigator.canShare, '| have blob:', !!blob);
 
     // Prefer the platform's own native share sheet on every device — that's
     // what gives people the real app picker (Messages, WhatsApp, Mail,
@@ -3076,6 +3089,7 @@
       }
     }
 
+    console.log('[share] falling back to openShareFallback modal');
     openShareFallback(blob, text);
   }
 
@@ -3707,18 +3721,24 @@
 
     function runPlatformShare(fn) {
       return function() {
+        console.log('[share] button clicked');
         var note = PLATFORM_SHARE_NOTE;
         closePlatformSharePicker();
-        if (!note) return;
+        if (!note) { console.log('[share] aborting: no note captured'); return; }
+        console.log('[share] proceeding with note', note.id || note);
         // Composing the share image can take a moment (and the picker
         // closes immediately, hiding whatever was clicked) — without any
         // cue, that gap looked exactly like nothing had happened. A busy
         // cursor is a minimal, universal way to show something's in
         // progress without adding new UI just for this.
         document.body.style.cursor = 'wait';
-        Promise.resolve(fn(note)).finally(function() {
-          document.body.style.cursor = '';
-        });
+        Promise.resolve(fn(note))
+          .then(function() { console.log('[share] fn(note) resolved'); })
+          .catch(function(e) { console.error('[share] fn(note) rejected:', e); })
+          .finally(function() {
+            document.body.style.cursor = '';
+            console.log('[share] cursor reset, flow ended');
+          });
       };
     }
 
