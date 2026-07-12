@@ -3045,14 +3045,25 @@
     }
     console.log('[share] navigator.share:', typeof navigator.share, '| navigator.canShare:', typeof navigator.canShare, '| have blob:', !!blob);
 
-    // Prefer the platform's own native share sheet on every device — that's
-    // what gives people the real app picker (Messages, WhatsApp, Mail,
-    // Instagram, etc.) instead of us guessing which app they want. This
-    // only works well once we actually have a real image to hand it
+    // Confirmed via live testing: navigator.share() can resolve
+    // *successfully* on desktop (Windows Chrome/Edge) while doing
+    // absolutely nothing visible — if there are no apps registered as OS
+    // "share targets," the promise just resolves anyway. Phones and
+    // tablets always have built-in share targets (Mail, Messages, etc.),
+    // so touch support is used as a practical proxy for "this device has a
+    // real, working native share sheet." Desktop skips straight to the
+    // fallback modal below instead, which is guaranteed to actually work.
+    var hasReliableNativeShare = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+    console.log('[share] hasReliableNativeShare (touch-capable):', hasReliableNativeShare);
+
+    // Prefer the platform's own native share sheet on touch devices —
+    // that's what gives people the real app picker (Messages, WhatsApp,
+    // Mail, Instagram, etc.) instead of us guessing which app they want.
+    // This only works well once we actually have a real image to hand it
     // (previously blob was silently ending up null due to the CORS bug
     // above — now that /api/photo-proxy fixes that, native sharing gets a
     // real image to work with on both iOS and Android.
-    if (blob && navigator.canShare && navigator.share) {
+    if (blob && hasReliableNativeShare && navigator.canShare && navigator.share) {
       var file = new File([blob], 'a-note-for-you.png', { type: blob.type || 'image/png' });
       var canShareFiles = false;
       try { canShareFiles = navigator.canShare({ files: [file] }); }
@@ -3074,12 +3085,13 @@
     }
 
     // Only fall back to a text-only native share when there's no image to
-    // offer at all. If we DO have an image but this browser can't do
-    // file-based sharing (canShare({files}) failed above), firing off a
-    // text-only share would silently drop the photo — go to our own
-    // fallback modal instead, which always includes the image (with its
-    // own download button) alongside the caption.
-    if (!blob && navigator.share) {
+    // offer at all AND we're on a device with a reliable native share
+    // sheet. If we DO have an image but this browser can't do file-based
+    // sharing (canShare({files}) failed above), firing off a text-only
+    // share would silently drop the photo — go to our own fallback modal
+    // instead, which always includes the image (with its own download
+    // button) alongside the caption.
+    if (!blob && hasReliableNativeShare && navigator.share) {
       try {
         await withTimeout(navigator.share({ text: text, title: 'A Note For You' }), 8000);
         return;
