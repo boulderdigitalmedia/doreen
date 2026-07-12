@@ -2257,7 +2257,9 @@
   // baked into the shared image itself as an overlay, so repeating it in
   // the message body would be redundant. This is a little promo for us
   // instead, since that's the one thing the image itself can't carry.
-  var SHARE_PROMO_TEXT = 'Send a gift of memories to someone you care about — https://anoteforyou.app';
+  // Plain text, not markdown — this goes straight into an SMS/native share
+  // sheet or a clipboard paste, none of which render [text](url) as a link.
+  var SHARE_PROMO_TEXT = 'Send your own note to someone you care about → https://anoteforyou.app/';
 
   document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });
 
