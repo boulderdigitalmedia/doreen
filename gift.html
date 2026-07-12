@@ -647,6 +647,12 @@
 
     /* BOTTOM CONTROLS */
     .card-actions {
+      position: relative;
+      z-index: 10; /* above .card/.card.peek (z-index 1–3) — the margin below
+                      .card-stack keeps them visually clear most of the time,
+                      but longer notes/steeper rotation can still nudge a
+                      card's corner into this row, so this guarantees the
+                      buttons stay on top and clickable regardless. */
       display: flex;
       align-items: center;
       justify-content: center;
