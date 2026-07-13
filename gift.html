@@ -2811,18 +2811,10 @@
       await sb.from('recipients').upsert(recipientData, { onConflict: 'gift_id' });
     }
 
-    // One-time welcome email — only on first-time setup, never on a later
-    // preferences revisit (send-welcome-email.js is idempotent via
-    // welcome_sent_at too, but no need to even call it for a revisit).
-    // Fire-and-forget: nothing in this flow should block on it or fail if
-    // it errors.
-    if (!isPrefsRevisit && channels.length > 0) {
-      fetch('/api/send-welcome-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: slug })
-      }).catch(function(e) { console.warn('Welcome email request failed:', e); });
-    }
+    // The welcome content itself now rides along with the actual first
+    // note delivery (see sendGiftNotifications / buildFirstNoteEmailHtml
+    // in _shared.js) instead of being a separate email fired from here —
+    // so nothing extra needs to happen on this end anymore.
 
     RECIPIENT = Object.assign({}, RECIPIENT, recipientData); // keep in sync for if prefs are reopened again this session
     localStorage.setItem('gift-setup-' + slug, '1');
