@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Private/utility pages (dashboard, login, checkout success, individual gift
+# pages) are excluded via <meta name="robots" content="noindex"> on each
+# page instead of a Disallow rule here — Disallow would stop crawlers from
+# ever reading that noindex tag, and a URL can still show up in search
+# results (just with no snippet) if something else links to it. noindex is
+# the more reliable way to actually keep a page out of search results.
+
+Sitemap: https://anoteforyou.app/sitemap.xml
