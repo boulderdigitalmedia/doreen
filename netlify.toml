@@ -92,11 +92,6 @@
   to     = "/.netlify/functions/update-gift-password"
   status = 200
 
-[[redirects]]
-  from   = "/api/send-welcome-email"
-  to     = "/.netlify/functions/send-welcome-email"
-  status = 200
-
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
