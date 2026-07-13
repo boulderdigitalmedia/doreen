@@ -191,6 +191,138 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
 </html>`;
 }
 
+// One-time email sent the moment a recipient finishes onboarding (choosing
+// their notification channels) — separate from buildEmailHtml, which is
+// the "a new note is waiting" template reused for every delivery including
+// note 1. This one instead just orients them: who set this up, what to
+// expect, and how it'll reach them, before any note content is shown.
+
+function frequencyLabel(gift) {
+  if (gift.frequency === 'weekly')   return 'a new note every week';
+  if (gift.frequency === 'biweekly') return 'a new note every two weeks';
+  if (gift.frequency === 'monthly')  return 'a new note every month';
+  return 'a new note every day';
+}
+
+function welcomeTourItems(gift, recipient) {
+  const items = [];
+
+  items.push({
+    title: `A new note ${frequencyLabel(gift).replace('a new note ', '')}`,
+    body: `Some are just a few words, some come with a photo — each one written by ${gift.sender_name || 'Your Favorite'} just for you. You can choose how you want to receive yours — text message, email, and/or push notifications. You can change that anytime from the settings icon on your gallery page.`
+  });
+
+  items.push({
+    title: 'Nothing gets lost',
+    body: `Every note you've been sent stays saved on your page, so you can always scroll back — bookmark your link and come back anytime to relive your memories.`
+  });
+
+  items.push({
+    title: 'Save your favorites',
+    body: `Tap the heart on any note to keep it in your Favorites, so the ones that mean the most to you are easy to find again later.`
+  });
+
+  items.push({
+    title: "It's just for you",
+    body: `Your page is protected by the password you set — no one else can open it without it, so it's a private space between you and ${gift.sender_name || 'Your Favorite'}.`
+  });
+
+  items.push({
+    title: 'Share your favorite notes',
+    body: `Found one that made your day? Tap the share icon in the top corner of any note to send it — photo and all — straight to a friend or family member by text, or to your favorite social app.`
+  });
+
+  items.push({
+    title: 'Change your mind anytime',
+    body: `Not loving text messages, or want your notes at a different time of day? Tap the settings icon on your page to update how and when they reach you, whenever and however you like.`
+  });
+
+  return items;
+}
+
+function buildWelcomeEmailHtml(gift, recipient, giftUrl) {
+  const senderName = gift.sender_name || 'Your Favorite';
+  const tourRows = welcomeTourItems(gift, recipient).map(function(item) {
+    return `<tr>
+      <td style="padding:0 0 20px;vertical-align:top;">
+        <table cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:top;padding-right:12px;">
+            <span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;background:#e8f0e8;color:#7a9e7e;border-radius:50%;font-size:12px;font-family:'DM Sans',sans-serif;">✦</span>
+          </td>
+          <td style="vertical-align:top;">
+            <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#2c3a2e;font-family:'DM Sans',sans-serif;">${item.title}</p>
+            <p style="margin:0;font-size:14px;line-height:1.6;color:#4a5c4b;font-family:'DM Sans',sans-serif;">${item.body}</p>
+          </td>
+        </tr></table>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+</head>
+<body style="margin:0;padding:0;background:#f5f2ec;font-family:'Georgia',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f2ec;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #dde8dd;">
+        <tr>
+          <td style="padding:28px 32px 20px;border-bottom:1px solid #dde8dd;">
+            <p style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#8fa391;font-family:'DM Sans',sans-serif;">From</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:300;color:#2c3a2e;">${senderName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 16px;">
+            <span style="background:#e8f0e8;color:#7a9e7e;font-size:11px;font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:0.08em;padding:4px 12px;border-radius:20px;border:1px solid #c8dbc9;">
+              ✦ Welcome
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 14px;">
+            <p style="margin:0;font-size:24px;font-weight:300;line-height:1.4;color:#2c3a2e;">
+              ${senderName} set up <em>A Note For You</em>.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 28px;">
+            <p style="margin:0;font-size:16px;line-height:1.7;color:#4a5c4b;font-family:'DM Sans',sans-serif;">
+              It's a little corner of the internet made just for you — a small, steady reason to smile, written one note at a time by someone who's thinking of you. Here's what to expect:
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 8px;">
+            <table width="100%" cellpadding="0" cellspacing="0">${tourRows}</table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 32px 36px;">
+            <a href="${giftUrl}"
+               style="display:inline-block;background:#7a9e7e;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;">
+              Open your gift →
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px;border-top:1px solid #dde8dd;">
+            <p style="margin:0;font-size:12px;color:#8fa391;font-family:'DM Sans',sans-serif;">
+              You're receiving this because someone special set this up for you.
+              <br>Visit <a href="${giftUrl}" style="color:#7a9e7e;">${giftUrl}</a> anytime.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ── SMS ──────────────────────────────────────────────────────────
 
 function buildSmsBody(gift, note, noteNum, giftUrl) {
@@ -385,6 +517,7 @@ module.exports = {
   isDeliveryWindow,
   sendGiftNotifications,
   buildEmailHtml,
+  buildWelcomeEmailHtml,
   buildFrom,
   ok, err, preflight
 };
