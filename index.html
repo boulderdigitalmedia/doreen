@@ -17,10 +17,57 @@
   <meta property="og:description" content="Send someone special a new reason why, every single day. Beautiful notes with photos, delivered by push notification, email, or text." />
   <meta property="og:image" content="https://anoteforyou.app/social-preview.jpg" />
   <meta property="og:url" content="https://anoteforyou.app/" />
+  <link rel="canonical" href="https://anoteforyou.app/" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="A Note For You — Daily notes for someone special, delivered" />
   <meta name="twitter:description" content="Send someone special a new reason why, every single day. Beautiful notes with photos, delivered by push notification, email, or text." />
   <meta name="twitter:image" content="https://anoteforyou.app/social-preview.jpg" />
+
+  <!-- Structured data — helps search engines understand what this is and
+       who runs it, and is a prerequisite for things like rich pricing
+       snippets. Kept intentionally simple/conservative (no ratings or
+       review counts, since none genuinely exist yet). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "A Note For You",
+    "url": "https://anoteforyou.app/",
+    "description": "Send someone special a new reason why, every single day. Beautiful notes with photos, delivered by push notification, email, or text.",
+    "email": "hello@anoteforyou.app"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "name": "A Note For You",
+    "serviceType": "Scheduled personal note and photo delivery",
+    "provider": {
+      "@type": "Organization",
+      "name": "Boulder Digital Media LLC"
+    },
+    "areaServed": "Worldwide",
+    "url": "https://anoteforyou.app/",
+    "offers": [
+      {
+        "@type": "Offer",
+        "name": "Monthly plan",
+        "price": "9.00",
+        "priceCurrency": "USD",
+        "url": "https://anoteforyou.app/signup"
+      },
+      {
+        "@type": "Offer",
+        "name": "Annual plan",
+        "price": "90.00",
+        "priceCurrency": "USD",
+        "url": "https://anoteforyou.app/signup"
+      }
+    ]
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
   <style>
