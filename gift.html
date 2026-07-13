@@ -403,6 +403,29 @@
     }
     .ob-legal a { color: var(--ink-soft); text-decoration: underline; }
 
+    .ob-legal-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 18px;
+      text-align: left;
+    }
+    .ob-legal-check input[type="checkbox"] {
+      margin-top: 2px;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      accent-color: var(--sage);
+      cursor: pointer;
+    }
+    .ob-legal-check label {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--ink-mid);
+      cursor: pointer;
+    }
+    .ob-legal-check label a { color: var(--sage); text-decoration: underline; }
+
     /* ── MAIN APP ── */
     #app {
       display: none;
@@ -1901,10 +1924,16 @@
       <div class="lock-error" id="obPasswordError" style="display:none"></div>
     </div>
 
+    <div class="ob-legal-check" id="obLegalCheck">
+      <input type="checkbox" id="obLegalCheckbox" />
+      <label for="obLegalCheckbox">I agree to the <a href="/terms" target="_blank">Terms</a>, <a href="/privacy" target="_blank">Privacy Policy</a>, and <a href="/conduct" target="_blank">Code of Conduct</a>.</label>
+    </div>
+    <div class="ob-legal" id="obLegalStatic" style="display:none">You previously agreed to our <a href="/terms" target="_blank">Terms</a>, <a href="/privacy" target="_blank">Privacy Policy</a>, and <a href="/conduct" target="_blank">Code of Conduct</a>.</div>
+    <div class="lock-error" id="obLegalError" style="display:none">Please agree to the Terms, Privacy Policy, and Code of Conduct to continue.</div>
+
     <button class="ob-btn" id="obBtn" onclick="submitOnboarding()">Open my gift</button>
     <span class="ob-skip" id="obSkip" onclick="skipOnboarding()">Skip for now</span>
     <span class="ob-skip" id="obCancel" style="display:none" onclick="cancelPrefsEdit()">Cancel</span>
-    <div class="ob-legal">By continuing, you agree to our <a href="/terms" target="_blank">Terms</a>, <a href="/privacy" target="_blank">Privacy Policy</a>, and <a href="/conduct" target="_blank">Code of Conduct</a>.</div>
   </div>
 </div>
 
@@ -2649,6 +2678,16 @@
     document.getElementById('obSkip').style.display = isPrefsRevisit ? 'none' : 'block';
     document.getElementById('obCancel').style.display = isPrefsRevisit ? 'block' : 'none';
 
+    // Only first-time setup requires (re-)checking the agreement box —
+    // a revisit from the ⚙ button is just adjusting settings, not agreeing
+    // to anything new, so it gets a plain reminder instead. Reset the
+    // checkbox/error each time this opens rather than leaving stale state
+    // from a previous open this session.
+    document.getElementById('obLegalCheck').style.display = isPrefsRevisit ? 'none' : 'flex';
+    document.getElementById('obLegalStatic').style.display = isPrefsRevisit ? 'block' : 'none';
+    document.getElementById('obLegalCheckbox').checked = false;
+    document.getElementById('obLegalError').style.display = 'none';
+
     if (gift.sms_addon) {
       document.getElementById('obSms').style.display = 'block';
     }
@@ -2744,6 +2783,15 @@
       document.getElementById('emailInput').focus();
       return;
     }
+
+    // First-time setup requires ticking the agreement checkbox — a revisit
+    // doesn't show it at all (see showOnboarding), so this only ever blocks
+    // the initial "Open my gift" flow.
+    if (!isPrefsRevisit && !document.getElementById('obLegalCheckbox').checked) {
+      document.getElementById('obLegalError').style.display = 'block';
+      return;
+    }
+    document.getElementById('obLegalError').style.display = 'none';
 
     var btn = document.getElementById('obBtn');
     btn.disabled = true;
