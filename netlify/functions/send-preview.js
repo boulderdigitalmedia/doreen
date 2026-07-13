@@ -8,7 +8,7 @@
 // recipient actually gets it. Doesn't touch the recipient's channels,
 // doesn't mark anything as sent, and doesn't affect the schedule at all.
 const { createClient } = require('@supabase/supabase-js');
-const { sb, resend, getNoteIndex, buildEmailHtml, buildFrom, ok, err, preflight } = require('./_shared');
+const { sb, resend, getNoteIndex, buildEmailHtml, buildFirstNoteEmailHtml, buildFrom, ok, err, preflight } = require('./_shared');
 
 const sbAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -62,6 +62,7 @@ exports.handler = async (event) => {
   }
 
   const noteNum = noteIndex + 1;
+  const isFirstNote = noteNum === 1;
   const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}`;
 
   try {
@@ -69,7 +70,9 @@ exports.handler = async (event) => {
       from:    buildFrom(`A Note For You From ${gift.sender_name || 'Your Favorite'}`),
       to:      user.email,
       subject: `👀 Preview — Note ${noteNum} for "${gift.display_name}"`,
-      html:    buildEmailHtml(gift, note, noteNum, giftUrl),
+      html: isFirstNote
+        ? buildFirstNoteEmailHtml(gift, note, recipient, giftUrl)
+        : buildEmailHtml(gift, note, noteNum, giftUrl),
     });
   } catch (e) {
     return err('Could not send preview: ' + e.message, 500);
