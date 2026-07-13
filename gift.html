@@ -1928,7 +1928,7 @@
       <button class="fav-btn" id="prefsOpenBtn" title="Notification preferences">
         <svg class="icon-svg icon-gear" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
       </button>
-      <button class="fav-btn" id="favOpenBtn" title="Favourites">
+      <button class="fav-btn" id="favOpenBtn" title="Favorites">
         <svg class="icon-svg icon-heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>
         <span class="fav-count" id="favCount"></span>
       </button>
@@ -2031,9 +2031,9 @@
 <div class="fav-overlay" id="favOverlay"></div>
 <div class="fav-drawer" id="favDrawer">
   <div class="fav-header">
-    <span class="fav-title">Favourites</span>
+    <span class="fav-title">Favorites</span>
     <div class="fav-header-right">
-      <div class="fav-view-toggle" role="group" aria-label="Favourites view">
+      <div class="fav-view-toggle" role="group" aria-label="Favorites view">
         <button class="fav-view-btn" id="favViewListBtn" aria-label="List view" title="List view">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
         </button>
@@ -2809,6 +2809,19 @@
     // Save to Supabase
     if (channels.length > 0) {
       await sb.from('recipients').upsert(recipientData, { onConflict: 'gift_id' });
+    }
+
+    // One-time welcome email — only on first-time setup, never on a later
+    // preferences revisit (send-welcome-email.js is idempotent via
+    // welcome_sent_at too, but no need to even call it for a revisit).
+    // Fire-and-forget: nothing in this flow should block on it or fail if
+    // it errors.
+    if (!isPrefsRevisit && channels.length > 0) {
+      fetch('/api/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: slug })
+      }).catch(function(e) { console.warn('Welcome email request failed:', e); });
     }
 
     RECIPIENT = Object.assign({}, RECIPIENT, recipientData); // keep in sync for if prefs are reopened again this session
