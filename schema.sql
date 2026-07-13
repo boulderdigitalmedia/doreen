@@ -62,8 +62,6 @@ CREATE TABLE IF NOT EXISTS recipients (
   timezone          TEXT,                        -- recipient's own IANA tz name; NULL = use gift's default
   favorites         INTEGER[]   DEFAULT ARRAY[]::INTEGER[], -- note order_indexes the giftee has favourited — synced here so it follows them across devices
   onboarded_at      TIMESTAMPTZ,
-  welcome_sent_at   TIMESTAMPTZ,                    -- set once the one-time welcome email (send-welcome-email.js)
-                                                     -- has gone out, so onboarding revisits / retries don't resend it
   created_at        TIMESTAMPTZ DEFAULT NOW(),
   updated_at        TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (gift_id)
@@ -296,10 +294,6 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
 -- Safe to re-run even if abuse_reports already existed without this column
 -- (e.g. if you ran the migration before page_url was added here).
 ALTER TABLE abuse_reports ADD COLUMN IF NOT EXISTS page_url TEXT;
-
--- Same idea — safe to re-run if recipients already existed before the
--- one-time welcome email (send-welcome-email.js) was added.
-ALTER TABLE recipients ADD COLUMN IF NOT EXISTS welcome_sent_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_gift_slug ON abuse_reports(gift_slug);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status    ON abuse_reports(status);
