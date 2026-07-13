@@ -123,9 +123,18 @@
 
     btn.disabled = true; btn.textContent = 'Creating account…';
 
+    // profiles rows don't exist yet at signup time (they're only created
+    // later by create-checkout.js / stripe-webhook.js), and there's no
+    // client-write policy on that table anyway — so the audit trail for
+    // "read and agreed" goes on the auth user's own metadata instead,
+    // which signUp can set directly and which persists regardless of
+    // whether they ever complete checkout.
     const { error } = await sb.auth.signUp({
       email:    document.getElementById('signupEmail').value.trim(),
-      password: document.getElementById('signupPw').value
+      password: document.getElementById('signupPw').value,
+      options: {
+        data: { terms_accepted_at: new Date().toISOString() }
+      }
     });
 
     if (error) {
