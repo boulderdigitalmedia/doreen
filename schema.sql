@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS recipients (
   timezone          TEXT,                        -- recipient's own IANA tz name; NULL = use gift's default
   favorites         INTEGER[]   DEFAULT ARRAY[]::INTEGER[], -- note order_indexes the giftee has favourited — synced here so it follows them across devices
   onboarded_at      TIMESTAMPTZ,
+  terms_accepted_at TIMESTAMPTZ,                    -- audit trail: when this recipient ticked the "I agree to the
+                                                     -- Terms/Privacy/Code of Conduct" checkbox during first-time
+                                                     -- setup on gift.html (see submitOnboarding())
   created_at        TIMESTAMPTZ DEFAULT NOW(),
   updated_at        TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (gift_id)
@@ -297,6 +300,10 @@ ALTER TABLE abuse_reports ADD COLUMN IF NOT EXISTS page_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_gift_slug ON abuse_reports(gift_slug);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status    ON abuse_reports(status);
+
+-- Same idea — safe to re-run if recipients already existed before the
+-- terms-acceptance audit trail (terms_accepted_at) was added.
+ALTER TABLE recipients ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 
 ALTER TABLE abuse_reports ENABLE ROW LEVEL SECURITY;
 
