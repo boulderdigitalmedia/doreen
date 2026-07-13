@@ -251,10 +251,8 @@
       text-align: center; margin-bottom: 64px; color: var(--ink);
     }
     /* Inline brand mark used when a section title references the product
-       by name — sized in em so it scales with whatever heading it sits
-       inside, matching the nav's icon-plus-wordmark treatment. */
-    .title-logo { display: inline-flex; align-items: center; gap: 0.12em; white-space: nowrap; }
-    .title-logo-icon { width: 1.1em; height: 0.8em; flex-shrink: 0; }
+       by name — matches the nav wordmark's italic "Note" treatment. */
+    .title-logo { white-space: nowrap; }
     .title-logo em { font-style: italic; color: var(--sage); }
     .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
     .how-card {
@@ -488,7 +486,7 @@
 <div class="usecase-section" id="ideas">
   <div class="usecase-inner">
     <div class="section-label" style="text-align:center">A few ideas</div>
-    <h2 class="section-title">Whatever the reason, there's <span class="title-logo"><svg class="title-logo-icon" viewBox="0 0 132 96" fill="none" aria-hidden="true"><rect x="3" y="6" width="126" height="84" rx="12" fill="#7E9576"></rect><path d="M3 18 C3 11 8 6 15 6 H117 C124 6 129 11 129 18 L72 54 C68 57 64 57 60 54 Z" fill="#93A98A"></path><path d="M66 63 c-2.3-2.1-11-7.3-11-14.4 a6.4 6.4 0 0 1 11-4.4 a6.4 6.4 0 0 1 11 4.4 c0 7.1-8.7 12.3-11 14.4 z" fill="#F6F3EA"></path></svg>A <em>Note</em> For You</span></h2>
+    <h2 class="section-title">Whatever the reason, there's <span class="title-logo">A <em>Note</em> For You</span></h2>
     <div class="usecase-grid">
       <div class="usecase-card">
         <div class="usecase-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
