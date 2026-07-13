@@ -2833,6 +2833,14 @@
       onboarded_at:  new Date().toISOString()
     };
 
+    // Audit trail for "read and agreed" — only set on first-time setup,
+    // when the checkbox was actually shown and checked (validated above).
+    // A prefs revisit doesn't show the checkbox at all, so it must not
+    // overwrite the original acceptance timestamp with anything here.
+    if (!isPrefsRevisit) {
+      recipientData.terms_accepted_at = new Date().toISOString();
+    }
+
     // If push selected, get push subscription first (this walks the
     // recipient through our own consent step before the browser's native
     // permission prompt — see askPushConsent()/registerPush() below)
