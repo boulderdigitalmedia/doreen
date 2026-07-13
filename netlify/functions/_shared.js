@@ -191,11 +191,12 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
 </html>`;
 }
 
-// One-time email sent the moment a recipient finishes onboarding (choosing
-// their notification channels) — separate from buildEmailHtml, which is
-// the "a new note is waiting" template reused for every delivery including
-// note 1. This one instead just orients them: who set this up, what to
-// expect, and how it'll reach them, before any note content is shown.
+// The recipient's very first gift email — sent by sendGiftNotifications in
+// place of the regular buildEmailHtml template, but only for noteNum === 1.
+// Every later note still uses the plain "a new note is waiting" template;
+// this one also orients them (who set this up, what to expect, how it'll
+// reach them) before showing note 1 itself, so their first message doubles
+// as an introduction instead of arriving as a bare, context-free note.
 
 function frequencyLabel(gift) {
   if (gift.frequency === 'weekly')   return 'a new note every week';
@@ -240,8 +241,11 @@ function welcomeTourItems(gift, recipient) {
   return items;
 }
 
-function buildWelcomeEmailHtml(gift, recipient, giftUrl) {
+function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl) {
   const senderName = gift.sender_name || 'Your Favorite';
+  const photo = note.photo_url
+    ? `<img src="${note.photo_url}" alt="" style="width:100%;max-width:496px;border-radius:12px;display:block;margin:0 auto 24px;" />`
+    : '';
   const tourRows = welcomeTourItems(gift, recipient).map(function(item) {
     return `<tr>
       <td style="padding:0 0 20px;vertical-align:top;">
@@ -301,7 +305,22 @@ function buildWelcomeEmailHtml(gift, recipient, giftUrl) {
           </td>
         </tr>
         <tr>
-          <td style="padding:8px 32px 36px;">
+          <td style="padding:12px 32px 6px;border-top:1px solid #dde8dd;">
+            <p style="margin:20px 0 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#8fa391;font-family:'DM Sans',sans-serif;">
+              And here's your very first note
+            </p>
+          </td>
+        </tr>
+        ${photo ? `<tr><td style="padding:16px 32px 20px;">${photo}</td></tr>` : ''}
+        <tr>
+          <td style="padding:0 32px 32px;">
+            <p style="margin:0;font-size:20px;font-weight:300;font-style:italic;line-height:1.6;color:#2c3a2e;">
+              "${note.text}"
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px 36px;">
             <a href="${giftUrl}"
                style="display:inline-block;background:#7a9e7e;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;">
               Open your gift →
@@ -459,14 +478,21 @@ async function sendGiftNotifications(gift, force = false) {
     }
   }
 
-  // Email
+  // Email — note 1 gets the richer "first gift message" (welcome content
+  // plus the note itself, all in one email); every later note gets the
+  // plain "a new note is waiting" template.
   if (recipient.channels.includes('email') && recipient.email) {
     try {
+      const isFirstNote = noteNum === 1;
       await resend.emails.send({
         from:    buildFrom(`A Note For You From ${gift.sender_name || 'Your Favorite'}`),
         to:      recipient.email,
-        subject: `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'} is waiting for you`,
-        html:    buildEmailHtml(gift, note, noteNum, giftUrl)
+        subject: isFirstNote
+          ? `💚 ${gift.sender_name || 'Your Favorite'} set up something special for you`
+          : `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'} is waiting for you`,
+        html: isFirstNote
+          ? buildFirstNoteEmailHtml(gift, note, recipient, giftUrl)
+          : buildEmailHtml(gift, note, noteNum, giftUrl)
       });
       results.email = 'sent';
     } catch (err) {
@@ -517,7 +543,7 @@ module.exports = {
   isDeliveryWindow,
   sendGiftNotifications,
   buildEmailHtml,
-  buildWelcomeEmailHtml,
+  buildFirstNoteEmailHtml,
   buildFrom,
   ok, err, preflight
 };
