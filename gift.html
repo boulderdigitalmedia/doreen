@@ -340,6 +340,37 @@
     .ob-time-row { display: flex; gap: 8px; }
     .ob-time-row .ob-input { width: auto; flex: 1; }
     .ob-time-row select.ob-input { min-width: 0; }
+    .ob-time-row .tz-select { flex: 1; min-width: 0; position: relative; }
+
+    /* Searchable timezone picker — a text input + filtered dropdown list,
+       built with plain JS/CSS (no external combobox library available on
+       this page). The actual selected zone lives on a hidden input with
+       the original element's id, so every other place in the code that
+       reads .value off that id keeps working unchanged. */
+    .tz-search-input { width: 100%; }
+    .tz-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      max-height: 220px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(20,26,20,0.12);
+      z-index: 20;
+    }
+    .tz-dropdown.open { display: block; }
+    .tz-option {
+      padding: 9px 14px;
+      font-size: 14px;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .tz-option.active { background: var(--sage-pale); }
+    .tz-option.tz-no-match { color: var(--ink-soft); cursor: default; }
 
     /* TEXT SIZE — reading-accessibility control, affects the note text
        (and related labels) throughout the gift page via --text-scale. */
@@ -2750,8 +2781,13 @@
     'America/Sao_Paulo','America/Bogota','UTC',
   ];
 
+  function tzLabel(z) { return z.replace(/_/g, ' '); }
+
+  // Converts (once) the plain <select id="selectId"> into a searchable text
+  // input + filtered dropdown list. Safe to call repeatedly (e.g. every time
+  // the onboarding screen reopens) — after the first call it just updates
+  // the value instead of rebuilding the widget.
   function populateTimezoneSelect(selectId, currentValue) {
-    var select = document.getElementById(selectId);
     var zones;
     try {
       zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : COMMON_TIMEZONES;
@@ -2760,10 +2796,99 @@
     }
     if (currentValue && zones.indexOf(currentValue) === -1) zones = [currentValue].concat(zones);
 
-    select.innerHTML = zones.map(function(z) {
-      return '<option value="' + z + '">' + z.replace(/_/g, ' ') + '</option>';
-    }).join('');
-    select.value = currentValue || 'Pacific/Auckland';
+    var el = document.getElementById(selectId);
+
+    if (el.tagName === 'SELECT') {
+      var wrap = document.createElement('div');
+      wrap.className = 'tz-select';
+
+      var search = document.createElement('input');
+      search.type = 'text';
+      search.className = el.className + ' tz-search-input';
+      search.id = selectId + '_search';
+      search.autocomplete = 'off';
+      search.placeholder = 'Search timezone…';
+
+      var dropdown = document.createElement('div');
+      dropdown.className = 'tz-dropdown';
+
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.id = selectId;
+
+      wrap.appendChild(search);
+      wrap.appendChild(hidden);
+      wrap.appendChild(dropdown);
+      el.parentNode.replaceChild(wrap, el);
+
+      var activeIndex = -1;
+
+      function render(filterText) {
+        var q = (filterText || '').trim().toLowerCase();
+        var matches = !q ? zones : zones.filter(function(z) {
+          return tzLabel(z).toLowerCase().indexOf(q) !== -1 || z.toLowerCase().indexOf(q) !== -1;
+        });
+        activeIndex = matches.length ? 0 : -1;
+        dropdown.innerHTML = matches.slice(0, 200).map(function(z, i) {
+          return '<div class="tz-option' + (i === 0 ? ' active' : '') + '" data-zone="' + z + '">' + tzLabel(z) + '</div>';
+        }).join('') || '<div class="tz-option tz-no-match">No matching timezone</div>';
+      }
+
+      function selectZone(zone) {
+        hidden.value = zone;
+        search.value = tzLabel(zone);
+        dropdown.classList.remove('open');
+      }
+
+      search.addEventListener('focus', function() {
+        render(search.value === tzLabel(hidden.value) ? '' : search.value);
+        dropdown.classList.add('open');
+      });
+      search.addEventListener('input', function() {
+        render(search.value);
+        dropdown.classList.add('open');
+      });
+      search.addEventListener('blur', function() {
+        // Delayed so a click on an option (mousedown fires first, below)
+        // still registers before the dropdown gets hidden here.
+        setTimeout(function() {
+          dropdown.classList.remove('open');
+          if (tzLabel(hidden.value) !== search.value) search.value = tzLabel(hidden.value);
+        }, 150);
+      });
+      search.addEventListener('keydown', function(e) {
+        if (!dropdown.classList.contains('open')) return;
+        var options = dropdown.querySelectorAll('.tz-option[data-zone]');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIndex = Math.min(activeIndex + 1, options.length - 1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIndex = Math.max(activeIndex - 1, 0);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (options[activeIndex]) selectZone(options[activeIndex].getAttribute('data-zone'));
+          return;
+        } else if (e.key === 'Escape') {
+          dropdown.classList.remove('open');
+          return;
+        } else {
+          return;
+        }
+        options.forEach(function(o, i) { o.classList.toggle('active', i === activeIndex); });
+        if (options[activeIndex]) options[activeIndex].scrollIntoView({ block: 'nearest' });
+      });
+      dropdown.addEventListener('mousedown', function(e) {
+        var opt = e.target.closest('.tz-option[data-zone]');
+        if (opt) selectZone(opt.getAttribute('data-zone'));
+      });
+
+      el = hidden;
+    }
+
+    el.value = currentValue || 'Pacific/Auckland';
+    var searchEl = document.getElementById(selectId + '_search');
+    if (searchEl) searchEl.value = tzLabel(el.value);
   }
 
   function toggleOption(channel) {
