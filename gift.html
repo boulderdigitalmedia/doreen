@@ -476,7 +476,10 @@
       animation: fadeDown 0.7s ease 0.1s forwards;
     }
 
-    .brand { display: flex; flex-direction: column; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-logo { width: 30px; height: 22px; flex-shrink: 0; }
+    .brand-logo-envelope { width: 100%; height: 100%; display: block; }
+    .brand-text { display: flex; flex-direction: column; }
     .brand-from  { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); }
     .brand-name  { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 300; color: var(--ink); line-height: 1.1; }
 
@@ -1901,7 +1904,7 @@
         <div class="ob-option-icon">🔔</div>
         <div class="ob-option-body">
           <div class="ob-option-title">Push notification</div>
-          <div class="ob-option-desc">A tap on your phone — works even without the app open</div>
+          <div class="ob-option-desc">A tap on your phone, even when you're not looking at this page</div>
         </div>
         <div class="ob-check" id="checkPush"></div>
       </div>
@@ -1973,8 +1976,17 @@
 
   <div class="topbar">
     <div class="brand">
-      <span class="brand-from">From</span>
-      <span class="brand-name" id="senderName">Your Favorite</span>
+      <span class="brand-logo" aria-hidden="true">
+        <svg class="brand-logo-envelope" viewBox="0 0 132 96" fill="none" aria-hidden="true">
+          <rect x="3" y="6" width="126" height="84" rx="12" fill="#7E9576"></rect>
+          <path d="M3 18 C3 11 8 6 15 6 H117 C124 6 129 11 129 18 L72 54 C68 57 64 57 60 54 Z" fill="#93A98A"></path>
+          <path d="M66 63 c-2.3-2.1-11-7.3-11-14.4 a6.4 6.4 0 0 1 11-4.4 a6.4 6.4 0 0 1 11 4.4 c0 7.1-8.7 12.3-11 14.4 z" fill="#F6F3EA"></path>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <span class="brand-from">From</span>
+        <span class="brand-name" id="senderName">Your Favorite</span>
+      </div>
     </div>
     <div class="topbar-right">
       <div class="main-view-toggle" role="group" aria-label="Note display">
