@@ -429,6 +429,57 @@ async function checkUpcomingNoteShortage(gift, recipient) {
 
 // ── Core send function ───────────────────────────────────────────
 
+// ── Fair term start (first-send anchored) ───────────────────────
+// See the long comment in schema.sql next to profiles.term_start_date/
+// access_term_end for the full rationale. Short version: the buyer's
+// 12-month "access term" starts from their first note actually going
+// out, not from the moment they paid — capped at 30 days after signup
+// by send-daily.js's scheduled sweep, for buyers who never send a first
+// note in time.
+const TERM_LENGTH_DAYS = 365;
+
+// Shared by ensureTermStarted (below) and send-daily.js's 30-day-cap
+// sweep — sets the anchor once, then propagates the computed term end
+// to the buyer's included gift and any already-active add-on gifts
+// (add-ons are pinned to the base term, not their own first-send date).
+async function applyTermStart(userId, termStart, termEnd) {
+  await sb.from('profiles').update({
+    term_start_date: termStart.toISOString(),
+    access_term_end: termEnd.toISOString(),
+  }).eq('id', userId);
+
+  await sb.from('gifts')
+    .update({ term_end_date: termEnd.toISOString() })
+    .eq('user_id', userId)
+    .in('gift_type', ['included', 'addon']);
+}
+
+// Called the moment an included gift's first note goes out. Only
+// applies to gift_type 'included' — an add-on gift's own first send
+// doesn't start a new term (add-ons stay pinned to the base term).
+// Idempotent: does nothing once profiles.term_start_date is already set,
+// so it's safe to call on every note-1 send without extra guards
+// upstream.
+async function ensureTermStarted(gift) {
+  if (gift.gift_type !== 'included') return;
+  try {
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('term_start_date')
+      .eq('id', gift.user_id)
+      .maybeSingle();
+    if (!profile || profile.term_start_date) return;
+
+    const termStart = new Date();
+    const termEnd = new Date(termStart.getTime() + TERM_LENGTH_DAYS * 24 * 60 * 60 * 1000);
+    await applyTermStart(gift.user_id, termStart, termEnd);
+  } catch (err) {
+    // Never let this block the actual note send — worst case, the term
+    // gets anchored a little later (next send, or the 30-day cap).
+    console.error('Failed to anchor term start for gift', gift.id, err.message);
+  }
+}
+
 async function sendGiftNotifications(gift, force = false) {
   const { data: recipient } = await sb
     .from('recipients')
@@ -460,6 +511,12 @@ async function sendGiftNotifications(gift, force = false) {
   const noteNum = noteIndex + 1;
   const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}`;
   const results = {};
+
+  // This is the actual moment the buyer's first note goes out — anchor
+  // their fair 12-month term here, if it isn't already (see
+  // ensureTermStarted above). Fires before the per-channel sends below so
+  // the term is anchored even if every channel then happens to fail.
+  if (noteNum === 1) await ensureTermStarted(gift);
 
   // Push
   if (recipient.channels.includes('push') && recipient.push_subscription) {
@@ -542,6 +599,7 @@ module.exports = {
   shouldSendToday,
   isDeliveryWindow,
   sendGiftNotifications,
+  applyTermStart,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
