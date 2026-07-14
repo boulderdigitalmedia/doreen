@@ -20,12 +20,21 @@
 //
 // MRR is computed from each billable subscriber's actual upcoming Stripe
 // invoice (retrieveUpcoming), not a flat list price — this means it
-// correctly reflects coupons/discounts and any recurring add-ons (extra
-// gift slots, SMS) riding on the same subscription, since those show up
-// as line items on that same invoice. Only falls back to list price
-// (MONTHLY_PRICE/ANNUAL_PRICE below) for the rare profile where the
-// Stripe lookup fails or there's no subscription id on file — see
-// mrrFallbackCount in the response.
+// correctly reflects coupons/discounts and the SMS add-on (still a
+// recurring line item on the same subscription). Only falls back to
+// list price (INSTALLMENT_PRICE/ANNUAL_PRICE below) for the rare profile
+// where the Stripe lookup fails, there's no subscription id on file, or
+// the installment plan's cancel_at has already ended it (no upcoming
+// invoice to look up) — see mrrFallbackCount in the response.
+//
+// Gift add-ons are now one-time Stripe payments (see
+// create-addon-checkout.js), not a recurring subscription item, so they
+// no longer show up in the invoice-preview figure above the way the old
+// extra_gift_slots quantity item did. addonRevenueEstimate adds them
+// back in as a flat assumption: every currently-active add-on gift
+// renews at $20/yr (stripe-webhook.js enforces exactly that), so its
+// monthly-equivalent contribution is $20/12 regardless of what tier it
+// was originally bought at.
 
 const Stripe = require('stripe');
 const { sb, ok, err, preflight } = require('./_shared');
@@ -35,8 +44,9 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 // Fallback-only list prices — kept in sync with index.html / the Stripe
 // price IDs used by create-checkout.js. Real MRR comes from Stripe itself;
 // these are just what a profile falls back to if that lookup fails.
-const MONTHLY_PRICE = 9;
-const ANNUAL_PRICE  = 90;
+const INSTALLMENT_PRICE = 4.5;
+const ANNUAL_PRICE      = 45;
+const ADDON_RENEWAL_PRICE = 20; // flat renewal rate for any add-on gift
 
 const EVENTS_WINDOW_DAYS = 180;
 
@@ -105,7 +115,7 @@ exports.handler = async (event) => {
     statusCounts[status] = (statusCounts[status] || 0) + 1;
     if (billableStatuses.has(status)) {
       if (p.plan === 'annual') annualBillable++;
-      else if (p.plan === 'monthly') monthlyBillable++;
+      else if (p.plan === 'installment') monthlyBillable++;
       billableProfiles.push(p);
     }
   }
@@ -122,9 +132,21 @@ exports.handler = async (event) => {
     const real = await monthlyRevenueForSubscription(p.stripe_subscription_id, p.plan);
     if (real != null) return real;
     mrrFallbackCount++;
-    return p.plan === 'annual' ? ANNUAL_PRICE / 12 : MONTHLY_PRICE;
+    return p.plan === 'annual' ? ANNUAL_PRICE / 12 : INSTALLMENT_PRICE;
   });
-  const mrr = Math.round(monthlyAmounts.reduce((sum, n) => sum + n, 0) * 100) / 100;
+  const baseMrr = monthlyAmounts.reduce((sum, n) => sum + n, 0);
+
+  // Add-on gifts are one-time purchases, not subscription line items, so
+  // they're not part of any subscription's upcoming invoice — estimated
+  // separately here instead (see the comment above this file's constants).
+  const { count: activeAddonCount } = await sb
+    .from('gifts')
+    .select('id', { count: 'exact', head: true })
+    .eq('gift_type', 'addon')
+    .eq('status', 'active');
+
+  const addonRevenueEstimate = ((activeAddonCount || 0) * ADDON_RENEWAL_PRICE) / 12;
+  const mrr = Math.round((baseMrr + addonRevenueEstimate) * 100) / 100;
 
   const cutoff = new Date(Date.now() - EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { data: events, error: eventsErr } = await sb
@@ -155,6 +177,7 @@ exports.handler = async (event) => {
       billableTotal,
       mrr,
       mrrFallbackCount,
+      activeAddonCount: activeAddonCount || 0,
       cancellations30d,
       churnRate30d,
     },
