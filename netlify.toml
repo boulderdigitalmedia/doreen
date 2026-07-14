@@ -92,6 +92,11 @@
   to     = "/.netlify/functions/update-gift-password"
   status = 200
 
+[[redirects]]
+  from   = "/api/admin-metrics"
+  to     = "/.netlify/functions/admin-metrics"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
@@ -106,6 +111,11 @@
 [[redirects]]
   from   = "/account"
   to     = "/account.html"
+  status = 200
+
+[[redirects]]
+  from   = "/admin"
+  to     = "/admin.html"
   status = 200
 
 [[redirects]]
