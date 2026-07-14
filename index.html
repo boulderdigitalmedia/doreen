@@ -121,9 +121,10 @@
       line-height: 1;
     }
     .nav-right { display: flex; align-items: center; gap: 20px; }
-    .nav-link { font-size: 18px; color: var(--ink-mid); text-decoration: none; }
+    .nav-link { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; color: var(--ink-mid); text-decoration: none; }
     .nav-link:hover { color: var(--ink); }
-    .btn-nav { background: var(--sage); color: #fff; padding: 9px 20px; border-radius: 10px; font-size: 18px; font-weight: 500; text-decoration: none; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s; }
+    .nav-link-icon { display: none; flex-shrink: 0; }
+    .btn-nav { background: var(--sage); color: #fff; padding: 9px 20px; border-radius: 10px; font-size: 18px; font-weight: 500; text-decoration: none; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s; white-space: nowrap; }
     .btn-nav:hover { opacity: 0.85; }
 
     /* ── FIND GIFT MODAL ── */
@@ -410,6 +411,22 @@
       .hero-full-card.role-right { transform: translate(46%,4%) rotate(8deg) scale(0.85); }
       .hero-full-card.role-left  { transform: translate(-46%,4%) rotate(-8deg) scale(0.85); }
     }
+
+    /* At phone widths, "A Note For You" + "Sign in" + "Get started" no
+       longer all fit comfortably — collapse "Sign in" down to just an
+       icon so the wordmark and the primary "Get started" CTA (the one
+       that actually matters most here) both keep their full room. */
+    @media (max-width: 430px) {
+      nav { padding: 0 14px; }
+      .nav-brand { font-size: 21px; gap: 6px; }
+      .nav-brand .logo-mark { width: 24px; height: 17px; }
+      .nav-brand .logo-badge { width: 12px; height: 12px; font-size: 9px; top: -6px; right: -6px; }
+      .nav-right { gap: 8px; }
+      .nav-link { padding: 6px; }
+      .nav-link-icon { display: inline-flex; }
+      .nav-link-text { display: none; }
+      .btn-nav { padding: 8px 12px; font-size: 15px; }
+    }
   </style>
 </head>
 <body>
@@ -428,7 +445,10 @@
     A <em>Note</em> For You
   </a>
   <div class="nav-right">
-    <a class="nav-link" href="/login">Sign in</a>
+    <a class="nav-link" href="/login" aria-label="Sign in">
+      <svg class="nav-link-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4.2 3.6-7 8-7s8 2.8 8 7"></path></svg>
+      <span class="nav-link-text">Sign in</span>
+    </a>
     <a class="btn-nav" href="/signup">Get started</a>
   </div>
 </nav>
