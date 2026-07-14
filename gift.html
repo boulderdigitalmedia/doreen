@@ -1052,9 +1052,11 @@
     }
 
     .fav-item-heart {
-      color: #e05c6f; font-size: 16px;
+      color: #e05c6f;
+      width: 16px; height: 16px;
       flex-shrink: 0; padding: 4px;
     }
+    .fav-item-heart svg { display: block; width: 100%; height: 100%; }
 
     /* THUMBNAIL (GRID) VIEW — same #favList element, just re-laid-out and
        filled with a different item template when the grid toggle is on. */
@@ -1089,12 +1091,13 @@
     .fav-grid-heart {
       position: absolute;
       top: 6px; right: 6px;
+      width: 14px; height: 14px;
       color: #fff;
-      font-size: 14px;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
       padding: 2px;
       z-index: 2;
     }
+    .fav-grid-heart svg { display: block; width: 100%; height: 100%; }
 
     /* Text preview that appears over the thumbnail on hover (or keyboard
        focus, for accessibility/no-hover devices tabbing through). */
@@ -1199,13 +1202,14 @@
     .main-grid-heart {
       position: absolute;
       top: 6px; right: 6px;
+      width: 14px; height: 14px;
       color: #fff;
-      font-size: 14px;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
       padding: 2px;
       z-index: 2;
       cursor: pointer;
     }
+    .main-grid-heart svg { display: block; width: 100%; height: 100%; }
     .main-grid-heart.favourited { color: #e05c6f; }
 
     .main-grid-overlay {
@@ -3912,7 +3916,7 @@
 
       var h = document.createElement('div');
       h.className = 'main-grid-heart' + (isFavourited(idx) ? ' favourited' : '');
-      h.textContent = '♥';
+      h.innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>';
       h.addEventListener('click', function(e) {
         e.stopPropagation();
         var added = toggleFavourite(idx);
@@ -4109,7 +4113,8 @@
       body.appendChild(dayEl); body.appendChild(quoteEl);
       item.appendChild(body);
 
-      var h = document.createElement('div'); h.className = 'fav-item-heart'; h.textContent = '♥';
+      var h = document.createElement('div'); h.className = 'fav-item-heart';
+      h.innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>';
       h.addEventListener('click', favHeartHandler(idx));
       item.appendChild(h);
 
@@ -4153,7 +4158,8 @@
       overlay.appendChild(overlayQuote);
       item.appendChild(overlay);
 
-      var h = document.createElement('div'); h.className = 'fav-grid-heart'; h.textContent = '♥';
+      var h = document.createElement('div'); h.className = 'fav-grid-heart';
+      h.innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>';
       h.addEventListener('click', favHeartHandler(idx));
       item.appendChild(h);
 
