@@ -2,8 +2,8 @@
 // Body: { action: 'preview' | 'confirm' }
 // Header: Authorization: Bearer <supabase_access_token>
 //
-// Mid-term cancellation for the 12-month base plan. Behavior differs by
-// how the buyer is paying:
+// Mid-term cancellation for the 12-month base plan. Only the installment
+// plan actually has anything to cancel:
 //
 //   installment ($4.50/mo) — this is the plan the "not cancel-anytime"
 //   term actually binds. Cancelling early costs a fee: half of the
@@ -15,13 +15,14 @@
 //   that charge fails, nothing is canceled, so they're never left
 //   without access AND without having paid the fee.
 //
-//   annual ($45/yr) — already paid in full for the year, so there's no
-//   fee to compute. "Cancel" here just stops it from auto-renewing
-//   (cancel_at_period_end) — access continues through the term they
-//   already paid for, then lapses normally at term end (customer.
-//   subscription.deleted in stripe-webhook.js handles that same as any
-//   other non-renewal). This wasn't explicitly specified in the pricing
-//   doc — flagging the assumption here rather than guessing silently.
+//   annual ($45) — paid in full upfront as a one-time charge (see
+//   create-checkout.js) with no Stripe subscription behind it at all,
+//   and it doesn't auto-renew on its own either — there is genuinely
+//   nothing left to cancel. account.html doesn't show a cancel option
+//   for annual buyers at all; this just returns an informational
+//   no-op if it's ever called for one anyway (stale UI, manual testing,
+//   etc.) rather than trying to operate on a subscription that doesn't
+//   exist.
 //
 // Call with { action: 'preview' } first to show the fee before charging
 // anything; call again with { action: 'confirm' } once the buyer's
@@ -85,11 +86,8 @@ exports.handler = async (event) => {
     .eq('id', user.id)
     .maybeSingle();
 
-  if (profileErr || !profile?.stripe_subscription_id) {
+  if (profileErr || !profile?.plan) {
     return err('No active subscription found', 409);
-  }
-  if (!['active', 'trialing', 'past_due'].includes(profile.stripe_status)) {
-    return err('Subscription is not currently active', 409);
   }
 
   // access_term_end (fair, first-send-anchored — see schema.sql) is what
@@ -99,27 +97,27 @@ exports.handler = async (event) => {
   // (the two haven't had a chance to diverge yet anyway).
   const termEnd = profile.access_term_end || profile.current_period_end;
 
-  // ── Annual (pre-paid in full) — no fee, just stop future renewal ──
+  // ── Annual — paid in full, one-time, already doesn't auto-renew ──
+  // Nothing to cancel. Returned as an informational 200 rather than an
+  // error since it isn't really a failure state, just a no-op.
   if (profile.plan === 'annual') {
-    if (action === 'preview') {
-      return ok({
-        plan: 'annual',
-        fee: 0,
-        message: 'Already paid in full for this term — cancelling stops future renewal. ' +
-                  'You keep access through ' + new Date(termEnd).toLocaleDateString() + '.',
-      });
-    }
-    await stripe.subscriptions.update(profile.stripe_subscription_id, { cancel_at_period_end: true });
     return ok({
       plan: 'annual',
       fee: 0,
-      canceledAt: null,
-      message: 'Renewal turned off — access continues through ' +
-                new Date(termEnd).toLocaleDateString() + '.',
+      message: termEnd
+        ? 'Your annual plan is paid in full and doesn\'t auto-renew — there\'s nothing to cancel. You keep access through ' +
+          new Date(termEnd).toLocaleDateString() + '.'
+        : 'Your annual plan is paid in full and doesn\'t auto-renew — there\'s nothing to cancel.',
     });
   }
 
-  // ── Installment — the plan the binding 12-month term actually applies to ──
+  // ── Installment — the only plan with anything to actually cancel ──
+  if (!profile.stripe_subscription_id) {
+    return err('No active subscription found', 409);
+  }
+  if (!['active', 'trialing', 'past_due'].includes(profile.stripe_status)) {
+    return err('Subscription is not currently active', 409);
+  }
   if (!termEnd) return err('Could not determine your term end date — contact support', 500);
 
   const months = remainingMonths(termEnd);
