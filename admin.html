@@ -230,6 +230,9 @@
     if (s.mrrFallbackCount) {
       document.getElementById('mMRRSub').textContent =
         s.mrrFallbackCount + ' of ' + s.billableTotal + ' used list price (Stripe lookup failed)';
+    } else if (s.activeAddonCount) {
+      document.getElementById('mMRRSub').textContent =
+        'Includes ' + s.activeAddonCount + ' add-on gift(s) at an assumed $20/yr renewal';
     }
     document.getElementById('mChurn').textContent      = fmtPct(s.churnRate30d);
     document.getElementById('mPastDue').textContent    = counts.past_due || 0;
