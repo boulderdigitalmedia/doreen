@@ -312,3 +312,57 @@ ALTER TABLE abuse_reports ENABLE ROW LEVEL SECURITY;
 -- key, which bypasses RLS entirely. That's intentional: reports may
 -- contain sensitive details, so nothing here should be reachable by
 -- a logged-in buyer or the public, only by whoever has server access.
+
+-- ── SUBSCRIPTION EVENTS ───────────────────────────────────────
+-- Append-only log of subscription lifecycle events, written by
+-- stripe-webhook.js (service role key) as they happen. profiles only
+-- ever holds *current* status, so this is what powers the internal
+-- admin dashboard's trend charts (enrollments/renewals/cancellations
+-- over time) — it can't be reconstructed after the fact from profiles
+-- alone. History only starts accumulating from whenever this ships;
+-- the backfill below seeds one row per already-existing profile so
+-- the dashboard isn't empty on day one, but backfilled dates are
+-- approximate (profiles doesn't record exact enrollment/cancel dates).
+
+CREATE TABLE IF NOT EXISTS subscription_events (
+  id                UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  profile_id        UUID        REFERENCES profiles(id) ON DELETE SET NULL,
+  stripe_customer_id TEXT,
+  event_type        TEXT        NOT NULL
+                                CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed')),
+  plan              TEXT,        -- monthly | annual, at time of event
+  amount            NUMERIC,     -- dollars, where known (e.g. renewal invoice amount)
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_events_type_created ON subscription_events(event_type, created_at);
+
+ALTER TABLE subscription_events ENABLE ROW LEVEL SECURITY;
+
+-- No policies for anon or authenticated — written by stripe-webhook.js
+-- and read by admin-metrics.js, both using the service role key, which
+-- bypasses RLS. This is internal business data (enrollment/cancellation
+-- history), not something any buyer or recipient should ever query.
+
+-- One-time backfill — safe to run once schema is up to date. Seeds an
+-- 'enrollment' row per existing profile (dated at profiles.created_at)
+-- and a 'cancellation' row per already-canceled profile (dated at
+-- current_period_end, the closest date we have on hand — the true
+-- cancellation date wasn't recorded). Skips profiles that already have
+-- a matching event so it's safe to re-run.
+INSERT INTO subscription_events (profile_id, stripe_customer_id, event_type, plan, created_at)
+SELECT p.id, p.stripe_customer_id, 'enrollment', p.plan, COALESCE(p.created_at, NOW())
+FROM profiles p
+WHERE NOT EXISTS (
+  SELECT 1 FROM subscription_events e
+  WHERE e.profile_id = p.id AND e.event_type = 'enrollment'
+);
+
+INSERT INTO subscription_events (profile_id, stripe_customer_id, event_type, plan, created_at)
+SELECT p.id, p.stripe_customer_id, 'cancellation', p.plan, COALESCE(p.current_period_end, NOW())
+FROM profiles p
+WHERE p.stripe_status = 'canceled'
+AND NOT EXISTS (
+  SELECT 1 FROM subscription_events e
+  WHERE e.profile_id = p.id AND e.event_type = 'cancellation'
+);
