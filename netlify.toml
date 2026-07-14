@@ -78,8 +78,13 @@
   status = 200
 
 [[redirects]]
-  from   = "/api/update-gift-slots"
-  to     = "/.netlify/functions/update-gift-slots"
+  from   = "/api/create-addon-checkout"
+  to     = "/.netlify/functions/create-addon-checkout"
+  status = 200
+
+[[redirects]]
+  from   = "/api/cancel-subscription"
+  to     = "/.netlify/functions/cancel-subscription"
   status = 200
 
 [[redirects]]
