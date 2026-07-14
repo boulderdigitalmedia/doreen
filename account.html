@@ -103,9 +103,21 @@
       display: flex; align-items: center; justify-content: center;
       line-height: 1;
     }
-    .header-right { display: flex; align-items: center; gap: 16px; }
+    .header-right { display: flex; align-items: center; gap: 16px; position: relative; }
     .header-signout { background: none; border: none; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink-soft); cursor: pointer; padding: 4px 0; }
     .header-signout:hover { color: var(--ink); }
+    /* Kebab toggle for the collapsed mobile header menu — hidden on
+       desktop, where "Manage billing"/"Sign out" just sit inline (see
+       .header-menu below, which is a plain inline flex row above the
+       480px breakpoint and becomes an actual dropdown under it). */
+    .header-menu-btn {
+      display: none;
+      background: none; border: none; cursor: pointer;
+      font-size: 20px; line-height: 1; color: var(--ink-soft);
+      padding: 6px 4px;
+    }
+    .header-menu-btn:hover { color: var(--ink); }
+    .header-menu { display: flex; align-items: center; gap: 16px; }
 
     /* ── PAGE CONTAINER ── */
     .page { max-width: 860px; margin: 0 auto; padding: 36px 20px 80px; }
@@ -311,10 +323,38 @@
       .header-brand { font-size: 19px; gap: 7px; }
       .header-brand .logo-mark { width: 25px; height: 19px; }
       .header-brand .logo-badge { width: 13px; height: 13px; font-size: 8px; top: -6px; right: -6px; }
-      .header-right { gap: 10px; }
-      .header-signout { font-size: 12px; }
       .page { padding-left: 16px; padding-right: 16px; }
       .panel { padding: 18px; }
+
+      /* Collapse "Manage billing" + "Sign out" into a single kebab menu
+         — at this width, the two text buttons sitting next to the
+         wordmark left the header feeling cramped/crowded. */
+      .header-menu-btn { display: flex; align-items: center; }
+      .header-menu {
+        display: none;
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        min-width: 160px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(20,26,20,0.12);
+        padding: 6px;
+        z-index: 20;
+      }
+      .header-menu.open { display: flex; }
+      .header-menu .header-signout {
+        font-size: 14px;
+        text-align: left;
+        padding: 10px 12px;
+        border-radius: 7px;
+        width: 100%;
+      }
+      .header-menu .header-signout:hover { background: var(--sage-pale); }
     }
   </style>
 </head>
@@ -360,8 +400,11 @@
       A <em>Note</em> For You
     </div>
     <div class="header-right">
-      <button class="header-signout" id="manageBillingBtn" style="display:none" onclick="openPortal()">Manage billing</button>
-      <button class="header-signout" onclick="signOut()">Sign out</button>
+      <button class="header-menu-btn" id="headerMenuBtn" onclick="toggleHeaderMenu()" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">&#8942;</button>
+      <div class="header-menu" id="headerMenu">
+        <button class="header-signout" id="manageBillingBtn" style="display:none" onclick="openPortal()">Manage billing</button>
+        <button class="header-signout" onclick="signOut()">Sign out</button>
+      </div>
     </div>
   </div>
 
@@ -846,6 +889,29 @@
       showToast('Could not open billing portal');
     }
   }
+
+  // ── HEADER MENU (mobile) ───────────────────────────────────────
+  // Below 480px, "Manage billing"/"Sign out" collapse into a single
+  // kebab-triggered dropdown (see .header-menu-btn/.header-menu CSS) —
+  // above that width the menu is just an inline row and this toggle
+  // never fires, since the kebab button is hidden by CSS.
+  function toggleHeaderMenu(forceClose) {
+    var menu = document.getElementById('headerMenu');
+    var btn  = document.getElementById('headerMenuBtn');
+    var open = forceClose === true ? false : !menu.classList.contains('open');
+    menu.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('headerMenu');
+    var btn  = document.getElementById('headerMenuBtn');
+    if (!menu || !menu.classList.contains('open')) return;
+    if (menu.contains(e.target) || btn.contains(e.target)) return;
+    toggleHeaderMenu(true);
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') toggleHeaderMenu(true);
+  });
 
   // ── GIFT LIST ─────────────────────────────────────────────────
 
