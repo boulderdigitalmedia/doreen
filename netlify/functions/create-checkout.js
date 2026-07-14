@@ -1,9 +1,26 @@
 // POST /api/create-checkout
-// Body: { plan: 'monthly' | 'annual' }
+// Body: { plan: 'annual' | 'installment' }
 // Header: Authorization: Bearer <supabase_access_token>
 //
 // Creates (or reuses) a Stripe customer for this user, then returns a
 // Stripe Checkout session URL for the chosen plan.
+//
+// Both plans are a 12-month committed term, not cancel-anytime — they
+// just differ in payment cadence:
+//   annual      — $45 charged once a year (a normal recurring annual
+//                 subscription; each yearly renewal already IS a fresh
+//                 12-month term, so no extra enforcement needed)
+//   installment — $4.50/mo x 12 ($54/yr total). This is a normal
+//                 recurring monthly subscription under the hood, but
+//                 stripe-webhook.js sets `cancel_at` on it (12 months
+//                 from creation) once it's live, so it stops on its own
+//                 after the 12th payment instead of auto-renewing
+//                 forever at $4.50/mo. Continuing past that point means
+//                 going through checkout again for a fresh term — see
+//                 the renewal-carryover logic in stripe-webhook.js.
+//
+// Both plans include exactly 1 gift. Additional gifts are purchased
+// separately, one at a time, through create-addon-checkout.js.
 
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
@@ -12,8 +29,8 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const PRICE_IDS = {
-  monthly: process.env.STRIPE_MONTHLY_PRICE_ID,
-  annual:  process.env.STRIPE_ANNUAL_PRICE_ID,
+  annual:      process.env.STRIPE_ANNUAL_PRICE_ID,      // $45/yr
+  installment: process.env.STRIPE_INSTALLMENT_PRICE_ID, // $4.50/mo
 };
 
 const SITE_URL = process.env.SITE_URL || 'https://yourdomain.com';
@@ -47,8 +64,12 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body || '{}'); } catch { return err('Invalid JSON'); }
   const { plan } = body;
 
+  if (plan === 'monthly') {
+    return err('The old cancel-anytime monthly plan has been retired — use "installment" for the new $4.50/mo, 12-month-term plan.', 410);
+  }
+
   const priceId = PRICE_IDS[plan];
-  if (!priceId) return err('Invalid plan — must be monthly or annual');
+  if (!priceId) return err('Invalid plan — must be "annual" or "installment"');
 
   // Get or create Stripe customer
   const { data: profile } = await sb.from('profiles').select('stripe_customer_id, stripe_status').eq('id', user.id).single();
@@ -69,14 +90,17 @@ exports.handler = async (event) => {
     await sb.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id);
   }
 
-  // Create Checkout session
+  // Create Checkout session. plan_type in subscription metadata is how
+  // stripe-webhook.js knows to apply the installment plan's cancel_at
+  // enforcement — it isn't derivable from the price alone once there are
+  // promotion codes/price changes in play.
   const session = await stripe.checkout.sessions.create({
     customer:             customerId,
     mode:                 'subscription',
     line_items:           [{ price: priceId, quantity: 1 }],
     success_url:          SITE_URL + '/success?session_id={CHECKOUT_SESSION_ID}',
     cancel_url:           SITE_URL + '/account',
-    subscription_data:    { metadata: { supabase_uid: user.id } },
+    subscription_data:    { metadata: { supabase_uid: user.id, plan_type: plan } },
     allow_promotion_codes: true,
   });
 
