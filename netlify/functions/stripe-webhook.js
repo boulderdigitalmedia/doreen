@@ -495,10 +495,18 @@ async function deactivateAllGifts(profileId) {
 // Advances the buyer's fair access_term_end (see schema.sql) by exactly
 // 365 days from wherever it last ended — deliberately NOT from Stripe's
 // own new billing period, which may have drifted from the access term
-// if the first-send grace period ever applied. If access_term_end was
-// somehow never established (e.g. the previous term lapsed before the
-// buyer ever sent a first note or hit the 30-day cap), this anchors
-// fresh from right now instead of failing silently.
+// if the first-send grace period ever applied.
+//
+// The "wherever it last ended" base is only used if that date is still
+// in the future — i.e. a gapless or early renewal, where extending
+// fairly from the exact old end date matters. If the stored
+// access_term_end is already in the past (the buyer's term genuinely
+// lapsed before they came back to renew — annual has no reminder email,
+// so this is an expected, not rare, path) or was never established at
+// all, this anchors a full fresh 365 days from right now instead.
+// Without this check, a buyer who lapsed for, say, 14 months before
+// resubscribing would get a "new" term stacked onto their stale end
+// date — already expired the moment it was written.
 //
 // subscriptionId/plan are the NEW term's subscription — for the annual
 // plan this is the SAME subscription object as before (Stripe just bills
@@ -512,7 +520,9 @@ async function handleNewTermStarted(profileId, stripeCustomerId, subscriptionId,
     .eq('id', profileId)
     .maybeSingle();
 
-  const base = profile && profile.access_term_end ? new Date(profile.access_term_end) : new Date();
+  const now = new Date();
+  const storedEnd = profile && profile.access_term_end ? new Date(profile.access_term_end) : null;
+  const base = storedEnd && storedEnd.getTime() > now.getTime() ? storedEnd : now;
   const newTermEnd = new Date(base.getTime() + 365 * 24 * 60 * 60 * 1000);
   const newTermEndISO = newTermEnd.toISOString();
 
