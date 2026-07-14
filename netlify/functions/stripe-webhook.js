@@ -2,10 +2,19 @@
 // (mapped to /api/stripe-webhook in netlify.toml)
 //
 // Handles:
-//   checkout.session.completed       → activate subscription
+//   checkout.session.completed       → activate subscription, log 'enrollment'
 //   customer.subscription.updated    → sync status/period
-//   customer.subscription.deleted    → cancel
-//   invoice.payment_failed           → mark past_due
+//   customer.subscription.deleted    → cancel, log 'cancellation'
+//   invoice.payment_succeeded        → log 'renewal' (recurring cycles only)
+//   invoice.payment_failed           → mark past_due, log 'payment_failed'
+//
+// The subscription_events inserts feed the internal admin dashboard
+// (admin.html / admin-metrics.js) — profiles only holds current status,
+// so this append-only log is the only place enrollment/renewal/
+// cancellation history lives. IMPORTANT: invoice.payment_succeeded must
+// be enabled on the Stripe webhook endpoint (Dashboard → Developers →
+// Webhooks → this endpoint → Add events) for renewals to be tracked —
+// it likely isn't yet, since nothing previously listened for it.
 
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
@@ -47,12 +56,14 @@ exports.handler = async (event) => {
 
         // Fetch the full subscription to get period end
         const sub = await stripe.subscriptions.retrieve(session.subscription);
-        await upsertProfile(session.customer, {
+        const plan = getPlan(sub);
+        const profileId = await upsertProfile(session.customer, {
           stripe_subscription_id: sub.id,
           stripe_status:          sub.status,
-          plan:                   getPlan(sub),
+          plan,
           current_period_end:     periodEndISO(sub),
         });
+        await logEvent(profileId, session.customer, 'enrollment', plan, planAmount(sub));
         break;
       }
 
@@ -69,11 +80,28 @@ exports.handler = async (event) => {
 
       case 'customer.subscription.deleted': {
         const sub = stripeEvent.data.object;
-        await upsertProfile(sub.customer, {
+        const plan = getPlan(sub);
+        const profileId = await upsertProfile(sub.customer, {
           stripe_subscription_id: sub.id,
           stripe_status:          'canceled',
           current_period_end:     periodEndISO(sub),
         });
+        await logEvent(profileId, sub.customer, 'cancellation', plan, null);
+        break;
+      }
+
+      // Fires on every successful invoice, including the very first one —
+      // billing_reason distinguishes a brand-new subscription
+      // ('subscription_create', already logged as 'enrollment' above) from
+      // an actual renewal charge ('subscription_cycle'). Proration invoices
+      // from mid-cycle plan/add-on changes ('subscription_update') are
+      // deliberately not counted as renewals here.
+      case 'invoice.payment_succeeded': {
+        const invoice = stripeEvent.data.object;
+        if (!invoice.subscription || invoice.billing_reason !== 'subscription_cycle') break;
+        const sub = await stripe.subscriptions.retrieve(invoice.subscription);
+        const profileId = await findProfileId(invoice.customer);
+        await logEvent(profileId, invoice.customer, 'renewal', getPlan(sub), (invoice.amount_paid || 0) / 100);
         break;
       }
 
@@ -81,9 +109,10 @@ exports.handler = async (event) => {
         const invoice = stripeEvent.data.object;
         if (!invoice.subscription) break;
         const sub = await stripe.subscriptions.retrieve(invoice.subscription);
-        await upsertProfile(sub.customer, {
+        const profileId = await upsertProfile(sub.customer, {
           stripe_status: 'past_due',
         });
+        await logEvent(profileId, sub.customer, 'payment_failed', getPlan(sub), (invoice.amount_due || 0) / 100);
         break;
       }
 
@@ -114,14 +143,50 @@ async function upsertProfile(stripeCustomerId, updates) {
     const uid = customer.metadata?.supabase_uid;
     if (!uid) {
       console.error('No supabase_uid found for Stripe customer:', stripeCustomerId);
-      return;
+      return null;
     }
     await sb.from('profiles').upsert({ id: uid, stripe_customer_id: stripeCustomerId, ...updates });
-    return;
+    return uid;
   }
 
   await sb.from('profiles').update(updates).eq('id', profile.id);
   console.log('Profile updated:', profile.id, updates);
+  return profile.id;
+}
+
+// Read-only version of the lookup half of upsertProfile, for handlers
+// (like invoice.payment_succeeded) that need the profile id to tag an
+// event with but have no status update of their own to write.
+async function findProfileId(stripeCustomerId) {
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('id')
+    .eq('stripe_customer_id', stripeCustomerId)
+    .maybeSingle();
+  if (profile) return profile.id;
+
+  const customer = await stripe.customers.retrieve(stripeCustomerId);
+  return customer.metadata?.supabase_uid || null;
+}
+
+// Appends a row to subscription_events — the only place enrollment/
+// renewal/cancellation history lives (see schema.sql comment). Never
+// throws: a logging failure shouldn't turn into a 500 that makes Stripe
+// retry a webhook whose actual work (the profile update) already
+// succeeded.
+async function logEvent(profileId, stripeCustomerId, eventType, plan, amount) {
+  try {
+    const { error } = await sb.from('subscription_events').insert({
+      profile_id:         profileId || null,
+      stripe_customer_id: stripeCustomerId || null,
+      event_type:         eventType,
+      plan:               plan || null,
+      amount:             amount != null ? amount : null,
+    });
+    if (error) console.error('Failed to log subscription event:', eventType, error.message);
+  } catch (err) {
+    console.error('Failed to log subscription event:', eventType, err.message);
+  }
 }
 
 function getPlan(sub) {
@@ -131,6 +196,15 @@ function getPlan(sub) {
   if (interval === 'year') return 'annual';
   if (interval === 'month') return 'monthly';
   return null;
+}
+
+// Dollar amount of the subscription's recurring price, for tagging the
+// 'enrollment' event — best-effort only (ignores quantity/proration);
+// renewal/payment_failed events use the actual invoice amount instead,
+// which is exact.
+function planAmount(sub) {
+  const price = sub.items?.data?.[0]?.price;
+  return price?.unit_amount != null ? price.unit_amount / 100 : null;
 }
 
 // Newer Stripe API versions moved current_period_end off the Subscription
