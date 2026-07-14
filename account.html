@@ -942,15 +942,20 @@
 
       var termInfo = document.getElementById('termInfo');
       var isBillable = ['active', 'trialing', 'past_due'].indexOf(PROFILE.stripe_status) !== -1;
+      // The annual plan is a one-time payment that already doesn't
+      // auto-renew — there's nothing to cancel, so no cancel link shows
+      // for it at all (cancel-subscription.js would just no-op anyway).
+      // Only the installment plan has an actual early-cancellation flow.
+      var cancelLink = PROFILE.plan === 'installment'
+        ? ' · <a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>'
+        : '';
       if (isBillable && PROFILE.access_term_end) {
         // access_term_end (not the raw Stripe billing date) is the fair
         // term — anchored to your first note actually sending, capped at
         // 30 days after signup. See schema.sql for why these can differ.
-        termInfo.innerHTML = 'Term runs through ' + new Date(PROFILE.access_term_end).toLocaleDateString() +
-          ' · <a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>';
+        termInfo.innerHTML = 'Term runs through ' + new Date(PROFILE.access_term_end).toLocaleDateString() + cancelLink;
       } else if (isBillable) {
-        termInfo.innerHTML = 'Your term begins once your first note sends (or automatically within 30 days) · ' +
-          '<a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>';
+        termInfo.innerHTML = 'Your term begins once your first note sends (or automatically within 30 days)' + cancelLink;
       } else {
         termInfo.innerHTML = '';
       }
@@ -1040,13 +1045,17 @@
     return Math.ceil(ms / (24 * 60 * 60 * 1000));
   }
 
-  // SMS delivery pricing/mechanism is unchanged from before this pricing
-  // overhaul — still $2/mo or $20/yr depending on plan interval, separate
-  // from the gift add-on tiers above. Kept as its own helper since it's a
-  // genuinely different pricing system that just happened to share a
-  // name with the old gift-slot helper.
+  // Installment plan: unchanged, still a real recurring $2/mo line item.
+  // Annual plan: no subscription exists to bill a recurring item against
+  // (see create-checkout.js), so SMS is a flat one-time charge instead,
+  // tiered by term remaining — the exact same tiers as the add-on gifts
+  // above (update-sms-addon.js mirrors addonTierInfo()'s boundaries
+  // server-side, so this reuses it rather than duplicating the tier
+  // logic a third time).
   function smsAddonPriceLabel() {
-    return (PROFILE && PROFILE.plan === 'annual') ? '$20/yr' : '$2/mo';
+    if (!PROFILE || PROFILE.plan !== 'annual') return '$2/mo';
+    var tier = addonTierInfo();
+    return tier ? tier.label + ' one-time' : 'renew to enable';
   }
 
   // Returns { price, label } for the next add-on gift's tier, or null if
@@ -1253,6 +1262,24 @@
 
     var smsEnabled = document.getElementById('dSmsAddon').checked;
     var smsChanged = smsEnabled !== !!CURRENT_GIFT.sms_addon;
+
+    // Annual plan: turning SMS on is a real one-time charge (no recurring
+    // subscription item to fall back on — see update-sms-addon.js), so
+    // confirm the price up front rather than silently charging on save.
+    // Installment plan keeps its existing (prorated, recurring) behavior
+    // with no extra confirmation, unchanged from before.
+    if (smsChanged && smsEnabled && PROFILE && PROFILE.plan === 'annual') {
+      var priceLabel = smsAddonPriceLabel();
+      if (priceLabel === 'renew to enable') {
+        showToast('Your term is too close to ending to add SMS — renew first.');
+        document.getElementById('dSmsAddon').checked = false;
+        return;
+      }
+      if (!confirm('Enabling SMS for this gift charges ' + priceLabel + ' now. Continue?')) {
+        document.getElementById('dSmsAddon').checked = false;
+        return;
+      }
+    }
 
     var { error } = await sb.from('gifts').update(updates).eq('id', CURRENT_GIFT.id);
     if (error) { showToast('Error: ' + error.message); return; }
