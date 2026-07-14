@@ -46,10 +46,62 @@ async function sweepTermStartGrace() {
   }
 }
 
+// The annual plan is a one-time payment now (see create-checkout.js) —
+// there's no Stripe subscription behind it, so nothing ever fires
+// customer.subscription.deleted for it when a term ends with no renewal.
+// The installment plan doesn't need this: cancel_at forces a real
+// subscription-lifecycle event that stripe-webhook.js already catches.
+// This sweep is the annual plan's equivalent — anything still marked
+// 'active' whose access_term_end has already passed gets treated exactly
+// like a lapsed installment subscription would: gifts deactivated (still
+// viewable, no more sends — see the gifts RLS policy in schema.sql),
+// status flipped so it stops showing as active, and a 'cancellation'
+// event logged for the admin dashboard.
+async function sweepExpiredAnnualTerms() {
+  const nowISO = new Date().toISOString();
+
+  const { data: expired, error } = await sb
+    .from('profiles')
+    .select('id, stripe_customer_id')
+    .eq('plan', 'annual')
+    .eq('stripe_status', 'active')
+    .lt('access_term_end', nowISO);
+
+  if (error) {
+    console.error('Expired-annual-term sweep query failed:', error.message);
+    return;
+  }
+
+  for (const profile of expired || []) {
+    try {
+      await sb.from('gifts')
+        .update({ status: 'cancelled' })
+        .eq('user_id', profile.id)
+        .eq('status', 'active');
+
+      await sb.from('profiles')
+        .update({ stripe_status: 'canceled' })
+        .eq('id', profile.id);
+
+      await sb.from('subscription_events').insert({
+        profile_id:         profile.id,
+        stripe_customer_id: profile.stripe_customer_id || null,
+        event_type:         'cancellation',
+        plan:               'annual',
+      });
+
+      console.log('Expired annual term closed out for profile', profile.id);
+    } catch (e) {
+      console.error('Failed to close out expired annual term for profile', profile.id, e.message);
+    }
+  }
+}
+
 exports.handler = schedule('*/15 * * * *', async () => {
   console.log('send-daily fired:', new Date().toISOString());
 
   await sweepTermStartGrace();
+  await sweepExpiredAnnualTerms();
 
   const { data: gifts, error } = await sb
     .from('gifts')
