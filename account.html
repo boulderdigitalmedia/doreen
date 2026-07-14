@@ -370,24 +370,28 @@
     <div class="paywall-wrap">
       <div class="paywall-icon">💌</div>
       <div class="paywall-title">Start sending love</div>
-      <div class="paywall-sub">One subscription. Up to 4 recipients. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
+      <div class="paywall-sub">A 12-month subscription. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
 
       <div class="pricing-grid">
-        <div class="pricing-card" id="planMonthly" onclick="selectPlan('monthly')">
+        <div class="pricing-card" id="planInstallment" onclick="selectPlan('installment')">
           <div class="pricing-name">Monthly</div>
-          <div class="pricing-price">$9<span>/mo</span></div>
-          <div class="pricing-desc">Cancel any time. Billed monthly.</div>
+          <div class="pricing-price">$4.50<span>/mo</span></div>
+          <div class="pricing-desc">$54/yr total — a 12-month term billed in installments, not cancel-anytime.</div>
         </div>
         <div class="pricing-card selected" id="planAnnual" onclick="selectPlan('annual')">
-          <div class="pricing-badge">Best value — 2 months free</div>
+          <div class="pricing-badge">Best value</div>
           <div class="pricing-name">Annual</div>
-          <div class="pricing-price">$90<span>/yr</span></div>
-          <div class="pricing-desc">$7.50/mo. Billed once per year.</div>
+          <div class="pricing-price">$45<span>/yr</span></div>
+          <div class="pricing-desc">Paid upfront for the full 12-month term.</div>
         </div>
       </div>
 
+      <p style="font-size:12px;color:var(--ink-mid);background:var(--sage-pale);border-radius:10px;padding:10px 14px;margin:4px 0 20px;line-height:1.5;">
+        Both plans are a 12-month commitment. The monthly option spreads that commitment over 12 payments of $4.50 — it isn't a cancel-anytime plan. Early cancellation is available for a fee (half of your remaining installments, capped at $20).
+      </p>
+
       <div class="feature-list">
-        <div class="feature-row"><span class="feature-check">✓</span> 2 gifts included, add more any time</div>
+        <div class="feature-row"><span class="feature-check">✓</span> 1 gift included, add more any time</div>
         <div class="feature-row"><span class="feature-check">✓</span> Unlimited notes + photos</div>
         <div class="feature-row"><span class="feature-check">✓</span> Push notifications &amp; email delivery</div>
         <div class="feature-row"><span class="feature-check">✓</span> Daily, weekly, or monthly cadence</div>
@@ -397,7 +401,7 @@
       <button class="btn btn-primary" style="font-size:16px;padding:14px 36px" onclick="startCheckout()" id="checkoutBtn">
         Get started →
       </button>
-      <p style="font-size:12px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Cancel any time.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe.</p>
     </div>
     <footer class="site-footer">
       © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
@@ -418,6 +422,7 @@
       <div>
         <div class="section-title">Your Gifts</div>
         <div class="section-sub" id="giftCountLabel"></div>
+        <div class="section-sub" id="termInfo" style="margin-top:2px"></div>
       </div>
     </div>
     <div class="gift-grid" id="giftGrid"></div>
@@ -612,7 +617,7 @@
 <!-- CREATE GIFT MODAL -->
 <div class="modal-overlay" id="createModal">
   <div class="modal">
-    <div class="modal-title">New gift</div>
+    <div class="modal-title" id="createModalTitle">New gift</div>
     <div class="field-row">
       <div class="field">
         <label>Display name</label>
@@ -658,10 +663,22 @@
       <input type="number" id="newPlannedCount" min="1" placeholder="e.g. 60" />
     </div>
     <div class="modal-actions">
-      <button class="btn btn-primary" style="flex:1" onclick="createGift()">Create gift</button>
+      <button class="btn btn-primary" style="flex:1" id="createSubmitBtn" onclick="createGift()">Create gift</button>
       <button class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
     </div>
     <p style="font-size:13px;color:var(--red);margin-top:12px;display:none" id="createError"></p>
+  </div>
+</div>
+
+<!-- CANCEL SUBSCRIPTION MODAL -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <div class="modal-title">Cancel subscription</div>
+    <div id="cancelModalBody" style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-bottom:20px;">Loading…</div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1;background:var(--red)" id="cancelConfirmBtn" onclick="confirmCancelSubscription()" disabled>Cancel subscription</button>
+      <button class="btn btn-ghost" onclick="closeCancelModal()">Never mind</button>
+    </div>
   </div>
 </div>
 
@@ -739,7 +756,7 @@
     // Load subscription profile
     const { data: profile } = await sb
       .from('profiles')
-      .select('stripe_status, plan, current_period_end, extra_gift_slots')
+      .select('stripe_status, plan, current_period_end, access_term_end, extra_gift_slots')
       .eq('id', USER.id)
       .maybeSingle();
 
@@ -777,8 +794,8 @@
 
   function selectPlan(plan) {
     SELECTED_PLAN = plan;
-    document.getElementById('planMonthly').classList.toggle('selected', plan === 'monthly');
-    document.getElementById('planAnnual').classList.toggle('selected',  plan === 'annual');
+    document.getElementById('planInstallment').classList.toggle('selected', plan === 'installment');
+    document.getElementById('planAnnual').classList.toggle('selected',      plan === 'annual');
   }
 
   async function startCheckout() {
@@ -856,6 +873,21 @@
       } else {
         banner.style.display = 'none';
       }
+
+      var termInfo = document.getElementById('termInfo');
+      var isBillable = ['active', 'trialing', 'past_due'].indexOf(PROFILE.stripe_status) !== -1;
+      if (isBillable && PROFILE.access_term_end) {
+        // access_term_end (not the raw Stripe billing date) is the fair
+        // term — anchored to your first note actually sending, capped at
+        // 30 days after signup. See schema.sql for why these can differ.
+        termInfo.innerHTML = 'Term runs through ' + new Date(PROFILE.access_term_end).toLocaleDateString() +
+          ' · <a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>';
+      } else if (isBillable) {
+        termInfo.innerHTML = 'Your term begins once your first note sends (or automatically within 30 days) · ' +
+          '<a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>';
+      } else {
+        termInfo.innerHTML = '';
+      }
     }
 
     const { data, error } = await sb
@@ -868,21 +900,103 @@
     renderGiftGrid();
   }
 
-  // Every subscription includes 2 gifts. Extra slots purchased via
-  // addGiftSlot() raise this — kept in sync with Stripe billing.
-  function giftLimit() {
-    return 2 + ((PROFILE && PROFILE.extra_gift_slots) || 0);
+  // ── CANCEL SUBSCRIPTION (with early-cancellation fee, if applicable) ──
+
+  async function openCancelModal() {
+    document.getElementById('cancelModal').classList.add('open');
+    var bodyEl = document.getElementById('cancelModalBody');
+    var btn    = document.getElementById('cancelConfirmBtn');
+    bodyEl.textContent = 'Loading…';
+    btn.disabled = true;
+    btn.textContent = 'Cancel subscription';
+    try {
+      var res = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': await authHeader() },
+        body: JSON.stringify({ action: 'preview' }),
+      });
+      var data = await res.json();
+      if (!res.ok) { bodyEl.textContent = data.error || 'Could not load cancellation details'; return; }
+      bodyEl.textContent = data.message;
+      btn.disabled = false;
+    } catch (e) {
+      bodyEl.textContent = 'Could not reach server';
+    }
   }
 
-  function extraGiftPriceLabel() {
+  function closeCancelModal() { document.getElementById('cancelModal').classList.remove('open'); }
+
+  async function confirmCancelSubscription() {
+    var btn = document.getElementById('cancelConfirmBtn');
+    btn.disabled = true;
+    btn.textContent = 'Cancelling…';
+    try {
+      var res = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': await authHeader() },
+        body: JSON.stringify({ action: 'confirm' }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast('Error: ' + (data.error || 'Could not cancel'));
+        btn.disabled = false;
+        btn.textContent = 'Cancel subscription';
+        return;
+      }
+      closeCancelModal();
+      showToast(data.message);
+      await boot();
+    } catch (e) {
+      showToast('Could not reach server');
+      btn.disabled = false;
+      btn.textContent = 'Cancel subscription';
+    }
+  }
+
+  // The base plan includes exactly 1 gift. Every gift after that is
+  // bought individually (create-addon-checkout.js), priced by how much
+  // of the current term is left — no upper limit, just a per-gift price.
+  // These helpers are display-only estimates: the server recomputes the
+  // real tier/price at the moment of actual purchase (never trust the
+  // client for what gets charged), so a few minutes of clock drift here
+  // is harmless.
+  var ADDON_CLOSED_UNDER_DAYS = 45;
+  var ADDON_LOW_TIER_MAX_DAYS = 90;
+  var ADDON_MID_TIER_MAX_DAYS = 180;
+
+  function daysRemainingInTerm() {
+    // access_term_end (fair, first-send-anchored term) drives add-on
+    // pricing — not Stripe's raw billing date. Null until the buyer's
+    // first note sends or the 30-day cap hits (see schema.sql), in which
+    // case there's no fair term yet to price an add-on against.
+    if (!PROFILE || !PROFILE.access_term_end) return null;
+    var ms = new Date(PROFILE.access_term_end).getTime() - Date.now();
+    return Math.ceil(ms / (24 * 60 * 60 * 1000));
+  }
+
+  // SMS delivery pricing/mechanism is unchanged from before this pricing
+  // overhaul — still $2/mo or $20/yr depending on plan interval, separate
+  // from the gift add-on tiers above. Kept as its own helper since it's a
+  // genuinely different pricing system that just happened to share a
+  // name with the old gift-slot helper.
+  function smsAddonPriceLabel() {
     return (PROFILE && PROFILE.plan === 'annual') ? '$20/yr' : '$2/mo';
+  }
+
+  // Returns { price, label } for the next add-on gift's tier, or null if
+  // purchases are currently closed (too close to term end — renew first).
+  function addonTierInfo() {
+    var days = daysRemainingInTerm();
+    if (days == null || days < ADDON_CLOSED_UNDER_DAYS) return null;
+    if (days <= ADDON_LOW_TIER_MAX_DAYS) return { price: 10, label: '$10' };
+    if (days <= ADDON_MID_TIER_MAX_DAYS) return { price: 15, label: '$15' };
+    return { price: 20, label: '$20' };
   }
 
   function renderGiftGrid() {
     var grid  = document.getElementById('giftGrid');
     var label = document.getElementById('giftCountLabel');
-    var limit = giftLimit();
-    label.textContent = GIFTS.length + ' of ' + limit + ' gifts used';
+    label.textContent = GIFTS.length + ' gift' + (GIFTS.length === 1 ? '' : 's');
     grid.innerHTML = '';
 
     GIFTS.forEach(function(g) {
@@ -897,67 +1011,53 @@
         return '<span class="channel-pill ' + (on ? 'channel-on' : 'channel-off') + '">' + c + '</span>';
       }).join('');
 
+      var termNote = '';
+      if (g.term_end_date) {
+        termNote = '<div class="gift-meta-row">Runs through ' + new Date(g.term_end_date).toLocaleDateString() + '</div>';
+      }
+      if (g.status === 'cancelled') {
+        termNote = '<div class="gift-meta-row" style="color:var(--red)">No longer sending — notes already delivered stay visible</div>';
+      }
+
       card.innerHTML =
-        '<div class="gift-name">' + esc(g.display_name) + '</div>' +
+        '<div class="gift-name">' + esc(g.display_name) + (g.gift_type === 'addon' ? ' <span style="font-size:11px;color:var(--ink-soft);font-weight:400">(add-on)</span>' : '') + '</div>' +
         '<div class="gift-slug">/' + esc(g.slug) + '</div>' +
         '<div class="gift-meta">' +
           '<div class="gift-meta-row">Notifications: ' + channelPills + '</div>' +
           '<div class="gift-meta-row" style="text-transform:capitalize">⟳ ' + g.frequency + '</div>' +
+          termNote +
         '</div>';
 
       grid.appendChild(card);
     });
 
-    if (GIFTS.length < limit) {
+    if (GIFTS.length === 0) {
       var add = document.createElement('div');
       add.className = 'gift-card gift-card-new';
-      add.onclick   = openCreateModal;
+      add.onclick   = function() { openCreateModal(false); };
       add.innerHTML = '<div class="plus">+</div><div>New gift</div>';
       grid.appendChild(add);
+      return;
+    }
 
-      var empty = limit - GIFTS.length - 1;
-      for (var i = 0; i < Math.max(0, empty); i++) {
-        var slot = document.createElement('div');
-        slot.className = 'gift-card gift-card-new';
-        slot.style.opacity = '0.35';
-        slot.style.cursor  = 'default';
-        slot.innerHTML = '<div class="plus" style="font-size:20px;color:var(--border)">○</div>';
-        grid.appendChild(slot);
-      }
+    var tier = addonTierInfo();
+    var addSlot = document.createElement('div');
+    addSlot.className = 'gift-card gift-card-new';
+    if (tier) {
+      addSlot.onclick   = function() { openCreateModal(true); };
+      addSlot.innerHTML = '<div class="plus">+</div><div>Add a gift — ' + tier.label + ' one-time</div>';
     } else {
-      var addSlot = document.createElement('div');
-      addSlot.className = 'gift-card gift-card-new';
-      addSlot.onclick   = addGiftSlot;
-      addSlot.innerHTML = '<div class="plus">+</div><div>Add a gift — ' + extraGiftPriceLabel() + '</div>';
-      grid.appendChild(addSlot);
+      addSlot.style.opacity = '0.6';
+      addSlot.style.cursor  = 'default';
+      var days = daysRemainingInTerm();
+      var closedMsg = (days == null)
+        ? 'Add-ons open up once your first note sends (or automatically within 30 days)'
+        : 'Your term ends in ' + Math.max(days, 0) + ' day(s) — add-ons reopen once you renew';
+      addSlot.innerHTML = '<div style="font-size:12px;color:var(--ink-soft);padding:0 12px;text-align:center">' +
+        closedMsg +
+        '</div>';
     }
-  }
-
-  // Purchases one additional gift slot (recurring add-on, billed at
-  // whichever interval the buyer's base plan already uses), then opens
-  // the create-gift modal right away so they can use it immediately.
-  async function addGiftSlot() {
-    try {
-      var res = await fetch('/api/update-gift-slots', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': await authHeader(),
-        },
-        body: JSON.stringify({ action: 'add' }),
-      });
-      var data = await res.json();
-      if (!res.ok || !data.ok) {
-        showToast('Could not add a gift slot: ' + (data.error || 'unknown error'));
-        return;
-      }
-      PROFILE.extra_gift_slots = data.extraGiftSlots;
-      showToast('Gift slot added 💚');
-      renderGiftGrid();
-      openCreateModal();
-    } catch (e) {
-      showToast('Could not reach server');
-    }
+    grid.appendChild(addSlot);
   }
 
   // ── GIFT DETAIL ───────────────────────────────────────────────
@@ -978,7 +1078,7 @@
     document.getElementById('dPlannedCount').value = gift.planned_notes_count || '';
     document.getElementById('dSmsAddon').checked = !!gift.sms_addon;
     var smsPriceEl = document.getElementById('smsAddonPriceLabel');
-    if (smsPriceEl) smsPriceEl.textContent = extraGiftPriceLabel();
+    if (smsPriceEl) smsPriceEl.textContent = smsAddonPriceLabel();
     updateSlugPreview();
 
     const [{ data: rec }, { data: notes }] = await Promise.all([
@@ -1752,7 +1852,10 @@
 
   // ── CREATE GIFT ───────────────────────────────────────────────
 
-  function openCreateModal() {
+  var ADDON_MODE = false;
+
+  function openCreateModal(isAddon) {
+    ADDON_MODE = !!isAddon;
     document.getElementById('newName').value      = '';
     document.getElementById('newSender').value    = '';
     document.getElementById('newSlug').value      = '';
@@ -1763,6 +1866,15 @@
     document.getElementById('newPlannedCount').value = '';
     document.getElementById('createError').style.display = 'none';
     updateNewSlugPreview();
+
+    var tier = ADDON_MODE ? addonTierInfo() : null;
+    document.getElementById('createModalTitle').textContent = ADDON_MODE
+      ? 'New add-on gift — ' + (tier ? tier.label + ' one-time' : '')
+      : 'New gift';
+    document.getElementById('createSubmitBtn').textContent = ADDON_MODE
+      ? 'Continue to payment' + (tier ? ' — ' + tier.label : '')
+      : 'Create gift';
+
     document.getElementById('createModal').classList.add('open');
   }
   function closeCreateModal() { document.getElementById('createModal').classList.remove('open'); }
@@ -1790,10 +1902,43 @@
     var plannedCount   = plannedCountRaw ? parseInt(plannedCountRaw, 10) : null;
     if (!name || !slug || !startDate) { errEl.textContent = 'All fields are required'; errEl.style.display = 'block'; return; }
     if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) { errEl.textContent = 'Slug: lowercase letters, numbers and hyphens only'; errEl.style.display = 'block'; return; }
-    if (GIFTS.length >= giftLimit()) { errEl.textContent = 'You\'ve used all ' + giftLimit() + ' of your gift slots — add another from the dashboard first'; errEl.style.display = 'block'; return; }
+
+    if (ADDON_MODE) {
+      var btn = document.getElementById('createSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Redirecting to payment…';
+      try {
+        var res = await fetch('/api/create-addon-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': await authHeader() },
+          body: JSON.stringify({
+            display_name: name, sender_name: sender, slug, start_date: startDate, frequency,
+            delivery_time: deliveryTime, timezone: timezone, planned_notes_count: plannedCount,
+          }),
+        });
+        var data = await res.json();
+        if (data.url) { window.location.href = data.url; return; }
+        errEl.textContent = data.error || 'Could not start checkout';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment';
+      } catch (e) {
+        errEl.textContent = 'Could not reach server';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment';
+      }
+      return;
+    }
+
+    // term_end_date is deliberately left unset here — it's established
+    // once this gift's first note actually sends (or, failing that, 30
+    // days after signup), not at creation time. See schema.sql /
+    // _shared.js's ensureTermStarted.
     var { error } = await sb.from('gifts').insert({
       user_id: USER.id, slug, display_name: name, sender_name: sender, start_date: startDate, frequency,
       delivery_time: deliveryTime, timezone: timezone, planned_notes_count: plannedCount, status: 'active',
+      gift_type: 'included',
     });
     if (error) { errEl.textContent = error.code === '23505' ? 'That slug is already taken' : error.message; errEl.style.display = 'block'; return; }
     closeCreateModal();
