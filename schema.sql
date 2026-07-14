@@ -498,3 +498,23 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- whichever of these applies).
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS term_start_date TIMESTAMPTZ;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS access_term_end TIMESTAMPTZ;
+
+-- ── ANNUAL PLAN → ONE-TIME PAYMENT ──────────────────────────────────
+-- The annual plan is now a genuine one-time $45 charge (mode 'payment'
+-- in create-checkout.js) instead of a recurring Stripe subscription —
+-- there's nothing left to auto-renew by accident. The installment plan
+-- is unchanged (still a real recurring subscription with cancel_at).
+--
+-- Because annual buyers have no subscription, the SMS add-on can't ride
+-- along as a recurring subscription item for them the way it still does
+-- for installment buyers — it's billed as a flat one-time charge per
+-- gift instead (see stripe-webhook.js's chargeSmsAddonCarryoverOneTime
+-- and update-sms-addon.js's annual branch). These two event types record
+-- that: 'sms_purchase' when a buyer first enables SMS on a gift,
+-- 'sms_renewal' when it's carried over and rebilled at each annual
+-- one-time renewal.
+ALTER TABLE subscription_events DROP CONSTRAINT IF EXISTS subscription_events_event_type_check;
+ALTER TABLE subscription_events ADD CONSTRAINT subscription_events_event_type_check
+  CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed',
+                         'addon_purchase','addon_renewal','early_cancellation',
+                         'sms_purchase','sms_renewal'));
