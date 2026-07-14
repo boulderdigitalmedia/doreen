@@ -4,8 +4,9 @@
 // Handles, for the 12-month-term pricing model:
 //   checkout.session.completed (mode 'subscription') → activate base
 //     plan, enforce the installment plan's 12-month cancel_at, log
-//     'enrollment' (first-ever) or 'renewal' + carry over add-ons
-//     (returning buyer starting a fresh term after a lapse)
+//     'enrollment' (first-ever) or 'renewal' + carry over add-on gifts
+//     and the SMS add-on (returning buyer starting a fresh term after a
+//     lapse)
 //   checkout.session.completed (mode 'payment', gift_addon metadata) →
 //     create the paid add-on gift, log 'addon_purchase'
 //   customer.subscription.updated  → sync status/period, mirror the
@@ -14,10 +15,11 @@
 //     deactivate ALL of this buyer's gifts (still viewable, no more
 //     sends), log 'cancellation'
 //   invoice.payment_succeeded (subscription_cycle, annual plan only) →
-//     log 'renewal', carry over add-ons. Skipped for the installment
-//     plan's monthly cycles — those are routine payments within the
-//     SAME term, not a new term starting (cancel_at ends it before it
-//     would ever reach a real renewal via this event).
+//     log 'renewal', carry over add-ons and re-sync the SMS add-on.
+//     Skipped for the installment plan's monthly cycles — those are
+//     routine payments within the SAME term, not a new term starting
+//     (cancel_at ends it before it would ever reach a real renewal via
+//     this event).
 //   invoice.payment_failed → mark past_due, log 'payment_failed'
 //
 // The subscription_events inserts feed the internal admin dashboard
@@ -38,6 +40,13 @@ const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_R
 // full $20/year rate — regardless of the discounted tier rate
 // originally paid").
 const ADDON_RENEWAL_PRICE = 20;
+
+// Same SMS add-on price IDs update-sms-addon.js uses — duplicated here
+// rather than shared, matching this file's existing per-function style
+// (see chargeOneTimeFee). Needed so a fresh term's subscription can have
+// the SMS item re-added at whichever price matches its plan.
+const SMS_ADDON_MONTHLY_PRICE_ID = process.env.STRIPE_SMS_ADDON_PRICE_ID;
+const SMS_ADDON_ANNUAL_PRICE_ID  = process.env.STRIPE_SMS_ADDON_ANNUAL_PRICE_ID;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -121,7 +130,7 @@ exports.handler = async (event) => {
 
         if (priorEnrollments > 0) {
           await logEvent(profileId, session.customer, 'renewal', plan, planAmount(sub));
-          if (profileId) await handleNewTermStarted(profileId, session.customer);
+          if (profileId) await handleNewTermStarted(profileId, session.customer, sub.id, plan);
         } else {
           await logEvent(profileId, session.customer, 'enrollment', plan, planAmount(sub));
         }
@@ -187,7 +196,7 @@ exports.handler = async (event) => {
 
         const profileId = await findProfileId(invoice.customer);
         await logEvent(profileId, invoice.customer, 'renewal', plan, (invoice.amount_paid || 0) / 100);
-        if (profileId) await handleNewTermStarted(profileId, invoice.customer);
+        if (profileId) await handleNewTermStarted(profileId, invoice.customer, sub.id, plan);
         break;
       }
 
@@ -401,7 +410,13 @@ async function deactivateAllGifts(profileId) {
 // somehow never established (e.g. the previous term lapsed before the
 // buyer ever sent a first note or hit the 30-day cap), this anchors
 // fresh from right now instead of failing silently.
-async function handleNewTermStarted(profileId, stripeCustomerId) {
+//
+// subscriptionId/plan are the NEW term's subscription — for the annual
+// plan this is the SAME subscription object as before (Stripe just bills
+// it again), but for the installment plan it's a brand-new subscription
+// from a fresh checkout, since cancel_at fully ended the old one. That
+// distinction matters for the SMS add-on carryover below.
+async function handleNewTermStarted(profileId, stripeCustomerId, subscriptionId, plan) {
   const { data: profile } = await sb
     .from('profiles')
     .select('access_term_end')
@@ -453,5 +468,59 @@ async function handleNewTermStarted(profileId, stripeCustomerId) {
       await sb.from('gifts').update({ status: 'cancelled' }).eq('id', addon.id);
       await logEvent(profileId, stripeCustomerId, 'payment_failed', 'addon', ADDON_RENEWAL_PRICE);
     }
+  }
+
+  // Carry the SMS add-on into the new term too. It's a real recurring
+  // Stripe subscription item, so on the annual plan it never actually
+  // goes anywhere (same subscription, billed again by Stripe itself) —
+  // this just double-checks it. On the installment plan, though,
+  // cancel_at above fully ends the old subscription every ~12 months and
+  // this term's checkout created a brand-new one, so without this the
+  // SMS item would silently vanish and buyers would have to re-enable it
+  // per gift. Priced at whichever rate matches the new subscription's
+  // plan (monthly vs annual), quantity = however many of this buyer's
+  // still-active gifts have sms_addon on (the add-on loop above has
+  // already resolved which add-on gifts survived into this term).
+  await syncSmsAddonCarryover(profileId, subscriptionId, plan);
+}
+
+async function syncSmsAddonCarryover(profileId, subscriptionId, plan) {
+  const priceId = plan === 'annual' ? SMS_ADDON_ANNUAL_PRICE_ID : SMS_ADDON_MONTHLY_PRICE_ID;
+  if (!priceId || !subscriptionId) return;
+
+  const { data: gifts } = await sb
+    .from('gifts')
+    .select('id, sms_addon')
+    .eq('user_id', profileId)
+    .eq('status', 'active');
+  const smsCount = (gifts || []).filter((g) => g.sms_addon).length;
+
+  try {
+    const items = await stripe.subscriptionItems.list({ subscription: subscriptionId, limit: 100 });
+    const existing = items.data.find((i) => i.price.id === priceId);
+
+    if (smsCount > 0) {
+      if (existing) {
+        if (existing.quantity !== smsCount) {
+          // 'none' rather than update-sms-addon.js's 'always_invoice' —
+          // this fires right at the start of a fresh billing cycle/
+          // subscription, so the quantity just becomes part of regular
+          // recurring billing going forward rather than generating a
+          // one-off prorated invoice.
+          await stripe.subscriptionItems.update(existing.id, { quantity: smsCount, proration_behavior: 'none' });
+        }
+      } else {
+        await stripe.subscriptionItems.create({
+          subscription: subscriptionId,
+          price:        priceId,
+          quantity:     smsCount,
+          proration_behavior: 'none',
+        });
+      }
+    } else if (existing) {
+      await stripe.subscriptionItems.del(existing.id, { proration_behavior: 'none' });
+    }
+  } catch (e) {
+    console.error('SMS add-on carryover failed for profile', profileId, e.message);
   }
 }
