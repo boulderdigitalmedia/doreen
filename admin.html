@@ -230,9 +230,12 @@
     if (s.mrrFallbackCount) {
       document.getElementById('mMRRSub').textContent =
         s.mrrFallbackCount + ' of ' + s.billableTotal + ' used list price (Stripe lookup failed)';
-    } else if (s.activeAddonCount) {
+    } else if (s.activeAddonCount || s.annualSmsCount) {
+      var parts = [];
+      if (s.activeAddonCount) parts.push(s.activeAddonCount + ' add-on gift(s)');
+      if (s.annualSmsCount)   parts.push(s.annualSmsCount + ' annual-plan SMS add-on(s)');
       document.getElementById('mMRRSub').textContent =
-        'Includes ' + s.activeAddonCount + ' add-on gift(s) at an assumed $20/yr renewal';
+        'Includes ' + parts.join(' and ') + ', each at an assumed $20/yr renewal';
     }
     document.getElementById('mChurn').textContent      = fmtPct(s.churnRate30d);
     document.getElementById('mPastDue').textContent    = counts.past_due || 0;
