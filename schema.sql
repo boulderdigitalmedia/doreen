@@ -366,3 +366,135 @@ AND NOT EXISTS (
   SELECT 1 FROM subscription_events e
   WHERE e.profile_id = p.id AND e.event_type = 'cancellation'
 );
+
+-- ══════════════════════════════════════════════════════════════
+-- PRICING OVERHAUL — 12-month term + tiered add-on gifts
+-- Replaces the old cancel-anytime $9/mo-$90/yr + $2/mo-$20/yr-per-slot
+-- model. New model: base plan is a 12-month committed term (paid
+-- upfront at $45/yr, or in $4.50/mo installments — NOT cancel-anytime),
+-- includes exactly 1 gift. Additional gifts are bought individually,
+-- one-time, tiered by how much of the current term is left at purchase
+-- (create-addon-checkout.js) — no rollover into a new term, but an
+-- active add-on carries over automatically on renewal at a flat $20.
+-- Safe to re-run.
+-- ══════════════════════════════════════════════════════════════
+
+-- Distinguishes the one gift bundled with the base plan from gifts
+-- bought separately as add-ons. Only 'addon' gifts get their own
+-- term_end_date/addon_tier_price — an 'included' gift's term always
+-- just tracks its buyer's profiles.current_period_end, kept in sync by
+-- stripe-webhook.js.
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS gift_type TEXT NOT NULL DEFAULT 'included'
+  CHECK (gift_type IN ('included','addon'));
+
+-- When this gift's current term ends and it stops receiving new notes
+-- (existing notes stay visible either way — see the RLS policy below).
+-- For 'included' gifts this mirrors profiles.current_period_end. For
+-- 'addon' gifts it's set at purchase time to the base term's end date
+-- at that moment, and refreshed only if a renewal rebill succeeds.
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS term_end_date TIMESTAMPTZ;
+
+-- What was actually charged for this gift's current term — informational/
+-- audit only (shown in account.html, not used in any billing logic
+-- itself). Add-ons always rebill at the flat $20 tier on renewal
+-- regardless of the discounted tier they originally purchased at.
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS addon_tier_price NUMERIC;
+
+CREATE INDEX IF NOT EXISTS idx_gifts_term_end ON gifts(term_end_date);
+
+-- profiles.extra_gift_slots (below, in the original PROFILES block) is
+-- superseded by the gift_type/term_end_date columns above and no longer
+-- read by any current code — left in place only so historical data
+-- isn't lost, not because anything still uses it.
+
+-- New event types for the tiered add-on system + early-cancellation fee.
+-- CHECK constraints can't be altered in place — drop and recreate it.
+ALTER TABLE subscription_events DROP CONSTRAINT IF EXISTS subscription_events_event_type_check;
+ALTER TABLE subscription_events ADD CONSTRAINT subscription_events_event_type_check
+  CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed',
+                         'addon_purchase','addon_renewal','early_cancellation'));
+
+-- A gift whose term has ended (status='cancelled') should still be
+-- viewable by its recipient — "you can't get new notes, but you can
+-- still see what you were already sent" — so public read access now
+-- covers 'cancelled' as well as 'active'. ('paused' is a separate,
+-- buyer-initiated state not part of this flow — left as buyer-only.)
+-- Policies have no CREATE OR REPLACE, so drop + recreate under the same
+-- name.
+DROP POLICY IF EXISTS "gift_public_read" ON gifts;
+CREATE POLICY "gift_public_read" ON gifts
+  FOR SELECT TO anon
+  USING (status IN ('active','cancelled'));
+
+DROP POLICY IF EXISTS "note_public_read" ON notes;
+CREATE POLICY "note_public_read" ON notes
+  FOR SELECT TO anon
+  USING (
+    EXISTS (SELECT 1 FROM gifts
+            WHERE gifts.id = notes.gift_id
+            AND   gifts.status IN ('active','cancelled'))
+  );
+
+-- Recipients can still favorite/adjust prefs while browsing a lapsed
+-- gift's past notes, so this stays open for 'cancelled' too.
+DROP POLICY IF EXISTS "recipient_public_upsert" ON recipients;
+CREATE POLICY "recipient_public_upsert" ON recipients
+  FOR ALL TO anon
+  USING (
+    EXISTS (SELECT 1 FROM gifts
+            WHERE gifts.id = recipients.gift_id
+            AND   gifts.status IN ('active','cancelled'))
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM gifts
+            WHERE gifts.id = recipients.gift_id
+            AND   gifts.status IN ('active','cancelled'))
+  );
+
+-- Supersedes the original enforce_gift_limit() (in the ENFORCE GIFT
+-- LIMIT block above): the base plan now includes exactly 1 gift, and
+-- every additional gift is bought individually through
+-- create-addon-checkout.js — only that flow's webhook handler (service
+-- role key, after payment succeeds) ever inserts a gift_type='addon'
+-- row, so there's no slot/quantity count left to enforce here. This
+-- CREATE OR REPLACE swaps the trigger's behavior in place; the trigger
+-- itself (gift_limit_check) doesn't need to change since it already
+-- calls this function by name.
+CREATE OR REPLACE FUNCTION enforce_gift_limit()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.gift_type = 'included' THEN
+    IF (SELECT COUNT(*) FROM gifts WHERE user_id = NEW.user_id AND gift_type = 'included') >= 1 THEN
+      RAISE EXCEPTION 'Only one included gift per account — additional gifts are purchased separately.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── FAIR TERM START (first-send anchored, not payment-date anchored) ──
+-- The buyer's 12-month "access term" — what actually gates gift
+-- delivery, add-on tier pricing, and the early-cancellation fee — is
+-- anchored to when their first note actually goes out, not the moment
+-- they paid. Someone who takes two weeks to finish setting up their
+-- gift shouldn't already be two weeks into their 12 months before their
+-- recipient has gotten anything. Capped at 30 days after signup so an
+-- abandoned setup doesn't leave the term open-ended forever (see
+-- send-daily.js's scheduled sweep for that cap, and _shared.js's
+-- ensureTermStarted for the first-send trigger).
+--
+-- This is DELIBERATELY separate from profiles.current_period_end, which
+-- stays exactly what Stripe reports for real billing (charge dates,
+-- cancel_at enforcement) — the two can legitimately differ by however
+-- long the buyer took to get their first note out. On renewal,
+-- access_term_end advances by 365 days from wherever it last ended,
+-- independent of Stripe's own new billing period — see
+-- handleNewTermStarted in stripe-webhook.js.
+--
+-- term_start_date is set once, ever, per account — it's the historical
+-- anchor, not something that moves. Add-on gifts do NOT get their own
+-- first-send-anchored term; they stay pinned to the base gift's
+-- access_term_end throughout (gifts.term_end_date already mirrors
+-- whichever of these applies).
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS term_start_date TIMESTAMPTZ;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS access_term_end TIMESTAMPTZ;
