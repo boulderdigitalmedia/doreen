@@ -2,24 +2,37 @@
 // (mapped to /api/stripe-webhook in netlify.toml)
 //
 // Handles, for the 12-month-term pricing model:
-//   checkout.session.completed (mode 'subscription') → activate base
-//     plan, enforce the installment plan's 12-month cancel_at, log
-//     'enrollment' (first-ever) or 'renewal' + carry over add-on gifts
-//     and the SMS add-on (returning buyer starting a fresh term after a
-//     lapse)
+//   checkout.session.completed (mode 'subscription') → activate the
+//     INSTALLMENT plan, enforce its 12-month cancel_at, log 'enrollment'
+//     (first-ever) or 'renewal' + carry over add-on gifts and the SMS
+//     add-on (returning buyer starting a fresh term after a lapse)
 //   checkout.session.completed (mode 'payment', gift_addon metadata) →
 //     create the paid add-on gift, log 'addon_purchase'
+//   checkout.session.completed (mode 'payment', plan_type 'annual') →
+//     the ANNUAL plan's one-time $45 charge — no subscription exists for
+//     it at all. Saves the card as the customer's default payment method
+//     (required for any later off-session charge to work at all, since
+//     there's no subscription to have attached one automatically), then
+//     logs 'enrollment' or 'renewal' the same way the installment path
+//     does and carries over add-ons/SMS via handleNewTermStarted.
 //   customer.subscription.updated  → sync status/period, mirror the
-//     included gift's term_end_date
+//     included gift's term_end_date. Only ever fires for installment-plan
+//     subscriptions now (and any pre-migration annual subscriptions still
+//     live from before annual became a one-time charge).
 //   customer.subscription.deleted  → term truly over (no successor) —
 //     deactivate ALL of this buyer's gifts (still viewable, no more
-//     sends), log 'cancellation'
-//   invoice.payment_succeeded (subscription_cycle, annual plan only) →
-//     log 'renewal', carry over add-ons and re-sync the SMS add-on.
-//     Skipped for the installment plan's monthly cycles — those are
-//     routine payments within the SAME term, not a new term starting
-//     (cancel_at ends it before it would ever reach a real renewal via
-//     this event).
+//     sends), log 'cancellation'. Same caveat as above: installment-only
+//     going forward. The annual plan's equivalent lapse (term end with no
+//     renewal checkout) is caught by send-daily.js's scheduled sweep
+//     instead, since there's no subscription event to fire it here.
+//   invoice.payment_succeeded (subscription_cycle) → renewal handling for
+//     any subscription that reaches an actual new billing period. In
+//     practice this now only ever fires for pre-migration annual
+//     subscriptions still auto-renewing under the old model — new annual
+//     purchases are one-time payments and never reach this event, and the
+//     installment plan's monthly cycles are explicitly skipped (routine
+//     payments within the SAME term, not a new term — cancel_at ends it
+//     before it would ever auto-renew this way).
 //   invoice.payment_failed → mark past_due, log 'payment_failed'
 //
 // The subscription_events inserts feed the internal admin dashboard
@@ -43,10 +56,17 @@ const ADDON_RENEWAL_PRICE = 20;
 
 // Same SMS add-on price IDs update-sms-addon.js uses — duplicated here
 // rather than shared, matching this file's existing per-function style
-// (see chargeOneTimeFee). Needed so a fresh term's subscription can have
-// the SMS item re-added at whichever price matches its plan.
+// (see chargeOneTimeFee). Only used for the installment plan now, which
+// still has a real subscription to attach the SMS item to.
 const SMS_ADDON_MONTHLY_PRICE_ID = process.env.STRIPE_SMS_ADDON_PRICE_ID;
 const SMS_ADDON_ANNUAL_PRICE_ID  = process.env.STRIPE_SMS_ADDON_ANNUAL_PRICE_ID;
+
+// The annual plan has no subscription to hang a recurring SMS item off
+// of, so its SMS add-on is a flat one-time charge instead — same $/year
+// rate the recurring version used, just charged directly rather than
+// through a subscription item. Matches update-sms-addon.js's identical
+// constant for the same reason (duplicated, not shared — see above).
+const SMS_ONE_TIME_ANNUAL_PRICE = 20;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -81,6 +101,11 @@ exports.handler = async (event) => {
 
         if (session.mode === 'payment' && session.metadata?.gift_addon === 'true') {
           await handleAddonPurchaseCompleted(session);
+          break;
+        }
+
+        if (session.mode === 'payment' && session.metadata?.plan_type === 'annual') {
+          await handleAnnualOneTimePurchase(session);
           break;
         }
 
@@ -386,6 +411,70 @@ async function handleAddonPurchaseCompleted(session) {
   await logEvent(profileId, session.customer, 'addon_purchase', 'addon', tierPrice);
 }
 
+// Handles the annual plan's one-time $45 checkout. There's no
+// subscription behind this at all — it's a genuine one-time payment, so
+// nothing about it can auto-renew even by accident. Two things this has
+// to do that the (real-subscription) installment path gets from Stripe
+// for free:
+//   1. Save the card used as the customer's default payment method. A
+//      one-time Checkout Session doesn't do this on its own — without
+//      it, every later off-session charge for this buyer (add-on gifts,
+//      the one-time SMS fee, add-on renewal carryover) would have no
+//      payment method to charge and would fail outright.
+//   2. Decide enrollment vs. renewal itself from subscription_events,
+//      exactly like the installment path does, since there's no Stripe
+//      subscription lifecycle to lean on here either.
+async function handleAnnualOneTimePurchase(session) {
+  const uid = session.metadata?.supabase_uid;
+  if (!uid) {
+    console.error('CRITICAL: annual checkout completed with no supabase_uid in metadata', session.id);
+    return;
+  }
+
+  try {
+    const pi = await stripe.paymentIntents.retrieve(session.payment_intent);
+    if (pi.payment_method) {
+      await stripe.customers.update(session.customer, {
+        invoice_settings: { default_payment_method: pi.payment_method },
+      });
+    } else {
+      console.error('CRITICAL: annual checkout completed with no payment_method on its PaymentIntent', session.id);
+    }
+  } catch (e) {
+    console.error('Failed to save default payment method for annual buyer', session.customer, e.message);
+  }
+
+  // No subscription for the annual plan means no stripe_subscription_id
+  // and no Stripe-driven current_period_end — access_term_end (below,
+  // via handleNewTermStarted) is the only clock that matters for it.
+  // Explicitly nulls stripe_subscription_id in case this buyer had a
+  // stale installment subscription id on file from switching plans.
+  const profileId = await upsertProfile(session.customer, {
+    stripe_subscription_id: null,
+    stripe_status:          'active',
+    plan:                   'annual',
+  });
+
+  let priorEnrollments = 0;
+  if (profileId) {
+    const res = await sb
+      .from('subscription_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_id', profileId)
+      .eq('event_type', 'enrollment');
+    priorEnrollments = res.count || 0;
+  }
+
+  const amount = (session.amount_total || 0) / 100;
+
+  if (priorEnrollments > 0) {
+    await logEvent(profileId, session.customer, 'renewal', 'annual', amount);
+    if (profileId) await handleNewTermStarted(profileId, session.customer, null, 'annual');
+  } else {
+    await logEvent(profileId, session.customer, 'enrollment', 'annual', amount);
+  }
+}
+
 // Sets every currently-active gift for this buyer to 'cancelled' — no
 // more notes go out, but existing ones stay visible to recipients (see
 // the gifts RLS policy in schema.sql). Called when a base term ends
@@ -470,18 +559,50 @@ async function handleNewTermStarted(profileId, stripeCustomerId, subscriptionId,
     }
   }
 
-  // Carry the SMS add-on into the new term too. It's a real recurring
-  // Stripe subscription item, so on the annual plan it never actually
-  // goes anywhere (same subscription, billed again by Stripe itself) —
-  // this just double-checks it. On the installment plan, though,
-  // cancel_at above fully ends the old subscription every ~12 months and
-  // this term's checkout created a brand-new one, so without this the
-  // SMS item would silently vanish and buyers would have to re-enable it
-  // per gift. Priced at whichever rate matches the new subscription's
-  // plan (monthly vs annual), quantity = however many of this buyer's
-  // still-active gifts have sms_addon on (the add-on loop above has
-  // already resolved which add-on gifts survived into this term).
-  await syncSmsAddonCarryover(profileId, subscriptionId, plan);
+  // Carry the SMS add-on into the new term too — the mechanism differs
+  // by plan since only the installment plan still has a subscription to
+  // work with. Installment: sync (or recreate) the recurring SMS
+  // subscription item on the new subscription, same as before — cancel_at
+  // fully ends the old subscription every ~12 months, so without this
+  // the item would silently vanish and buyers would have to re-enable it
+  // per gift. Annual: there's no subscription at all, so each gift with
+  // SMS on gets charged the flat one-time fee directly instead.
+  if (plan === 'annual') {
+    await chargeSmsAddonCarryoverOneTime(profileId, stripeCustomerId);
+  } else {
+    await syncSmsAddonCarryover(profileId, subscriptionId, plan);
+  }
+}
+
+// One-time-charge equivalent of syncSmsAddonCarryover, for the annual
+// plan. Charges SMS_ONE_TIME_ANNUAL_PRICE per still-active gift that has
+// sms_addon on (the add-on carryover loop above has already resolved
+// which add-on gifts survived into this term) — no subscription item to
+// sync since annual buyers don't have one. A failed charge turns SMS off
+// for that gift rather than leaving it silently enabled with nothing
+// paid; the gift itself (notes) is unaffected either way.
+async function chargeSmsAddonCarryoverOneTime(profileId, stripeCustomerId) {
+  const { data: gifts } = await sb
+    .from('gifts')
+    .select('id, sms_addon')
+    .eq('user_id', profileId)
+    .eq('status', 'active');
+
+  for (const gift of (gifts || []).filter((g) => g.sms_addon)) {
+    try {
+      const paid = await chargeOneTimeFee(stripeCustomerId, SMS_ONE_TIME_ANNUAL_PRICE, 'SMS add-on renewal');
+      if (paid) {
+        await logEvent(profileId, stripeCustomerId, 'sms_renewal', 'annual', SMS_ONE_TIME_ANNUAL_PRICE);
+      } else {
+        await sb.from('gifts').update({ sms_addon: false }).eq('id', gift.id);
+        await logEvent(profileId, stripeCustomerId, 'payment_failed', 'annual', SMS_ONE_TIME_ANNUAL_PRICE);
+      }
+    } catch (e) {
+      console.error('SMS renewal charge failed for gift', gift.id, e.message);
+      await sb.from('gifts').update({ sms_addon: false }).eq('id', gift.id);
+      await logEvent(profileId, stripeCustomerId, 'payment_failed', 'annual', SMS_ONE_TIME_ANNUAL_PRICE);
+    }
+  }
 }
 
 async function syncSmsAddonCarryover(profileId, subscriptionId, plan) {
