@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <title>Admin — A Note For You</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f2ec; --surface: #fff; --sage: #7a9e7e; --sage-light: #c8dbc9;
+      --sage-pale: #e8f0e8; --ink: #2c3a2e; --ink-mid: #5a6e5c; --ink-soft: #8fa391;
+      --border: #dde8dd; --shadow: rgba(80,110,85,0.10); --red: #c0392b; --red-pale: #fdf0ef;
+      --gold: #b8860b; --gold-pale: #fdf8e8;
+    }
+    html, body { min-height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+
+    /* ── GATE ── */
+    #gate {
+      min-height: 100svh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .gate-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      box-shadow: 0 4px 24px var(--shadow);
+      padding: 40px 36px; max-width: 340px; width: 100%; text-align: center;
+    }
+    .gate-icon { font-size: 28px; margin-bottom: 14px; }
+    .gate-title {
+      font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 300;
+      color: var(--ink); margin-bottom: 6px;
+    }
+    .gate-sub { font-size: 13px; color: var(--ink-soft); margin-bottom: 24px; line-height: 1.5; }
+    .gate-input {
+      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+      font-family: 'DM Sans', sans-serif; font-size: 15px; text-align: center;
+      background: var(--bg); color: var(--ink); margin-bottom: 12px;
+    }
+    .gate-input:focus { outline: none; border-color: var(--sage); }
+    .gate-btn {
+      width: 100%; padding: 12px; border-radius: 10px; border: none;
+      background: var(--sage); color: #fff; font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.15s;
+    }
+    .gate-btn:hover { opacity: 0.88; }
+    .gate-btn:disabled { opacity: 0.6; cursor: default; }
+    .gate-error { color: var(--red); font-size: 13px; margin-top: 12px; display: none; }
+
+    /* ── DASHBOARD ── */
+    #dash { display: none; max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+    .dash-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+    .dash-title { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 300; color: var(--ink); }
+    .dash-refreshed { font-size: 12px; color: var(--ink-soft); }
+    .dash-refresh-btn {
+      font-size: 12px; color: var(--sage); background: none; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; text-decoration: underline; padding: 0;
+    }
+
+    .card-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px; margin-bottom: 32px;
+    }
+    .metric-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px 20px; box-shadow: 0 2px 12px var(--shadow);
+    }
+    .metric-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-bottom: 6px; }
+    .metric-value { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 400; color: var(--ink); line-height: 1; }
+    .metric-value.red { color: var(--red); }
+    .metric-sub { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+
+    .panel {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+      padding: 24px 26px; box-shadow: 0 2px 16px var(--shadow); margin-bottom: 24px;
+    }
+    .panel-title { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 4px; }
+    .panel-sub { font-size: 12px; color: var(--ink-soft); margin-bottom: 18px; line-height: 1.5; }
+    .chart-wrap { position: relative; height: 280px; }
+
+    .plan-split { display: flex; gap: 24px; flex-wrap: wrap; }
+    .plan-split-item { flex: 1; min-width: 120px; }
+    .plan-split-bar { height: 8px; border-radius: 4px; background: var(--sage-pale); overflow: hidden; margin: 6px 0; }
+    .plan-split-fill { height: 100%; background: var(--sage); }
+
+    .activity-list { display: flex; flex-direction: column; gap: 0; }
+    .activity-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .activity-row:last-child { border-bottom: none; }
+    .activity-type { display: flex; align-items: center; gap: 8px; }
+    .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .activity-dot.enrollment   { background: var(--sage); }
+    .activity-dot.renewal      { background: #7a97b8; }
+    .activity-dot.cancellation { background: var(--red); }
+    .activity-dot.payment_failed { background: var(--gold); }
+    .activity-label { text-transform: capitalize; color: var(--ink); }
+    .activity-plan { color: var(--ink-soft); font-size: 12px; }
+    .activity-right { display: flex; align-items: center; gap: 14px; }
+    .activity-amount { color: var(--ink-mid); font-variant-numeric: tabular-nums; }
+    .activity-date { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+    .empty-note { font-size: 13px; color: var(--ink-soft); padding: 8px 0; }
+
+    @media (max-width: 560px) {
+      .dash-header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-icon">🔒</div>
+    <div class="gate-title">Admin</div>
+    <div class="gate-sub">Internal dashboard — enrollments, renewals, cancellations.</div>
+    <input class="gate-input" type="password" id="gatePassword" placeholder="Password" autocomplete="off" />
+    <button class="gate-btn" id="gateSubmit">Enter</button>
+    <div class="gate-error" id="gateError">Incorrect password.</div>
+  </div>
+</div>
+
+<div id="dash">
+  <div class="dash-header">
+    <div class="dash-title">Subscriber Activity</div>
+    <div>
+      <span class="dash-refreshed" id="refreshedAt"></span>
+      &nbsp;·&nbsp;
+      <button class="dash-refresh-btn" id="refreshBtn">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card-grid">
+    <div class="metric-card">
+      <div class="metric-label">Active Subscribers</div>
+      <div class="metric-value" id="mActive">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">MRR</div>
+      <div class="metric-value" id="mMRR">—</div>
+      <div class="metric-sub">Base plans only, excludes add-ons</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Churn (30d, approx.)</div>
+      <div class="metric-value" id="mChurn">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Past Due</div>
+      <div class="metric-value red" id="mPastDue">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Canceled (all time)</div>
+      <div class="metric-value" id="mCanceled">—</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Plan breakdown</div>
+    <div class="panel-sub">Among currently billable subscribers (active, trialing, or past due).</div>
+    <div class="plan-split">
+      <div class="plan-split-item">
+        <div>Monthly — <span id="planMonthlyCount">0</span></div>
+        <div class="plan-split-bar"><div class="plan-split-fill" id="planMonthlyBar" style="width:0%"></div></div>
+      </div>
+      <div class="plan-split-item">
+        <div>Annual — <span id="planAnnualCount">0</span></div>
+        <div class="plan-split-bar"><div class="plan-split-fill" id="planAnnualBar" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Enrollments · Renewals · Cancellations</div>
+    <div class="panel-sub">By week, last 12 weeks. History only goes back to whenever this dashboard shipped (plus a one-time backfill) — early weeks may look sparse.</div>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Recent activity</div>
+    <div class="panel-sub">Last 20 events.</div>
+    <div class="activity-list" id="activityList"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var gate       = document.getElementById('gate');
+  var dash       = document.getElementById('dash');
+  var pwInput    = document.getElementById('gatePassword');
+  var submitBtn  = document.getElementById('gateSubmit');
+  var gateError  = document.getElementById('gateError');
+  var refreshBtn = document.getElementById('refreshBtn');
+
+  var storedPassword = null; // kept in memory only, re-sent on refresh
+  var trendChart = null;
+
+  function fmtMoney(n) {
+    return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  function fmtPct(n) {
+    if (n == null) return '—';
+    return (n * 100).toFixed(1) + '%';
+  }
+
+  async function fetchMetrics(password) {
+    var res = await fetch('/api/admin-metrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password })
+    });
+    if (res.status === 401) throw new Error('unauthorized');
+    if (!res.ok) throw new Error('server error (' + res.status + ')');
+    return res.json();
+  }
+
+  function render(data) {
+    var s = data.summary;
+    var counts = s.statusCounts || {};
+
+    document.getElementById('mActive').textContent    = s.billableTotal;
+    document.getElementById('mMRR').textContent        = fmtMoney(s.mrr);
+    document.getElementById('mChurn').textContent      = fmtPct(s.churnRate30d);
+    document.getElementById('mPastDue').textContent    = counts.past_due || 0;
+    document.getElementById('mCanceled').textContent   = counts.canceled || 0;
+
+    var planTotal = (s.monthlyBillable + s.annualBillable) || 1;
+    document.getElementById('planMonthlyCount').textContent = s.monthlyBillable;
+    document.getElementById('planAnnualCount').textContent  = s.annualBillable;
+    document.getElementById('planMonthlyBar').style.width = Math.round(100 * s.monthlyBillable / planTotal) + '%';
+    document.getElementById('planAnnualBar').style.width  = Math.round(100 * s.annualBillable / planTotal) + '%';
+
+    renderChart(data.events || []);
+    renderActivity(data.events || []);
+
+    document.getElementById('refreshedAt').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Buckets events into the last 12 Monday-start weeks and draws a
+  // 3-line chart (enrollments / renewals / cancellations). payment_failed
+  // events are tracked (see activity list) but left off this chart to keep
+  // it readable — it's a leading indicator, not a lifecycle stage.
+  function renderChart(events) {
+    var weeks = [];
+    var now = new Date();
+    var day = now.getDay();
+    var mondayOffset = (day === 0 ? 6 : day - 1);
+    var thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+
+    for (var i = 11; i >= 0; i--) {
+      var start = new Date(thisMonday);
+      start.setDate(start.getDate() - 7 * i);
+      var end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      weeks.push({ start: start, end: end, enrollment: 0, renewal: 0, cancellation: 0 });
+    }
+
+    events.forEach(function (e) {
+      var t = new Date(e.created_at).getTime();
+      for (var i = 0; i < weeks.length; i++) {
+        if (t >= weeks[i].start.getTime() && t < weeks[i].end.getTime()) {
+          if (weeks[i][e.event_type] !== undefined) weeks[i][e.event_type]++;
+          break;
+        }
+      }
+    });
+
+    var labels = weeks.map(function (w) {
+      return w.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+
+    var ctx = document.getElementById('trendChart').getContext('2d');
+    var datasets = [
+      { label: 'Enrollments',   data: weeks.map(function (w) { return w.enrollment; }),   borderColor: '#7a9e7e', backgroundColor: '#7a9e7e', tension: 0.3 },
+      { label: 'Renewals',      data: weeks.map(function (w) { return w.renewal; }),      borderColor: '#7a97b8', backgroundColor: '#7a97b8', tension: 0.3 },
+      { label: 'Cancellations', data: weeks.map(function (w) { return w.cancellation; }), borderColor: '#c0392b', backgroundColor: '#c0392b', tension: 0.3 }
+    ];
+
+    if (trendChart) {
+      trendChart.data.labels = labels;
+      trendChart.data.datasets = datasets;
+      trendChart.update();
+      return;
+    }
+
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#dde8dd' } },
+          x: { grid: { display: false } }
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'DM Sans' }, boxWidth: 10, padding: 16 } }
+        }
+      }
+    });
+  }
+
+  function renderActivity(events) {
+    var list = document.getElementById('activityList');
+    list.innerHTML = '';
+    var recent = events.slice(-20).reverse();
+
+    if (recent.length === 0) {
+      list.innerHTML = '<div class="empty-note">No activity logged yet.</div>';
+      return;
+    }
+
+    recent.forEach(function (e) {
+      var row = document.createElement('div');
+      row.className = 'activity-row';
+
+      var left = document.createElement('div');
+      left.className = 'activity-type';
+      var dot = document.createElement('div');
+      dot.className = 'activity-dot ' + e.event_type;
+      var label = document.createElement('span');
+      label.className = 'activity-label';
+      label.textContent = e.event_type.replace('_', ' ');
+      left.appendChild(dot);
+      left.appendChild(label);
+      if (e.plan) {
+        var plan = document.createElement('span');
+        plan.className = 'activity-plan';
+        plan.textContent = '(' + e.plan + ')';
+        left.appendChild(plan);
+      }
+
+      var right = document.createElement('div');
+      right.className = 'activity-right';
+      if (e.amount != null) {
+        var amt = document.createElement('span');
+        amt.className = 'activity-amount';
+        amt.textContent = '$' + Number(e.amount).toFixed(2);
+        right.appendChild(amt);
+      }
+      var date = document.createElement('span');
+      date.className = 'activity-date';
+      date.textContent = new Date(e.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      right.appendChild(date);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      list.appendChild(row);
+    });
+  }
+
+  async function attemptLogin(password) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Checking…';
+    gateError.style.display = 'none';
+    try {
+      var data = await fetchMetrics(password);
+      storedPassword = password;
+      gate.style.display = 'none';
+      dash.style.display = 'block';
+      render(data);
+      try { sessionStorage.setItem('anfy-admin-pw', password); } catch (e) {}
+    } catch (err) {
+      gateError.textContent = err.message === 'unauthorized' ? 'Incorrect password.' : 'Something went wrong — try again.';
+      gateError.style.display = 'block';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Enter';
+    }
+  }
+
+  submitBtn.addEventListener('click', function () {
+    if (pwInput.value) attemptLogin(pwInput.value);
+  });
+  pwInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && pwInput.value) attemptLogin(pwInput.value);
+  });
+
+  refreshBtn.addEventListener('click', function () {
+    if (storedPassword) fetchMetrics(storedPassword).then(render);
+  });
+
+  // Convenience only — this is sessionStorage (cleared when the tab closes),
+  // not a security boundary. The actual gate is server-side: admin-metrics.js
+  // rejects every request unless it carries the right password.
+  try {
+    var saved = sessionStorage.getItem('anfy-admin-pw');
+    if (saved) attemptLogin(saved);
+  } catch (e) {}
+})();
+</script>
+
+</body>
+</html>
