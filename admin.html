@@ -146,7 +146,7 @@
     <div class="metric-card">
       <div class="metric-label">MRR</div>
       <div class="metric-value" id="mMRR">—</div>
-      <div class="metric-sub">Base plans only, excludes add-ons</div>
+      <div class="metric-sub" id="mMRRSub">From actual Stripe pricing, incl. discounts &amp; add-ons</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Churn (30d, approx.)</div>
@@ -227,6 +227,10 @@
 
     document.getElementById('mActive').textContent    = s.billableTotal;
     document.getElementById('mMRR').textContent        = fmtMoney(s.mrr);
+    if (s.mrrFallbackCount) {
+      document.getElementById('mMRRSub').textContent =
+        s.mrrFallbackCount + ' of ' + s.billableTotal + ' used list price (Stripe lookup failed)';
+    }
     document.getElementById('mChurn').textContent      = fmtPct(s.churnRate30d);
     document.getElementById('mPastDue').textContent    = counts.past_due || 0;
     document.getElementById('mCanceled').textContent   = counts.canceled || 0;
