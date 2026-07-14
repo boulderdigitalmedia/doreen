@@ -5,11 +5,21 @@
 // Creates (or reuses) a Stripe customer for this user, then returns a
 // Stripe Checkout session URL for the chosen plan.
 //
-// Both plans are a 12-month committed term, not cancel-anytime — they
-// just differ in payment cadence:
-//   annual      — $45 charged once a year (a normal recurring annual
-//                 subscription; each yearly renewal already IS a fresh
-//                 12-month term, so no extra enforcement needed)
+// Both plans are a 12-month committed term, not cancel-anytime — but
+// they're structured very differently in Stripe:
+//   annual      — $45 charged once, as a genuine ONE-TIME payment (mode
+//                 'payment', not 'subscription'). There is no underlying
+//                 Stripe subscription for annual buyers at all, so it
+//                 cannot auto-renew even accidentally — continuing past
+//                 the 12-month term always means coming back and
+//                 checking out again (handled as a 'renewal' the same
+//                 way as an installment restart — see stripe-webhook.js).
+//                 Because there's no subscription to attach a default
+//                 payment method to automatically, this checkout sets
+//                 setup_future_usage so the card IS saved to the
+//                 customer — required for any later off-session charges
+//                 (add-on gifts, the one-time SMS fee, renewal add-on
+//                 carryover) to work at all for an annual buyer.
 //   installment — $4.50/mo x 12 ($54/yr total). This is a normal
 //                 recurring monthly subscription under the hood, but
 //                 stripe-webhook.js sets `cancel_at` on it (12 months
@@ -90,19 +100,34 @@ exports.handler = async (event) => {
     await sb.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id);
   }
 
-  // Create Checkout session. plan_type in subscription metadata is how
-  // stripe-webhook.js knows to apply the installment plan's cancel_at
-  // enforcement — it isn't derivable from the price alone once there are
-  // promotion codes/price changes in play.
-  const session = await stripe.checkout.sessions.create({
-    customer:             customerId,
-    mode:                 'subscription',
-    line_items:           [{ price: priceId, quantity: 1 }],
-    success_url:          SITE_URL + '/success?session_id={CHECKOUT_SESSION_ID}',
-    cancel_url:           SITE_URL + '/account',
-    subscription_data:    { metadata: { supabase_uid: user.id, plan_type: plan } },
-    allow_promotion_codes: true,
-  });
+  // Annual is a one-time payment — no subscription object exists for it
+  // at all, so plan_type has to travel as session-level metadata instead
+  // of subscription_data.metadata, and setup_future_usage is required to
+  // save the card for later off-session charges (see the comment above).
+  // Installment stays a real recurring subscription; plan_type there is
+  // how stripe-webhook.js knows to apply cancel_at — it isn't derivable
+  // from the price alone once there are promotion codes/price changes in
+  // play.
+  const session = plan === 'annual'
+    ? await stripe.checkout.sessions.create({
+        customer:             customerId,
+        mode:                 'payment',
+        line_items:           [{ price: priceId, quantity: 1 }],
+        success_url:          SITE_URL + '/success?session_id={CHECKOUT_SESSION_ID}',
+        cancel_url:           SITE_URL + '/account',
+        metadata:             { supabase_uid: user.id, plan_type: 'annual' },
+        payment_intent_data:  { setup_future_usage: 'off_session' },
+        allow_promotion_codes: true,
+      })
+    : await stripe.checkout.sessions.create({
+        customer:             customerId,
+        mode:                 'subscription',
+        line_items:           [{ price: priceId, quantity: 1 }],
+        success_url:          SITE_URL + '/success?session_id={CHECKOUT_SESSION_ID}',
+        cancel_url:           SITE_URL + '/account',
+        subscription_data:    { metadata: { supabase_uid: user.id, plan_type: plan } },
+        allow_promotion_codes: true,
+      });
 
   return ok({ url: session.url });
 };
