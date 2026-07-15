@@ -405,6 +405,45 @@ async function sendNoteShortageAlert(gift, noteIndex, isAdvanceWarning = false) 
   }
 }
 
+// ── Renewal reminder (fires ~30 days before a term ends) ────────────
+// Neither plan auto-renews past its 12-month term anymore — annual is a
+// one-time payment (create-checkout.js) and installment's cancel_at
+// forcibly ends it (stripe-webhook.js) — so without this, a buyer who
+// doesn't happen to check their account page only finds out their gift
+// stopped once it already had. Called from send-daily.js's
+// sweepRenewalReminders, which also stamps profiles.renewal_reminder_
+// sent_at so this only ever goes out once per term (see schema.sql).
+async function sendRenewalReminderEmail(profile) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for renewal reminder, profile ${profile.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const termEndLabel = new Date(profile.access_term_end).toLocaleDateString();
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    const planNote = profile.plan === 'annual'
+      ? "Your plan is a one-time yearly payment, so it won't renew on its own — you'll need to come back and check out again for a new 12-month term."
+      : "Your plan doesn't auto-renew past its 12 scheduled payments — you'll need to come back and subscribe again for a new 12-month term.";
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `Your term ends ${termEndLabel} — renew to keep it going`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Your current 12-month term ends on <strong>${termEndLabel}</strong> — about a month from now.</p>
+        <p style="font-size:16px;">${planNote} Once it ends, your gift(s) stop sending new notes — though everything already sent stays visible to your recipient(s).</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Renew from your account →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send renewal reminder for profile ${profile.id}:`, err.message);
+  }
+}
+
 // Looks one day ahead (in the gift's own day-counting) and warns the buyer
 // early if tomorrow's slot needs a *new* note that doesn't exist yet. If
 // tomorrow's note index is the same as today's (e.g. mid-week for a weekly
@@ -429,55 +468,39 @@ async function checkUpcomingNoteShortage(gift, recipient) {
 
 // ── Core send function ───────────────────────────────────────────
 
-// ── Fair term start (first-send anchored) ───────────────────────
+// ── Fair term start (anchored to the start_date the buyer chose) ───
 // See the long comment in schema.sql next to profiles.term_start_date/
-// access_term_end for the full rationale. Short version: the buyer's
-// 12-month "access term" starts from their first note actually going
-// out, not from the moment they paid — capped at 30 days after signup
-// by send-daily.js's scheduled sweep, for buyers who never send a first
-// note in time.
-const TERM_LENGTH_DAYS = 365;
-
-// Shared by ensureTermStarted (below) and send-daily.js's 30-day-cap
-// sweep — sets the anchor once, then propagates the computed term end
-// to the buyer's included gift and any already-active add-on gifts
-// (add-ons are pinned to the base term, not their own first-send date).
+// access_term_end for the full rationale. The buyer's 12-month "access
+// term" is anchored to whatever start_date they picked for their
+// included gift in the dashboard — known the moment that gift is
+// created, not something that has to wait to be observed. Setting it is
+// handled by a Postgres trigger on gifts (anchor_term_from_gift_start in
+// schema.sql), not here — that fires atomically on the INSERT itself
+// regardless of whether the row came from account.html's direct client
+// insert or any server-side path, which a Node-side hook couldn't
+// guarantee as reliably. send-daily.js's scheduled sweep is the only
+// remaining fallback, for the rare case of a buyer who paid but never
+// actually finished creating their included gift at all (30 days after
+// signup, same cap as before).
+//
+// Kept here (and exported) for send-daily.js's grace-period sweep to
+// call for that fallback case — the normal, expected path no longer
+// calls this from _shared.js itself; it's applied directly by the
+// schema.sql trigger instead.
 async function applyTermStart(userId, termStart, termEnd) {
   await sb.from('profiles').update({
     term_start_date: termStart.toISOString(),
     access_term_end: termEnd.toISOString(),
+    // New term, so any reminder already sent for the previous one no
+    // longer applies — see the renewal_reminder_sent_at comment in
+    // schema.sql.
+    renewal_reminder_sent_at: null,
   }).eq('id', userId);
 
   await sb.from('gifts')
     .update({ term_end_date: termEnd.toISOString() })
     .eq('user_id', userId)
     .in('gift_type', ['included', 'addon']);
-}
-
-// Called the moment an included gift's first note goes out. Only
-// applies to gift_type 'included' — an add-on gift's own first send
-// doesn't start a new term (add-ons stay pinned to the base term).
-// Idempotent: does nothing once profiles.term_start_date is already set,
-// so it's safe to call on every note-1 send without extra guards
-// upstream.
-async function ensureTermStarted(gift) {
-  if (gift.gift_type !== 'included') return;
-  try {
-    const { data: profile } = await sb
-      .from('profiles')
-      .select('term_start_date')
-      .eq('id', gift.user_id)
-      .maybeSingle();
-    if (!profile || profile.term_start_date) return;
-
-    const termStart = new Date();
-    const termEnd = new Date(termStart.getTime() + TERM_LENGTH_DAYS * 24 * 60 * 60 * 1000);
-    await applyTermStart(gift.user_id, termStart, termEnd);
-  } catch (err) {
-    // Never let this block the actual note send — worst case, the term
-    // gets anchored a little later (next send, or the 30-day cap).
-    console.error('Failed to anchor term start for gift', gift.id, err.message);
-  }
 }
 
 async function sendGiftNotifications(gift, force = false) {
@@ -511,12 +534,6 @@ async function sendGiftNotifications(gift, force = false) {
   const noteNum = noteIndex + 1;
   const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}`;
   const results = {};
-
-  // This is the actual moment the buyer's first note goes out — anchor
-  // their fair 12-month term here, if it isn't already (see
-  // ensureTermStarted above). Fires before the per-channel sends below so
-  // the term is anchored even if every channel then happens to fail.
-  if (noteNum === 1) await ensureTermStarted(gift);
 
   // Push
   if (recipient.channels.includes('push') && recipient.push_subscription) {
@@ -600,6 +617,7 @@ module.exports = {
   isDeliveryWindow,
   sendGiftNotifications,
   applyTermStart,
+  sendRenewalReminderEmail,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
