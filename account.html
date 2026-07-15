@@ -951,11 +951,11 @@
         : '';
       if (isBillable && PROFILE.access_term_end) {
         // access_term_end (not the raw Stripe billing date) is the fair
-        // term — anchored to your first note actually sending, capped at
-        // 30 days after signup. See schema.sql for why these can differ.
+        // term — anchored to the start date you chose for your gift when
+        // you created it. See schema.sql for why these can differ.
         termInfo.innerHTML = 'Term runs through ' + new Date(PROFILE.access_term_end).toLocaleDateString() + cancelLink;
       } else if (isBillable) {
-        termInfo.innerHTML = 'Your term begins once your first note sends (or automatically within 30 days)' + cancelLink;
+        termInfo.innerHTML = 'Your term begins once you set up your gift (or automatically within 30 days)' + cancelLink;
       } else {
         termInfo.innerHTML = '';
       }
@@ -1036,10 +1036,11 @@
   var ADDON_MID_TIER_MAX_DAYS = 180;
 
   function daysRemainingInTerm() {
-    // access_term_end (fair, first-send-anchored term) drives add-on
-    // pricing — not Stripe's raw billing date. Null until the buyer's
-    // first note sends or the 30-day cap hits (see schema.sql), in which
-    // case there's no fair term yet to price an add-on against.
+    // access_term_end (fair term, anchored to your gift's chosen start
+    // date) drives add-on pricing — not Stripe's raw billing date. Null
+    // until the buyer has actually created their included gift (or the
+    // 30-day cap hits — see schema.sql), in which case there's no fair
+    // term yet to price an add-on against.
     if (!PROFILE || !PROFILE.access_term_end) return null;
     var ms = new Date(PROFILE.access_term_end).getTime() - Date.now();
     return Math.ceil(ms / (24 * 60 * 60 * 1000));
@@ -1126,7 +1127,7 @@
       addSlot.style.cursor  = 'default';
       var days = daysRemainingInTerm();
       var closedMsg = (days == null)
-        ? 'Add-ons open up once your first note sends (or automatically within 30 days)'
+        ? 'Add-ons open up once you set up your gift (or automatically within 30 days)'
         : 'Your term ends in ' + Math.max(days, 0) + ' day(s) — add-ons reopen once you renew';
       addSlot.innerHTML = '<div style="font-size:12px;color:var(--ink-soft);padding:0 12px;text-align:center">' +
         closedMsg +
