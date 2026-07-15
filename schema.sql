@@ -518,3 +518,99 @@ ALTER TABLE subscription_events ADD CONSTRAINT subscription_events_event_type_ch
   CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed',
                          'addon_purchase','addon_renewal','early_cancellation',
                          'sms_purchase','sms_renewal'));
+
+-- ── RENEWAL REMINDER EMAIL ───────────────────────────────────────────
+-- Neither plan auto-renews past its 12-month term anymore (annual is a
+-- one-time payment now; installment's cancel_at forcibly ends it) — so
+-- without a heads-up, a buyer who doesn't happen to check their account
+-- page only finds out their gift stopped once it already had. send-daily.
+-- js's sweepRenewalReminders sends one email ~30 days before
+-- access_term_end. This column marks that it's already gone out for the
+-- CURRENT term, so the 15-minute sweep doesn't resend it every cycle for
+-- a month straight — it's reset to NULL whenever a new term starts
+-- (applyTermStart in _shared.js, and handleNewTermStarted in
+-- stripe-webhook.js), so the next term gets its own reminder in due course.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS renewal_reminder_sent_at TIMESTAMPTZ;
+
+-- ── TERM START ANCHORED TO THE CHOSEN start_date ─────────────────────
+-- Originally, the buyer's 12-month "access term" was anchored to the
+-- moment their included gift's first note actually SENT (a Node-side
+-- hook, ensureTermStarted in _shared.js, fired at send time), falling
+-- back to 30 days after signup for anyone who never got a first note out
+-- at all. That had a real problem for any account whose first note had
+-- already gone out before this code existed — legacy accounts — since
+-- that send-time hook had already come and gone with nothing to catch
+-- it, permanently. Their ONLY path forward was the 30-day fallback,
+-- which used created_at + 30 days as a guess — wildly wrong for an
+-- account that's been active and paying for a year or more, since the
+-- resulting term_end would already be in the past the instant it was
+-- written.
+--
+-- The fix: anchor from the start_date the buyer actually chose for
+-- their included gift in the dashboard instead — known immediately at
+-- gift-creation time, not something that has to wait to be observed.
+-- This trigger fires the moment an 'included' gift row is inserted
+-- (whether from account.html's direct client insert or any other path —
+-- a database trigger fires on the INSERT itself, which is more reliable
+-- than a Node-side hook that has to actually get called), and is a
+-- no-op if term_start_date is already set (matches the "set once, ever"
+-- rule already established for this field). send-daily.js's 30-day
+-- grace sweep remains as the fallback for the one case this can't cover:
+-- a buyer who paid but never actually finished creating a gift at all.
+CREATE OR REPLACE FUNCTION anchor_term_from_gift_start()
+RETURNS TRIGGER AS $$
+DECLARE
+  existing_start TIMESTAMPTZ;
+BEGIN
+  IF NEW.gift_type = 'included' THEN
+    SELECT term_start_date INTO existing_start FROM profiles WHERE id = NEW.user_id;
+
+    IF existing_start IS NULL THEN
+      UPDATE profiles
+      SET term_start_date = NEW.start_date::timestamptz,
+          access_term_end = NEW.start_date::timestamptz + INTERVAL '365 days',
+          renewal_reminder_sent_at = NULL
+      WHERE id = NEW.user_id;
+    END IF;
+
+    -- Whatever the profile's access_term_end now is (just set above, or
+    -- already set from an earlier included gift on this account), mirror
+    -- it onto this row so gifts.term_end_date is never left null for an
+    -- included gift.
+    SELECT access_term_end INTO NEW.term_end_date FROM profiles WHERE id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_anchor_term_from_gift_start ON gifts;
+CREATE TRIGGER trg_anchor_term_from_gift_start
+  BEFORE INSERT ON gifts
+  FOR EACH ROW
+  EXECUTE FUNCTION anchor_term_from_gift_start();
+
+-- One-time backfill for accounts that already exist as of this
+-- migration — sets term_start_date/access_term_end from their included
+-- gift's start_date, exactly like the trigger above would have done had
+-- it existed when that gift was created. Only touches profiles where
+-- term_start_date is still null, so it's safe to re-run (a no-op the
+-- second time). Profiles with no included gift on file at all are left
+-- alone for send-daily.js's 30-day sweep to handle instead.
+UPDATE profiles p
+SET term_start_date = g.start_date::timestamptz,
+    access_term_end = g.start_date::timestamptz + INTERVAL '365 days'
+FROM gifts g
+WHERE g.user_id = p.id
+  AND g.gift_type = 'included'
+  AND p.term_start_date IS NULL;
+
+-- Mirrors the backfilled access_term_end onto every included/add-on gift
+-- that doesn't have its own term_end_date set yet — same propagation the
+-- trigger and applyTermStart already do for new rows going forward.
+UPDATE gifts g
+SET term_end_date = p.access_term_end
+FROM profiles p
+WHERE g.user_id = p.id
+  AND g.gift_type IN ('included', 'addon')
+  AND g.term_end_date IS NULL
+  AND p.access_term_end IS NOT NULL;
