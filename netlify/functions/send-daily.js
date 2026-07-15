@@ -13,32 +13,31 @@ const TERM_START_GRACE_DAYS   = 30;
 const TERM_LENGTH_DAYS        = 365;
 const RENEWAL_REMINDER_DAYS   = 30;
 
-// Caps the "fair term start" grace period (see the schema.sql comment
-// next to profiles.term_start_date) — normally a buyer's 12-month access
-// term starts from their first note actually sending (_shared.js's
-// ensureTermStarted), but someone who never gets around to sending a
-// first note at all shouldn't leave their term open-ended forever. Any
-// billable profile that's gone 30+ days since signup with no
-// term_start_date yet gets anchored right at that 30-day mark instead.
+// Term start is now normally anchored to the start_date the buyer chose
+// for their included gift, the moment that gift is created — a Postgres
+// trigger (anchor_term_from_gift_start in schema.sql) handles that
+// atomically at INSERT time, not this sweep. This sweep is only a
+// fallback for two cases the trigger can't cover:
 //
-// This also has to be the catch-all for LEGACY accounts predating this
-// whole term-tracking system entirely — ensureTermStarted only fires
-// once, at the exact moment a gift's note #1 sends, and for an account
-// whose first note already went out long before this code existed,
-// that moment is gone for good. This sweep is the only thing left that
-// can ever set term_start_date for them.
+//   1. A buyer who paid but never actually finished creating their
+//      included gift at all — there's no start_date to anchor from, so
+//      this falls back to the old flat 30-days-after-signup cap.
+//   2. Defense in depth: if a profile somehow still has no
+//      term_start_date 30+ days after signup despite having a gift on
+//      file (the trigger should have caught this, but this is cheap
+//      insurance against, say, a row inserted outside the normal app
+//      flow), this looks up that gift's own start_date and uses it —
+//      the same accurate source the trigger uses — rather than falling
+//      back to the flat guess.
 //
-// That makes the naive created_at + 30 days math actively dangerous for
-// long-standing accounts: for anyone whose profile is already more than
-// ~13 months old (created_at + 30 + 365 days), that computed term_end
-// lands in the PAST the instant it's written — which would make the very
+// Either way, the same danger applies as before to the flat 30-day
+// fallback: for a long-standing account, created_at + 30 + 365 days can
+// land in the past the instant it's written, which would make the very
 // next sweep cycle treat a real, currently-serviced paying customer as
-// already expired and deactivate their gifts, with zero warning, purely
-// because of when this code happened to first catch up with them. The
-// clamp below prevents that: if the created_at-anchored math would
-// already be expired by the time it's applied, this anchors a full fresh
-// 365 days from right now instead — exactly the same principle as the
-// stale-date guard in stripe-webhook.js's handleNewTermStarted.
+// already expired. The clamp below prevents that — if the computed term
+// would already be expired, this anchors a full fresh 365 days from
+// right now instead, same principle as the stale-date guard in
+// stripe-webhook.js's handleNewTermStarted.
 async function sweepTermStartGrace() {
   const cutoffISO = new Date(Date.now() - TERM_START_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -56,8 +55,21 @@ async function sweepTermStartGrace() {
 
   for (const profile of overdue || []) {
     const now = new Date();
-    const computedStart = new Date(new Date(profile.created_at).getTime() + TERM_START_GRACE_DAYS * 24 * 60 * 60 * 1000);
-    const computedEnd   = new Date(computedStart.getTime() + TERM_LENGTH_DAYS * 24 * 60 * 60 * 1000);
+
+    const { data: includedGift } = await sb
+      .from('gifts')
+      .select('start_date')
+      .eq('user_id', profile.id)
+      .eq('gift_type', 'included')
+      .maybeSingle();
+
+    let computedStart;
+    if (includedGift && includedGift.start_date) {
+      computedStart = new Date(includedGift.start_date);
+    } else {
+      computedStart = new Date(new Date(profile.created_at).getTime() + TERM_START_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    }
+    const computedEnd = new Date(computedStart.getTime() + TERM_LENGTH_DAYS * 24 * 60 * 60 * 1000);
     const isAlreadyExpired = computedEnd.getTime() <= now.getTime();
 
     const termStart = isAlreadyExpired ? now : computedStart;
@@ -66,7 +78,7 @@ async function sweepTermStartGrace() {
     try {
       await applyTermStart(profile.id, termStart, termEnd);
       if (isAlreadyExpired) {
-        console.log('Term-start grace cap applied for LEGACY profile', profile.id, '— anchored fresh from now, created_at-based math was already expired');
+        console.log('Term-start grace cap applied for LEGACY profile', profile.id, '— anchored fresh from now, computed term was already expired');
       } else {
         console.log('Term-start grace cap applied for profile', profile.id);
       }
