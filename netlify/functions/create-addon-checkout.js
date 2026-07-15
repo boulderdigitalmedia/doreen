@@ -109,14 +109,14 @@ exports.handler = async (event) => {
     return err('Your subscription isn\'t active — resolve billing before adding another gift', 409);
   }
   // access_term_end (not Stripe's raw current_period_end) is the fair
-  // term used for add-on pricing — anchored to the buyer's first note
-  // actually sending, capped at 30 days after signup (see schema.sql).
-  // It isn't set yet if they haven't sent their first note and the
-  // 30-day cap hasn't hit either — there's no fair term to price against
-  // yet, so add-ons just aren't purchasable until then.
+  // term used for add-on pricing — anchored to the start_date chosen for
+  // the included gift, capped at 30 days after signup for anyone who
+  // never actually creates one (see schema.sql). It isn't set yet in
+  // that latter case — there's no fair term to price against yet, so
+  // add-ons just aren't purchasable until then.
   if (!profile.access_term_end) {
     return err(
-      'Your term hasn\'t started yet — it begins once your first gift\'s first note sends (or automatically within 30 days of subscribing). Add-on gifts open up after that.',
+      'Your term hasn\'t started yet — it begins once you set up your included gift (or automatically within 30 days of subscribing). Add-on gifts open up after that.',
       409
     );
   }
