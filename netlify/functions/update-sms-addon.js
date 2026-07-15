@@ -184,7 +184,7 @@ async function handleAnnualSmsToggle(profile, gift, enabled) {
   }
   if (!profile.access_term_end) {
     return err(
-      'Your term hasn\'t started yet — it begins once your first gift\'s first note sends (or automatically within 30 days of subscribing). SMS opens up after that.',
+      'Your term hasn\'t started yet — it begins once you set up your included gift (or automatically within 30 days of subscribing). SMS opens up after that.',
       409
     );
   }
