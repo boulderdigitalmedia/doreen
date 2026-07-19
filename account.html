@@ -824,6 +824,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     PROFILE = profile;
 
+    // Fire-and-forget "buyer is actually using the app" beacon — powers
+    // send-daily.js's dormancy nudge email. Never awaited/blocked on:
+    // this should never slow down or interrupt a real page load.
+    fetch('/api/touch-activity', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + session.access_token },
+    }).catch(function() {});
+
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display     = 'block';
 
