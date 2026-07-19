@@ -102,6 +102,11 @@
   to     = "/.netlify/functions/admin-metrics"
   status = 200
 
+[[redirects]]
+  from   = "/api/touch-activity"
+  to     = "/.netlify/functions/touch-activity"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
