@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 -- Buyers can read their own profile (needed for the paywall check in account.html)
+DROP POLICY IF EXISTS "profile_owner_read" ON profiles;
 CREATE POLICY "profile_owner_read" ON profiles
   FOR SELECT TO authenticated
   USING (auth.uid() = id);
@@ -119,14 +120,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS gifts_updated_at ON gifts;
 CREATE TRIGGER gifts_updated_at
   BEFORE UPDATE ON gifts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS recipients_updated_at ON recipients;
 CREATE TRIGGER recipients_updated_at
   BEFORE UPDATE ON recipients
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS notes_updated_at ON notes;
 CREATE TRIGGER notes_updated_at
   BEFORE UPDATE ON notes
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -139,12 +143,18 @@ ALTER TABLE recipients ENABLE ROW LEVEL SECURITY;
 
 -- GIFTS
 -- Buyers can fully manage their own gifts
+DROP POLICY IF EXISTS "gift_owner_all" ON gifts;
 CREATE POLICY "gift_owner_all" ON gifts
   FOR ALL TO authenticated
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- Public (anon) can read active gifts — needed for slug lookup on recipient page
+-- Public (anon) can read active gifts — needed for slug lookup on recipient page.
+-- (Superseded further down by the PRICING OVERHAUL block's version of this
+-- same policy, which also allows 'cancelled' — left here, still guarded,
+-- since dropping/recreating it twice in one run is harmless and this keeps
+-- the file readable in its original build order.)
+DROP POLICY IF EXISTS "gift_public_read" ON gifts;
 CREATE POLICY "gift_public_read" ON gifts
   FOR SELECT TO anon
   USING (status = 'active');
@@ -162,6 +172,7 @@ REVOKE SELECT (access_password) ON gifts FROM anon;
 
 -- NOTES
 -- Buyers manage notes on their own gifts
+DROP POLICY IF EXISTS "note_owner_all" ON notes;
 CREATE POLICY "note_owner_all" ON notes
   FOR ALL TO authenticated
   USING (
@@ -175,7 +186,9 @@ CREATE POLICY "note_owner_all" ON notes
             AND   gifts.user_id = auth.uid())
   );
 
--- Public can read notes for active gifts
+-- Public can read notes for active gifts (superseded further down, same
+-- reasoning as gift_public_read above)
+DROP POLICY IF EXISTS "note_public_read" ON notes;
 CREATE POLICY "note_public_read" ON notes
   FOR SELECT TO anon
   USING (
@@ -186,7 +199,9 @@ CREATE POLICY "note_public_read" ON notes
 
 -- RECIPIENTS
 -- Public can insert/update the recipient record for an active gift
--- (the giftee sets their own notification preferences on first visit)
+-- (the giftee sets their own notification preferences on first visit) —
+-- superseded further down, same reasoning as gift_public_read above
+DROP POLICY IF EXISTS "recipient_public_upsert" ON recipients;
 CREATE POLICY "recipient_public_upsert" ON recipients
   FOR ALL TO anon
   USING (
@@ -201,6 +216,7 @@ CREATE POLICY "recipient_public_upsert" ON recipients
   );
 
 -- Buyers can read the recipient record for their own gifts (dashboard stats)
+DROP POLICY IF EXISTS "recipient_owner_read" ON recipients;
 CREATE POLICY "recipient_owner_read" ON recipients
   FOR SELECT TO authenticated
   USING (
@@ -212,6 +228,7 @@ CREATE POLICY "recipient_owner_read" ON recipients
 -- Buyers can also set/update the recipient record themselves for their own
 -- gifts (e.g. entering the recipient's email directly from the dashboard,
 -- instead of waiting for the giftee to onboard via the public link)
+DROP POLICY IF EXISTS "recipient_owner_write" ON recipients;
 CREATE POLICY "recipient_owner_write" ON recipients
   FOR ALL TO authenticated
   USING (
@@ -247,6 +264,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS gift_limit_check ON gifts;
 CREATE TRIGGER gift_limit_check
   BEFORE INSERT ON gifts
   FOR EACH ROW EXECUTE FUNCTION enforce_gift_limit();
@@ -261,16 +279,19 @@ VALUES ('photos', 'photos', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Allow authenticated buyers to upload photos
+DROP POLICY IF EXISTS "buyers_upload_photos" ON storage.objects;
 CREATE POLICY "buyers_upload_photos" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'photos');
 
 -- Allow public to read photos (recipient page needs them)
+DROP POLICY IF EXISTS "public_read_photos" ON storage.objects;
 CREATE POLICY "public_read_photos" ON storage.objects
   FOR SELECT TO anon
   USING (bucket_id = 'photos');
 
 -- Allow buyers to delete their own photos
+DROP POLICY IF EXISTS "buyers_delete_photos" ON storage.objects;
 CREATE POLICY "buyers_delete_photos" ON storage.objects
   FOR DELETE TO authenticated
   USING (bucket_id = 'photos' AND auth.uid()::text = (storage.foldername(name))[1]);
@@ -614,3 +635,34 @@ WHERE g.user_id = p.id
   AND g.gift_type IN ('included', 'addon')
   AND g.term_end_date IS NULL
   AND p.access_term_end IS NOT NULL;
+
+-- ── GIFT SETUP REMINDER EMAIL ────────────────────────────────────────
+-- A buyer who pays but never actually creates their included gift still
+-- gets their term auto-started 30 days after signup (send-daily.js's
+-- sweepTermStartGrace) — that clock runs whether or not they ever set
+-- anything up. This column tracks whether a heads-up email has already
+-- gone out warning them that's about to happen (sweepGiftSetupReminders,
+-- ~5 days before the 30-day cutoff), so it's only ever sent once. Unlike
+-- renewal_reminder_sent_at, this never needs to reset — the "haven't
+-- created a gift yet" state can only ever occur once, before
+-- term_start_date is ever set for the first time on an account.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gift_setup_reminder_sent_at TIMESTAMPTZ;
+
+-- ── RE-ENGAGEMENT TRACKING ───────────────────────────────────────────
+-- Nothing in this app previously tracked whether a paying buyer actually
+-- opens their account — only billing state (active/canceled/etc). This
+-- gives that visibility and powers a dormancy nudge email:
+--
+--   last_active_at — stamped to now() every time account.html finishes
+--     loading for a signed-in buyer (see touch-activity.js, called
+--     fire-and-forget from account.html's boot()). NULL for anyone who
+--     signed up before this column existed and hasn't logged back in
+--     since — send-daily.js treats that the same as "currently dormant."
+--
+--   reengagement_email_sent_at — sent-once-per-dormancy-episode guard,
+--     same pattern as renewal_reminder_sent_at. touch-activity.js clears
+--     it back to NULL every time the buyer is actually active, so if they
+--     go quiet again later they're eligible for another nudge — it's not
+--     a lifetime cap like gift_setup_reminder_sent_at.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reengagement_email_sent_at TIMESTAMPTZ;
