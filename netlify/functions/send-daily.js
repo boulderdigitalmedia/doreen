@@ -7,11 +7,18 @@
 // isDeliveryWindow in _shared.js, accurate to the nearest 15-minute
 // bucket, e.g. picking 8:07am sends around 8:00-8:15am local time.
 const { schedule } = require('@netlify/functions');
-const { sb, shouldSendToday, isDeliveryWindow, sendGiftNotifications, applyTermStart, sendRenewalReminderEmail } = require('./_shared');
+const {
+  sb, shouldSendToday, isDeliveryWindow, sendGiftNotifications,
+  checkNoteShortage, getGiftNoteStatus,
+  applyTermStart, sendRenewalReminderEmail, sendGiftSetupReminderEmail,
+  sendReengagementEmail,
+} = require('./_shared');
 
-const TERM_START_GRACE_DAYS   = 30;
-const TERM_LENGTH_DAYS        = 365;
-const RENEWAL_REMINDER_DAYS   = 30;
+const TERM_START_GRACE_DAYS     = 30;
+const TERM_LENGTH_DAYS          = 365;
+const RENEWAL_REMINDER_DAYS     = 30;
+const GIFT_SETUP_REMINDER_DAY   = 25; // ~5 days before the 30-day auto-start cap
+const REENGAGEMENT_INACTIVE_DAYS = 30; // how long without opening the app counts as "dormant"
 
 // Term start is now normally anchored to the start_date the buyer chose
 // for their included gift, the moment that gift is created — a Postgres
@@ -180,12 +187,139 @@ async function sweepRenewalReminders() {
   }
 }
 
+// A buyer who subscribes but never actually creates their included gift
+// still gets their term auto-started 30 days after signup regardless
+// (sweepTermStartGrace above) — anchored to created_at + 30 days rather
+// than a start_date they chose, since there's no gift to pull one from.
+// That clock runs whether or not they ever set anything up, so this
+// gives them a heads-up ~5 days before it happens. Only ever needs to
+// fire once per account — gift_setup_reminder_sent_at never resets,
+// since this "haven't created a gift yet" state can only occur once,
+// before term_start_date is ever set for the first time (see schema.sql).
+// Naturally stops matching once either the buyer creates a gift (the
+// trigger sets term_start_date) or the 30-day cap fires above (this
+// sweep runs first in the handler below, so by the time day 30 arrives
+// term_start_date is already set and this query excludes them either way.
+async function sweepGiftSetupReminders() {
+  const cutoffISO = new Date(Date.now() - GIFT_SETUP_REMINDER_DAY * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: overdue, error } = await sb
+    .from('profiles')
+    .select('id, created_at')
+    .is('term_start_date', null)
+    .is('gift_setup_reminder_sent_at', null)
+    .in('stripe_status', ['active', 'trialing', 'past_due'])
+    .lte('created_at', cutoffISO);
+
+  if (error) {
+    console.error('Gift-setup-reminder sweep query failed:', error.message);
+    return;
+  }
+
+  for (const profile of overdue || []) {
+    const autoStartDate = new Date(new Date(profile.created_at).getTime() + TERM_START_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    try {
+      await sendGiftSetupReminderEmail(profile, autoStartDate);
+      await sb.from('profiles')
+        .update({ gift_setup_reminder_sent_at: new Date().toISOString() })
+        .eq('id', profile.id);
+      console.log('Gift-setup reminder sent for profile', profile.id);
+    } catch (e) {
+      console.error('Failed to send/record gift-setup reminder for profile', profile.id, e.message);
+    }
+  }
+}
+
+// Billing state (active/canceled/etc) says nothing about whether a paying
+// buyer is actually opening the app — this catches the ones who aren't.
+// last_active_at is stamped by touch-activity.js on every account.html
+// load; NULL means "never recorded an active moment" (either a legacy
+// profile that predates this column, or genuinely hasn't been back since
+// signup) and is treated the same as "past the inactivity window." Only
+// fires once per dormancy episode: touch-activity.js clears
+// reengagement_email_sent_at back to NULL the instant the buyer is
+// active again, so a later lapse is eligible for another nudge.
+async function sweepReengagement() {
+  const cutoffISO = new Date(Date.now() - REENGAGEMENT_INACTIVE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: dormant, error } = await sb
+    .from('profiles')
+    .select('id, created_at, last_active_at')
+    .in('stripe_status', ['active', 'trialing', 'past_due'])
+    .is('reengagement_email_sent_at', null)
+    .or(`last_active_at.is.null,last_active_at.lte.${cutoffISO}`);
+
+  if (error) {
+    console.error('Re-engagement sweep query failed:', error.message);
+    return;
+  }
+
+  for (const profile of dormant || []) {
+    // For a legacy profile with no last_active_at on record at all, fall
+    // back to created_at so the email's "X days" figure is still honest
+    // rather than fabricated.
+    const since = profile.last_active_at ? new Date(profile.last_active_at) : new Date(profile.created_at);
+    const daysSinceActive = Math.max(0, Math.round((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000)));
+
+    // Actually check note supply rather than assuming it's fine — worst
+    // status across all of this buyer's active gifts wins ('out' beats
+    // 'low' beats 'ok'), so the email never undersells a real problem.
+    let noteStatus = 'ok';
+    try {
+      const { data: activeGifts } = await sb
+        .from('gifts')
+        .select('id, slug, display_name, sender_name, frequency, start_date, delivery_time, timezone, sms_addon, user_id')
+        .eq('user_id', profile.id)
+        .eq('status', 'active');
+
+      for (const g of activeGifts || []) {
+        const status = await getGiftNoteStatus(g);
+        if (status === 'out') { noteStatus = 'out'; break; }
+        if (status === 'low') noteStatus = 'low';
+      }
+    } catch (e) {
+      console.error('Failed to compute note status for profile', profile.id, e.message);
+    }
+
+    try {
+      await sendReengagementEmail(profile, daysSinceActive, noteStatus);
+      await sb.from('profiles')
+        .update({ reengagement_email_sent_at: new Date().toISOString() })
+        .eq('id', profile.id);
+      console.log('Re-engagement nudge sent for profile', profile.id, '—', daysSinceActive, 'days inactive, note status:', noteStatus);
+    } catch (e) {
+      console.error('Failed to send/record re-engagement nudge for profile', profile.id, e.message);
+    }
+  }
+}
+
+// Standalone note-shortage check, once per gift per day — see the long
+// comment on checkNoteShortage in _shared.js for why this is decoupled
+// from sendGiftNotifications/the main send loop below rather than
+// nested inside it: that path only ever ran for gifts with a fully
+// onboarded recipient, on their exact scheduled send day, which silently
+// missed a fresh gift under test (no recipient yet) or a weekly/
+// biweekly/monthly gift on any day that isn't its send day.
+//
+// Gated per-gift by isDeliveryWindow so it still only actually runs once
+// per day (matching the gift's own default delivery_time/timezone even
+// when recipient is null), not once per 15-minute cycle.
+async function sweepNoteShortageChecks(gifts, recipientByGiftId) {
+  await Promise.allSettled(
+    gifts
+      .filter(g => isDeliveryWindow(g, recipientByGiftId.get(g.id)))
+      .map(g => checkNoteShortage(g, recipientByGiftId.get(g.id)))
+  );
+}
+
 exports.handler = schedule('*/15 * * * *', async () => {
   console.log('send-daily fired:', new Date().toISOString());
 
+  await sweepGiftSetupReminders();
   await sweepTermStartGrace();
   await sweepExpiredAnnualTerms();
   await sweepRenewalReminders();
+  await sweepReengagement();
 
   const { data: gifts, error } = await sb
     .from('gifts')
@@ -206,6 +340,10 @@ exports.handler = schedule('*/15 * * * *', async () => {
     .in('gift_id', giftIds);
 
   const recipientByGiftId = new Map((recipients || []).map(r => [r.gift_id, r]));
+
+  // Independent of the actual send below — runs for every active gift
+  // once/day regardless of cadence or recipient/channel completeness.
+  await sweepNoteShortageChecks(gifts, recipientByGiftId);
 
   const results = await Promise.allSettled(
     gifts
