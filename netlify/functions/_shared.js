@@ -444,6 +444,92 @@ async function sendRenewalReminderEmail(profile) {
   }
 }
 
+// ── Re-engagement nudge (fires after a stretch of no app activity) ──
+// Billing state alone doesn't tell you whether a paying buyer is actually
+// using the thing they're paying for — this is the "come back and check
+// on your gift" email for someone who is (last_active_at is stamped by
+// touch-activity.js, called from account.html's boot()). Called from
+// send-daily.js's sweepReengagement, which also stamps profiles.
+// reengagement_email_sent_at so this only fires once per dormancy episode
+// — touch-activity.js clears that column the moment they're active again,
+// so a later lapse is eligible for a fresh nudge (unlike the one-time-ever
+// gift_setup_reminder_sent_at).
+// noteStatus is the WORST status (see getGiftNoteStatus) across all of
+// this buyer's active gifts, computed by sweepReengagement before calling
+// this — never guessed here. 'out' and 'low' get an honest, specific
+// warning; 'ok' gets a genuine (verified, not assumed) all-clear instead
+// of a generic "probably fine."
+async function sendReengagementEmail(profile, daysSinceActive, noteStatus) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for re-engagement nudge, profile ${profile.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    const statusLine = noteStatus === 'out'
+      ? `One of your gifts is <strong>currently out of written notes</strong> — your recipient won't get anything new until you add more.`
+      : noteStatus === 'low'
+        ? `One of your gifts is <strong>running low on upcoming notes</strong> — worth adding a few more soon so you don't run out.`
+        : `Your notes are all set for now — no shortage on any active gift.`;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: noteStatus === 'out'
+        ? `Your gift is out of notes — and we haven't seen you in a while`
+        : `It's been a while — everything okay with your gift?`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">We haven't seen you in your account in a while (about ${daysSinceActive} days) — just checking in.</p>
+        <p style="font-size:16px;">${statusLine}</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Check on your gift →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send re-engagement nudge for profile ${profile.id}:`, err.message);
+  }
+}
+
+// ── Gift setup reminder (fires ~5 days before the 30-day auto-start) ──
+// A buyer who subscribes but never actually creates their included gift
+// still gets their 12-month term auto-started 30 days after signup
+// (send-daily.js's sweepTermStartGrace) — anchored to created_at + 30
+// days rather than a start_date they chose, since there's no gift to
+// pull one from. That clock runs whether or not they ever set anything
+// up, so this gives them a heads-up first. Called from send-daily.js's
+// sweepGiftSetupReminders, which also stamps profiles.gift_setup_
+// reminder_sent_at so this only ever goes out once (see schema.sql —
+// unlike the renewal reminder, this never needs to reset).
+async function sendGiftSetupReminderEmail(profile, autoStartDate) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for gift-setup reminder, profile ${profile.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const autoStartLabel = autoStartDate.toLocaleDateString();
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `Set up your gift before ${autoStartLabel}`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Looks like you haven't set up your gift yet.</p>
+        <p style="font-size:16px;">Your 12-month term starts automatically on <strong>${autoStartLabel}</strong> whether or not your gift is ready by then — so any time between now and that date is time you won't get back once the clock starts.</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Set up your gift now →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send gift-setup reminder for profile ${profile.id}:`, err.message);
+  }
+}
+
 // Looks one day ahead (in the gift's own day-counting) and warns the buyer
 // early if tomorrow's slot needs a *new* note that doesn't exist yet. If
 // tomorrow's note index is the same as today's (e.g. mid-week for a weekly
@@ -464,6 +550,63 @@ async function checkUpcomingNoteShortage(gift, recipient) {
   if (!note) {
     await sendNoteShortageAlert(gift, tomorrowIndex, true);
   }
+}
+
+// ── Note-shortage check — standalone, once per gift per day ─────────
+// Previously this only ran as the tail end of a successful
+// sendGiftNotifications call, which meant it silently never fired for a
+// gift with no recipient yet (or a recipient who hasn't picked
+// notification channels — sendGiftNotifications bails out before this
+// point in both cases), and for weekly/biweekly/monthly gifts it was only
+// reachable on their actual send day, since the outer send-daily.js loop
+// only calls sendGiftNotifications when shouldSendToday is already true.
+// A buyer testing a fresh gift, or one on an off-day for a non-daily
+// cadence, would see no alert at all despite having zero notes written.
+//
+// Called from send-daily.js's sweepNoteShortageChecks instead — once per
+// gift per day (gated there by isDeliveryWindow, using the gift's own
+// default delivery_time/timezone even absent a recipient), independent
+// of whether today happens to be a scheduled send day or whether a
+// recipient/channels exist yet.
+async function checkNoteShortage(gift, recipient) {
+  if (shouldSendToday(gift, recipient)) {
+    const todayIndex = getNoteIndex(gift, recipient, 0);
+    const { data: note } = await sb
+      .from('notes')
+      .select('id')
+      .eq('gift_id', gift.id)
+      .eq('order_index', todayIndex)
+      .maybeSingle();
+
+    if (!note) await sendNoteShortageAlert(gift, todayIndex, false);
+  }
+
+  await checkUpcomingNoteShortage(gift, recipient);
+}
+
+// ── Note supply status for one gift — 'out' / 'low' / 'ok' ──────────
+// Used by sendReengagementEmail so it can tell a dormant buyer something
+// actually true about their gift instead of assuming everything's fine.
+// 'out'  — today's required slot has no note at all (matches the "today"
+//          half of checkNoteShortage above).
+// 'low'  — today's slot is covered, but fewer than NOTE_BUFFER_SIZE of
+//          the upcoming slots after it are written yet.
+// 'ok'   — comfortably ahead.
+const NOTE_BUFFER_SIZE = 5;
+async function getGiftNoteStatus(gift) {
+  const todayIndex = getNoteIndex(gift, null, 0);
+
+  const { data: notes } = await sb
+    .from('notes')
+    .select('order_index')
+    .eq('gift_id', gift.id)
+    .gte('order_index', todayIndex)
+    .lt('order_index', todayIndex + NOTE_BUFFER_SIZE);
+
+  const indices = new Set((notes || []).map((n) => n.order_index));
+  if (!indices.has(todayIndex)) return 'out';
+  if (indices.size < NOTE_BUFFER_SIZE) return 'low';
+  return 'ok';
 }
 
 // ── Core send function ───────────────────────────────────────────
@@ -526,8 +669,12 @@ async function sendGiftNotifications(gift, force = false) {
     .eq('order_index', noteIndex)
     .maybeSingle();
 
+  // Alerting on a missing note is handled entirely by send-daily.js's
+  // sweepNoteShortageChecks now (via checkNoteShortage) — decoupled from
+  // this function so it still fires even when there's no recipient/
+  // channels configured yet, or on an off-day for a non-daily cadence.
+  // This still has to bail out of an actual send attempt, though.
   if (!note) {
-    await sendNoteShortageAlert(gift, noteIndex);
     return { skipped: true, reason: `No note at index ${noteIndex}` };
   }
 
@@ -589,10 +736,6 @@ async function sendGiftNotifications(gift, force = false) {
 
   console.log(`[${gift.slug}] note ${noteNum}:`, results);
 
-  // Today's note went out fine — now peek at tomorrow so a gap gets caught
-  // a day early instead of only being discovered when it's already due.
-  await checkUpcomingNoteShortage(gift, recipient);
-
   return { sent: true, noteNum, results };
 }
 
@@ -616,8 +759,12 @@ module.exports = {
   shouldSendToday,
   isDeliveryWindow,
   sendGiftNotifications,
+  checkNoteShortage,
+  getGiftNoteStatus,
   applyTermStart,
   sendRenewalReminderEmail,
+  sendGiftSetupReminderEmail,
+  sendReengagementEmail,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
