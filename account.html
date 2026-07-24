@@ -280,12 +280,28 @@
     .note-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
     .note-thumb-ph { width: 44px; height: 44px; border-radius: 8px; background: var(--sage-pale); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
     .note-text-preview { flex: 1; font-size: 16px; color: var(--ink); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .note-voice-tag { color: var(--sage); font-weight: 500; }
     .note-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
     /* ── NOTE EDITOR ── */
     .note-editor { background: var(--sage-pale); border: 1px solid var(--sage-light); border-radius: 12px; padding: 16px; }
     .photo-upload-area { border: 2px dashed var(--sage-light); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; margin-bottom: 12px; font-size: 16px; color: var(--ink-soft); transition: border-color 0.15s; }
     .photo-upload-area:hover { border-color: var(--sage); }
+
+    /* ── VOICE NOTE RECORDING ── */
+    .voice-note-area { margin-bottom: 12px; }
+    .voice-record-btn.recording {
+      background: var(--red);
+      border-color: var(--red);
+      color: #fff;
+      animation: voiceRecordPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes voiceRecordPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(200,70,70,0.35); }
+      50%      { box-shadow: 0 0 0 7px rgba(200,70,70,0); }
+    }
+    .voice-note-preview { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .voice-note-audio { flex: 1; min-width: 180px; height: 36px; }
     .bulk-photo-order {
       list-style: decimal;
       margin: -4px 0 12px;
@@ -648,6 +664,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             </div>
           </div>
           <input type="file" id="addPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect('add')" />
+          <div class="voice-note-area" id="addVoiceArea">
+            <button type="button" class="btn btn-secondary btn-sm voice-record-btn" id="addVoiceRecordBtn" onclick="toggleVoiceRecording('add')">🎤 Record a voice note (optional)</button>
+            <div class="voice-note-preview" id="addVoicePreview" style="display:none;">
+              <audio class="voice-note-audio" id="addVoiceAudio" controls></audio>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="toggleVoiceRecording('add')">Re-record</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="removeVoiceNote('add')">Remove</button>
+            </div>
+          </div>
           <textarea id="addNoteText" placeholder="Write your note…"></textarea>
           <div class="editor-actions">
             <button class="btn btn-primary btn-sm" id="saveNoteBtn" onclick="saveNewNote()">Save note</button>
@@ -797,6 +821,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     </div>
     <input type="file" id="editPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect('edit')" />
     <input type="hidden" id="editPhotoUrl" />
+    <div class="voice-note-area" id="editVoiceArea" style="margin-top:12px;">
+      <button type="button" class="btn btn-secondary btn-sm voice-record-btn" id="editVoiceRecordBtn" onclick="toggleVoiceRecording('edit')">🎤 Record a voice note (optional)</button>
+      <div class="voice-note-preview" id="editVoicePreview" style="display:none;">
+        <audio class="voice-note-audio" id="editVoiceAudio" controls></audio>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="toggleVoiceRecording('edit')">Re-record</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="removeVoiceNote('edit')">Remove</button>
+      </div>
+    </div>
     <div class="field" style="margin-top:12px;">
       <textarea id="editNoteText" placeholder="Write your note…" style="min-height:120px;"></textarea>
     </div>
@@ -828,6 +860,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   var ADD_PHOTO_FILE  = null;
   var EDIT_PHOTO_FILE = null;
   var PHOTO_POS = { add: { x: 50, y: 50 }, edit: { x: 50, y: 50 } };
+
+  // 'add' notes never have an existingUrl (they're brand new); 'edit'
+  // starts with whatever voice_url the note already had, if any. See the
+  // "── VOICE NOTE RECORDING ──" section below for how these fields get used.
+  var VOICE_STATE = {
+    add:  { file: null, recorder: null, chunks: [], recording: false, existingUrl: null, removed: false, elapsed: 0, timer: null },
+    edit: { file: null, recorder: null, chunks: [], recording: false, existingUrl: null, removed: false, elapsed: 0, timer: null },
+  };
 
   // Supabase auto-refreshes the access token in the background, but the
   // SESSION variable above is only set once at boot — after the token
@@ -1330,11 +1370,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       // etc.), position and order_index disagree — and this label is what
       // you use to judge "is today's note right", so it has to reflect the
       // same order_index the site and emails actually deliver by.
+      var voiceTag = note.voice_url
+        ? '<span class="note-voice-tag" title="Includes a voice recording">🎤</span> '
+        : '';
+
       row.innerHTML =
         handle +
         '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
         thumb +
-        '<div class="note-text-preview">' + esc(note.text) + '</div>' +
+        '<div class="note-text-preview">' + voiceTag + esc(note.text) + '</div>' +
         '<div class="note-actions">' +
           '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
           '<button class="btn btn-danger btn-sm" onclick="deleteNote(\'' + note.id + '\')">✕</button>' +
@@ -1643,10 +1687,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     setPhotoPosition('add', 50, 50);
     hidePhotoPreview('add');
     document.getElementById('addNoteText').value = '';
+    resetVoiceState('add', null);
   }
   function cancelAddNote() {
     document.getElementById('addNoteEditor').style.display = 'none';
     ADD_PHOTO_FILE = null;
+    stopVoiceRecordingIfActive('add');
+    resetVoiceState('add', null);
   }
 
   // ── BULK ADD NOTES ────────────────────────────────────────────
@@ -1806,24 +1853,36 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   async function saveNewNote() {
     var text = document.getElementById('addNoteText').value.trim();
-    if (!text) { showToast('Note text is required'); return; }
+    var hasVoice = voiceHasClip('add');
+    if (!text && !ADD_PHOTO_FILE && !hasVoice) {
+      showToast('Add some text, a photo, or a voice note first');
+      return;
+    }
 
     var btn = document.getElementById('saveNoteBtn');
     var originalLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = ADD_PHOTO_FILE ? 'Uploading photo…' : 'Saving…';
+    btn.textContent = ADD_PHOTO_FILE ? 'Uploading photo…' : (hasVoice ? 'Uploading voice note…' : 'Saving…');
 
     try {
       var photoUrl = null;
       if (ADD_PHOTO_FILE) {
         photoUrl = await uploadPhoto(ADD_PHOTO_FILE, CURRENT_GIFT.id);
         if (!photoUrl) return;
+        btn.textContent = hasVoice ? 'Uploading voice note…' : 'Saving…';
+      }
+
+      var voiceUrl = null;
+      if (hasVoice) {
+        voiceUrl = await uploadVoice(VOICE_STATE.add.file, CURRENT_GIFT.id);
+        if (!voiceUrl) return;
         btn.textContent = 'Saving…';
       }
 
       var { error } = await sb.from('notes').insert({
         gift_id: CURRENT_GIFT.id, order_index: NOTES.length, text, photo_url: photoUrl,
         photo_position: photoUrl ? (PHOTO_POS.add.x + '% ' + PHOTO_POS.add.y + '%') : null,
+        voice_url: voiceUrl,
       });
       if (error) { showToast('Error: ' + error.message); return; }
 
@@ -1857,32 +1916,54 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       setPhotoPosition('edit', 50, 50);
       hidePhotoPreview('edit');
     }
+    resetVoiceState('edit', note.voice_url || null);
     document.getElementById('editNoteModal').classList.add('open');
   }
   function closeEditModal() {
     document.getElementById('editNoteModal').classList.remove('open');
     EDIT_PHOTO_FILE = null;
+    stopVoiceRecordingIfActive('edit');
   }
   async function saveEditNote() {
     var id   = document.getElementById('editNoteId').value;
     var text = document.getElementById('editNoteText').value.trim();
-    if (!text) { showToast('Note text is required'); return; }
+    var hasVoice = voiceHasClip('edit');
+    var hasPhoto = !!(document.getElementById('editPhotoUrl').value || EDIT_PHOTO_FILE);
+    if (!text && !hasPhoto && !hasVoice) {
+      showToast('Add some text, a photo, or a voice note first');
+      return;
+    }
 
     var btn = document.getElementById('saveEditBtn');
     var originalLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = EDIT_PHOTO_FILE ? 'Uploading photo…' : 'Saving…';
+    btn.textContent = EDIT_PHOTO_FILE ? 'Uploading photo…' : (VOICE_STATE.edit.file ? 'Uploading voice note…' : 'Saving…');
 
     try {
       var photoUrl = document.getElementById('editPhotoUrl').value || null;
       if (EDIT_PHOTO_FILE) {
         photoUrl = await uploadPhoto(EDIT_PHOTO_FILE, CURRENT_GIFT.id);
         if (!photoUrl) return;
-        btn.textContent = 'Saving…';
+        btn.textContent = VOICE_STATE.edit.file ? 'Uploading voice note…' : 'Saving…';
       }
+
+      // Three possible outcomes for voice: a fresh recording replaces
+      // whatever was there (state.file set), the sender explicitly removed
+      // it (state.removed, no new file), or neither happened and whatever
+      // voice_url the note already had should just carry over untouched.
+      var voiceUrl = VOICE_STATE.edit.existingUrl || null;
+      if (VOICE_STATE.edit.file) {
+        voiceUrl = await uploadVoice(VOICE_STATE.edit.file, CURRENT_GIFT.id);
+        if (!voiceUrl) return;
+        btn.textContent = 'Saving…';
+      } else if (VOICE_STATE.edit.removed) {
+        voiceUrl = null;
+      }
+
       var { error } = await sb.from('notes').update({
         text, photo_url: photoUrl,
         photo_position: photoUrl ? (PHOTO_POS.edit.x + '% ' + PHOTO_POS.edit.y + '%') : null,
+        voice_url: voiceUrl,
       }).eq('id', id);
       if (error) { showToast('Error: ' + error.message); return; }
       closeEditModal();
@@ -2010,6 +2091,142 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var { error } = await sb.storage.from('photos').upload(filename, file, { upsert: true });
     if (error) { showToast('Photo upload failed: ' + error.message); return null; }
     var { data } = sb.storage.from('photos').getPublicUrl(filename);
+    return data.publicUrl;
+  }
+
+  // ── VOICE NOTE RECORDING ──────────────────────────────────────
+  // MediaRecorder-based, mirroring the pointer-events-not-native-DnD
+  // philosophy used for drag-to-reorder above: pick the API that actually
+  // works consistently rather than something more "standard" but flakier.
+  // VOICE_STATE (declared near ADD_PHOTO_FILE/EDIT_PHOTO_FILE above) tracks
+  // one of these per editor ('add' or 'edit'):
+  //   file        — freshly recorded Blob, not yet uploaded (null if none)
+  //   existingUrl — the voice_url the note already had, if editing one
+  //   removed     — true if the sender explicitly removed it this session
+  //   recording   — true while actively capturing audio
+  // No duration is stored client-side either — see the schema.sql comment
+  // next to notes.voice_url for why.
+
+  var MAX_VOICE_SECONDS = 180; // 3 min — plenty for a voice note, keeps files small
+
+  function voiceHasClip(mode) {
+    var s = VOICE_STATE[mode];
+    return !!s.file || !!(s.existingUrl && !s.removed);
+  }
+
+  function formatVoiceTime(totalSeconds) {
+    var m = Math.floor(totalSeconds / 60);
+    var s = Math.floor(totalSeconds % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function resetVoiceState(mode, existingUrl) {
+    if (VOICE_STATE[mode].timer) clearInterval(VOICE_STATE[mode].timer);
+    VOICE_STATE[mode] = {
+      file: null, recorder: null, chunks: [], recording: false,
+      existingUrl: existingUrl || null, removed: false, elapsed: 0, timer: null,
+    };
+    syncVoiceUI(mode);
+  }
+
+  function stopVoiceRecordingIfActive(mode) {
+    var s = VOICE_STATE[mode];
+    if (s.recording && s.recorder && s.recorder.state !== 'inactive') s.recorder.stop();
+  }
+
+  function syncVoiceUI(mode) {
+    var recordBtn   = document.getElementById(mode + 'VoiceRecordBtn');
+    var previewWrap = document.getElementById(mode + 'VoicePreview');
+    var audioEl     = document.getElementById(mode + 'VoiceAudio');
+    var s = VOICE_STATE[mode];
+
+    if (s.recording) {
+      recordBtn.style.display = '';
+      recordBtn.classList.add('recording');
+      recordBtn.textContent = '⏹ Stop recording — ' + formatVoiceTime(s.elapsed);
+      previewWrap.style.display = 'none';
+      return;
+    }
+
+    recordBtn.classList.remove('recording');
+
+    if (voiceHasClip(mode)) {
+      recordBtn.style.display = 'none';
+      previewWrap.style.display = 'flex';
+      var src = s.file ? URL.createObjectURL(s.file) : s.existingUrl;
+      if (audioEl.getAttribute('data-src-tag') !== src) {
+        audioEl.src = src;
+        audioEl.setAttribute('data-src-tag', src);
+      }
+    } else {
+      recordBtn.style.display = '';
+      recordBtn.textContent = '🎤 Record a voice note (optional)';
+      previewWrap.style.display = 'none';
+    }
+  }
+
+  async function toggleVoiceRecording(mode) {
+    var s = VOICE_STATE[mode];
+    if (s.recording) { stopVoiceRecordingIfActive(mode); return; } // onstop below finishes the rest
+
+    var stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      showToast("Couldn't access your microphone — check your browser's site permissions");
+      return;
+    }
+
+    // Starting fresh discards whatever clip (new or pre-existing) was there
+    // before — re-recording is meant to fully replace it, not append.
+    s.file = null;
+    s.removed = true;
+
+    var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
+      ? 'audio/webm;codecs=opus' : '';
+    s.recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+    s.chunks = [];
+    s.startedAt = Date.now();
+    s.recording = true;
+    s.elapsed = 0;
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+
+    s.recorder.ondataavailable = function(e) { if (e.data.size > 0) s.chunks.push(e.data); };
+    s.recorder.onstop = function() {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      clearInterval(s.timer);
+      s.recording = false;
+      var blob = new Blob(s.chunks, { type: s.recorder.mimeType || 'audio/webm' });
+      if (blob.size > 0) {
+        s.file = blob;
+        s.removed = false;
+      }
+      syncVoiceUI(mode);
+    };
+
+    s.recorder.start();
+    syncVoiceUI(mode);
+    s.timer = setInterval(function() {
+      s.elapsed = (Date.now() - s.startedAt) / 1000;
+      if (s.elapsed >= MAX_VOICE_SECONDS) { stopVoiceRecordingIfActive(mode); return; }
+      syncVoiceUI(mode);
+    }, 500);
+  }
+
+  function removeVoiceNote(mode) {
+    var s = VOICE_STATE[mode];
+    s.file = null;
+    s.removed = true;
+    syncVoiceUI(mode);
+  }
+
+  async function uploadVoice(blob, giftId) {
+    var ext      = (blob.type || '').indexOf('mp4') !== -1 ? 'm4a' : 'webm';
+    var filename = USER.id + '/' + giftId + '/' + Date.now() + '-voice.' + ext;
+    var file     = new File([blob], filename.split('/').pop(), { type: blob.type || 'audio/webm' });
+    var { error } = await sb.storage.from('voice-notes').upload(filename, file, { upsert: true });
+    if (error) { showToast('Voice note upload failed: ' + error.message); return null; }
+    var { data } = sb.storage.from('voice-notes').getPublicUrl(filename);
     return data.publicUrl;
   }
 
