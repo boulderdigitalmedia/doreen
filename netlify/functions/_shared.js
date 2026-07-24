@@ -130,6 +130,44 @@ async function sendPush(pushSubscription, noteNum, senderName) {
   await webpush.sendNotification(pushSubscription, payload);
 }
 
+// SMS can't render a distinct callout box the way the HTML emails below
+// can (buildSmsBody is one plain-text line) — this is its stand-in for a
+// voice-only note (no typed text — see notes.voice_url in schema.sql),
+// so it isn't left quoting an empty string, or —worse— interpolating
+// `null` literally if text is ever NULL rather than ''.
+function noteQuoteText(note) {
+  if (note.text) return note.text;
+  if (note.voice_url) return '🎤 (a voice note — open the app to listen)';
+  return '';
+}
+
+// The HTML emails, unlike SMS, have room for a proper callout instead of
+// squeezing the voice-note prompt into the quote line — email clients
+// can't play audio inline regardless, so this is deliberately a "go
+// listen in the app" nudge rather than an attempt to embed the clip.
+function voiceNoteEmailBanner(note) {
+  if (!note.voice_url) return '';
+  return `<tr>
+    <td style="padding:0 32px 24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#e8f0e8;border:1px solid #c8dbc9;border-radius:12px;">
+        <tr>
+          <td style="padding:16px 20px;font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.5;color:#4a5c4b;">
+            🎤 <strong style="color:#2c3a2e;">This note includes a voice message.</strong>
+            Email can't play it directly — tap below to open the app and listen.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>`;
+}
+
+// Voice-only notes (no note.text) deserve a CTA that says what's actually
+// waiting, rather than the generic "Open the app" that reads like there's
+// nothing there to open for.
+function emailCtaLabel(note, defaultLabel) {
+  return note.voice_url && !note.text ? '🎤 Listen to your note →' : defaultLabel;
+}
+
 // ── Email ────────────────────────────────────────────────────────
 
 function buildEmailHtml(gift, note, noteNum, giftUrl) {
@@ -161,18 +199,19 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
           </td>
         </tr>
         ${photo ? `<tr><td style="padding:0 32px 24px;">${photo}</td></tr>` : ''}
-        <tr>
+        ${note.text ? `<tr>
           <td style="padding:0 32px 32px;">
             <p style="margin:0;font-size:20px;font-weight:300;font-style:italic;line-height:1.6;color:#2c3a2e;">
               "${note.text}"
             </p>
           </td>
-        </tr>
+        </tr>` : ''}
+        ${voiceNoteEmailBanner(note)}
         <tr>
           <td style="padding:0 32px 36px;">
             <a href="${giftUrl}"
                style="display:inline-block;background:#7a9e7e;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;">
-              Open the app →
+              ${emailCtaLabel(note, 'Open the app →')}
             </a>
           </td>
         </tr>
@@ -312,18 +351,19 @@ function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl) {
           </td>
         </tr>
         ${photo ? `<tr><td style="padding:16px 32px 20px;">${photo}</td></tr>` : ''}
-        <tr>
+        ${note.text ? `<tr>
           <td style="padding:0 32px 32px;">
             <p style="margin:0;font-size:20px;font-weight:300;font-style:italic;line-height:1.6;color:#2c3a2e;">
               "${note.text}"
             </p>
           </td>
-        </tr>
+        </tr>` : ''}
+        ${voiceNoteEmailBanner(note)}
         <tr>
           <td style="padding:0 32px 36px;">
             <a href="${giftUrl}"
                style="display:inline-block;background:#7a9e7e;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;">
-              Open your gift →
+              ${emailCtaLabel(note, 'Open your gift →')}
             </a>
           </td>
         </tr>
@@ -345,10 +385,14 @@ function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl) {
 // ── SMS ──────────────────────────────────────────────────────────
 
 function buildSmsBody(gift, note, noteNum, giftUrl) {
-  // Keep it short — first ~100 chars of note + link
-  const preview = note.text.length > 100
-    ? note.text.substring(0, 97) + '…'
-    : note.text;
+  // Keep it short — first ~100 chars of note + link. Goes through
+  // noteQuoteText() first — note.text is '' (not null) for photo/voice-only
+  // notes, but .length/.substring() on a bare null would still crash this
+  // send job outright, so this can't just assume a string.
+  const quoteText = noteQuoteText(note);
+  const preview = quoteText.length > 100
+    ? quoteText.substring(0, 97) + '…'
+    : quoteText;
   return `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'}: "${preview}" — ${giftUrl}`;
 }
 
