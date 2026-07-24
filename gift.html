@@ -708,6 +708,54 @@
 
     .card-quote.fading { opacity: 0; }
 
+    /* VOICE NOTE PLAYER — a custom minimal player instead of native <audio
+       controls> so it matches the card's own look rather than whatever
+       the browser/OS renders. Sits between the photo and the quote. */
+    .card-voice {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 8px 10px;
+      background: var(--sage-pale);
+      border-radius: 20px;
+    }
+    .card-voice-play {
+      flex-shrink: 0;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: none;
+      background: var(--sage);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .card-voice-play svg { width: 15px; height: 15px; }
+    .card-voice-play .icon-pause { display: none; }
+    .card-voice.playing .card-voice-play .icon-play  { display: none; }
+    .card-voice.playing .card-voice-play .icon-pause { display: block; }
+    .card-voice-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(122,158,126,0.28);
+      border-radius: 2px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .card-voice-fill { width: 0%; height: 100%; background: var(--sage); border-radius: 2px; }
+    .card-voice-time {
+      flex-shrink: 0;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      color: var(--ink-soft);
+      min-width: 32px;
+      text-align: right;
+    }
+
     /* LOCK OVERLAY */
     .lock-overlay {
       display: none;
@@ -2055,6 +2103,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
         <img class="card-img" id="cardImgLeft" alt="" style="display:none" />
         <div class="card-body">
+          <div class="card-voice" id="cardVoiceLeft" style="display:none">
+            <button type="button" class="card-voice-play" id="cardVoicePlayLeft" aria-label="Play voice note">
+              <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <div class="card-voice-track" id="cardVoiceTrackLeft"><div class="card-voice-fill" id="cardVoiceFillLeft"></div></div>
+            <span class="card-voice-time" id="cardVoiceTimeLeft">0:00</span>
+            <audio id="cardVoiceAudioLeft" preload="metadata"></audio>
+          </div>
           <div class="card-quote" id="cardQuoteLeft"></div>
         </div>
       </div>
@@ -2065,6 +2122,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
         <img class="card-img" id="cardImgRight" alt="" style="display:none" />
         <div class="card-body">
+          <div class="card-voice" id="cardVoiceRight" style="display:none">
+            <button type="button" class="card-voice-play" id="cardVoicePlayRight" aria-label="Play voice note">
+              <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <div class="card-voice-track" id="cardVoiceTrackRight"><div class="card-voice-fill" id="cardVoiceFillRight"></div></div>
+            <span class="card-voice-time" id="cardVoiceTimeRight">0:00</span>
+            <audio id="cardVoiceAudioRight" preload="metadata"></audio>
+          </div>
           <div class="card-quote" id="cardQuoteRight"></div>
         </div>
       </div>
@@ -2075,6 +2141,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
         <img class="card-img" id="cardImg" alt="" style="display:none" />
         <div class="card-body">
+          <div class="card-voice" id="cardVoice" style="display:none">
+            <button type="button" class="card-voice-play" id="cardVoicePlay" aria-label="Play voice note">
+              <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <div class="card-voice-track" id="cardVoiceTrack"><div class="card-voice-fill" id="cardVoiceFill"></div></div>
+            <span class="card-voice-time" id="cardVoiceTime">0:00</span>
+            <audio id="cardVoiceAudio" preload="metadata"></audio>
+          </div>
           <div class="card-quote" id="cardQuote"></div>
         </div>
         <div class="lock-overlay" id="lockOverlay">
@@ -2174,6 +2249,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <img id="lightboxImg" src="" alt="" />
   </div>
   <div class="lightbox-caption-wrap">
+    <div class="card-voice" id="lightboxVoice" style="display:none">
+      <button type="button" class="card-voice-play" id="lightboxVoicePlay" aria-label="Play voice note">
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      </button>
+      <div class="card-voice-track" id="lightboxVoiceTrack"><div class="card-voice-fill" id="lightboxVoiceFill"></div></div>
+      <span class="card-voice-time" id="lightboxVoiceTime">0:00</span>
+      <audio id="lightboxVoiceAudio" preload="metadata"></audio>
+    </div>
     <div class="lightbox-caption" id="lightboxCaption"></div>
     <div class="lightbox-scroll-hint" id="lightboxScrollHint" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -3069,6 +3153,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // posting isn't possible from a website anyway) fall back to a small
   // panel: download the image, copy the caption, done manually.
 
+  // A voice-only note (no typed text) has nothing to show in the surfaces
+  // built around photo+text — share images, the photo lightbox caption,
+  // the grid/favorites overlays. Rather than build full audio playback
+  // into each of those too, this gives them a friendly one-line stand-in
+  // instead of a blank caption (or, for null vs. '', literally the string
+  // "null" — note.text is '' for existing photo-only notes, but a
+  // voice-only note saved from account.html can leave it either way).
+  function noteDisplayText(note) {
+    if (note.text) return note.text;
+    if (note.voice_url) return '🎤 Voice note';
+    return '';
+  }
+
   function wrapCanvasLines(ctx, text, maxWidth, maxLines) {
     var words = (text || '').split(/\s+/).filter(Boolean);
     var lines = [];
@@ -3176,7 +3273,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
       ctx.font = 'italic 400 46px "Cormorant Garamond", serif';
-      var lines = wrapCanvasLines(ctx, note.text, size - 160, 5);
+      var lines = wrapCanvasLines(ctx, noteDisplayText(note), size - 160, 5);
       var lineHeight = 58;
       var startY = size - 80 - (lines.length - 1) * lineHeight;
       lines.forEach(function(line, i) { ctx.fillText(line, size / 2, startY + i * lineHeight); });
@@ -3190,7 +3287,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       ctx.fillStyle = '#2c3a2e';
       ctx.textAlign = 'center';
       ctx.font = 'italic 400 56px "Cormorant Garamond", serif';
-      var lines2 = wrapCanvasLines(ctx, note.text, size - 220, 8);
+      var lines2 = wrapCanvasLines(ctx, noteDisplayText(note), size - 220, 8);
       var lineHeight2 = 72;
       var totalH = lines2.length * lineHeight2;
       var startY2 = (size - totalH) / 2 + lineHeight2 * 0.7;
@@ -3587,16 +3684,32 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var cardImgRightEl      = document.getElementById('cardImgRight');
     var cardQuoteRightEl    = document.getElementById('cardQuoteRight');
 
+    // Voice-player elements for each of the 3 physical cards — same
+    // "identity never changes, role rotates" setup as everything else in
+    // `slots` below, so each physical card gets its own independent
+    // <audio> rather than sharing one across whichever note currently
+    // occupies the front role.
+    function voiceRefs(suffix) {
+      return {
+        voiceWrapEl: document.getElementById('cardVoice' + suffix),
+        voicePlayBtnEl: document.getElementById('cardVoicePlay' + suffix),
+        voiceTrackEl: document.getElementById('cardVoiceTrack' + suffix),
+        voiceFillEl: document.getElementById('cardVoiceFill' + suffix),
+        voiceTimeEl: document.getElementById('cardVoiceTime' + suffix),
+        audioEl: document.getElementById('cardVoiceAudio' + suffix),
+      };
+    }
+
     var slots = [
-      { el: cardLeftEl,  role: 'left',  noteIndex: currentIndex - 1,
+      Object.assign({ el: cardLeftEl,  role: 'left',  noteIndex: currentIndex - 1,
         placeholderEl: photoPlaceholderLeftEl, imgEl: cardImgLeftEl, quoteEl: cardQuoteLeftEl,
-        lockOverlayEl: null, lockDateEl: null, phHintEl: null },
-      { el: cardEl,      role: 'front', noteIndex: currentIndex,
+        lockOverlayEl: null, lockDateEl: null, phHintEl: null }, voiceRefs('Left')),
+      Object.assign({ el: cardEl,      role: 'front', noteIndex: currentIndex,
         placeholderEl: placeholderEl, imgEl: cardImgEl, quoteEl: null /* set below */,
-        lockOverlayEl: null /* set below */, lockDateEl: null /* set below */, phHintEl: phHintEl },
-      { el: cardRightEl, role: 'right', noteIndex: currentIndex + 1,
+        lockOverlayEl: null /* set below */, lockDateEl: null /* set below */, phHintEl: phHintEl }, voiceRefs('')),
+      Object.assign({ el: cardRightEl, role: 'right', noteIndex: currentIndex + 1,
         placeholderEl: photoPlaceholderRightEl, imgEl: cardImgRightEl, quoteEl: cardQuoteRightEl,
-        lockOverlayEl: null, lockDateEl: null, phHintEl: null },
+        lockOverlayEl: null, lockDateEl: null, phHintEl: null }, voiceRefs('Right')),
     ];
 
     var photoLightbox  = document.getElementById('photoLightbox');
@@ -3605,6 +3718,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var lightboxError   = document.getElementById('lightboxError');
     var lightboxRetryBtn = document.getElementById('lightboxRetryBtn');
     var lightboxCaption = document.getElementById('lightboxCaption');
+    var lightboxVoiceWrap  = document.getElementById('lightboxVoice');
+    var lightboxVoicePlay  = document.getElementById('lightboxVoicePlay');
+    var lightboxVoiceTrack = document.getElementById('lightboxVoiceTrack');
+    var lightboxVoiceFill  = document.getElementById('lightboxVoiceFill');
+    var lightboxVoiceTime  = document.getElementById('lightboxVoiceTime');
+    var lightboxVoiceAudio = document.getElementById('lightboxVoiceAudio');
     var lightboxScrollHint = document.getElementById('lightboxScrollHint');
     var lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
     var lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
@@ -3638,6 +3757,111 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     slots[1].quoteEl      = cardQuoteEl;
     slots[1].lockOverlayEl = lockOverlayEl;
     slots[1].lockDateEl    = lockDateEl;
+
+    // ── VOICE NOTE PLAYBACK ──────────────────────────────────────
+    // One real <audio> element lives permanently on each of the 3 physical
+    // cards (see voiceRefs() above) — setSlotContent below just points it
+    // at whichever note's voice_url currently belongs to that card and
+    // resets the UI, the same way it already does for imgEl/quoteEl.
+
+    function formatVoiceTime(seconds) {
+      if (!isFinite(seconds) || seconds < 0) seconds = 0;
+      var m = Math.floor(seconds / 60);
+      var s = Math.floor(seconds % 60);
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    // Any card's audio still playing when the recipient navigates away
+    // would otherwise keep going, unheard, behind whatever's now in front —
+    // called on every goTo() below.
+    function pauseAllVoice() {
+      slots.forEach(function(slot) {
+        if (slot.audioEl && !slot.audioEl.paused) slot.audioEl.pause();
+      });
+      if (lightboxVoiceAudio && !lightboxVoiceAudio.paused) lightboxVoiceAudio.pause();
+    }
+
+    function wireVoicePlayer(slot) {
+      var audio = slot.audioEl;
+      if (!audio) return;
+
+      slot.voicePlayBtnEl.addEventListener('click', function(e) {
+        // Prevent this from also bubbling into the card's own click
+        // handler, which brings a peek card to the front — pressing play
+        // on a peeked card should just play it in place.
+        e.stopPropagation();
+        if (audio.paused) {
+          pauseAllVoice(); // only one clip plays at a time across the 3 cards
+          audio.play().catch(function() {});
+        } else {
+          audio.pause();
+        }
+      });
+
+      slot.voiceTrackEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!audio.duration) return;
+        var rect = slot.voiceTrackEl.getBoundingClientRect();
+        var ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+        audio.currentTime = ratio * audio.duration;
+      });
+
+      audio.addEventListener('play',  function() { slot.voiceWrapEl.classList.add('playing'); });
+      audio.addEventListener('pause', function() { slot.voiceWrapEl.classList.remove('playing'); });
+      audio.addEventListener('ended', function() {
+        slot.voiceWrapEl.classList.remove('playing');
+        slot.voiceFillEl.style.width = '0%';
+        slot.voiceTimeEl.textContent = formatVoiceTime(audio.duration || 0);
+      });
+      audio.addEventListener('loadedmetadata', function() {
+        if (!audio.currentTime) slot.voiceTimeEl.textContent = formatVoiceTime(audio.duration);
+      });
+      audio.addEventListener('timeupdate', function() {
+        if (audio.duration) {
+          slot.voiceFillEl.style.width = (audio.currentTime / audio.duration * 100) + '%';
+          slot.voiceTimeEl.textContent = formatVoiceTime(audio.duration - audio.currentTime);
+        }
+      });
+    }
+
+    slots.forEach(wireVoicePlayer);
+
+    // Lightbox gets its own independent voice player, wired the same way
+    // as wireVoicePlayer() above but against a single fixed set of
+    // elements (the lightbox itself isn't tripled like the carousel cards
+    // — there's only ever one lightbox open at a time).
+    lightboxVoicePlay.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (lightboxVoiceAudio.paused) {
+        pauseAllVoice();
+        lightboxVoiceAudio.play().catch(function() {});
+      } else {
+        lightboxVoiceAudio.pause();
+      }
+    });
+    lightboxVoiceTrack.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!lightboxVoiceAudio.duration) return;
+      var rect = lightboxVoiceTrack.getBoundingClientRect();
+      var ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      lightboxVoiceAudio.currentTime = ratio * lightboxVoiceAudio.duration;
+    });
+    lightboxVoiceAudio.addEventListener('play',  function() { lightboxVoiceWrap.classList.add('playing'); });
+    lightboxVoiceAudio.addEventListener('pause', function() { lightboxVoiceWrap.classList.remove('playing'); });
+    lightboxVoiceAudio.addEventListener('ended', function() {
+      lightboxVoiceWrap.classList.remove('playing');
+      lightboxVoiceFill.style.width = '0%';
+      lightboxVoiceTime.textContent = formatVoiceTime(lightboxVoiceAudio.duration || 0);
+    });
+    lightboxVoiceAudio.addEventListener('loadedmetadata', function() {
+      if (!lightboxVoiceAudio.currentTime) lightboxVoiceTime.textContent = formatVoiceTime(lightboxVoiceAudio.duration);
+    });
+    lightboxVoiceAudio.addEventListener('timeupdate', function() {
+      if (lightboxVoiceAudio.duration) {
+        lightboxVoiceFill.style.width = (lightboxVoiceAudio.currentTime / lightboxVoiceAudio.duration * 100) + '%';
+        lightboxVoiceTime.textContent = formatVoiceTime(lightboxVoiceAudio.duration - lightboxVoiceAudio.currentTime);
+      }
+    });
 
     // The mount entrance (fadeUp, with fill:forwards) holds its own
     // opacity/transform indefinitely once finished, which would block our
@@ -3676,10 +3900,32 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     function renderLightbox() {
       var note = notes[lightboxIndex];
+      // Unlike the grid/favorites/share surfaces, the lightbox only ever
+      // opens for notes that have a photo (see openLightbox below) — so a
+      // voice_url here always means "photo + voice", never voice-only.
+      // With a real player now shown above, the caption can just be the
+      // plain text (blank if there isn't any) instead of the "🎤 Voice
+      // note" stand-in noteDisplayText() uses elsewhere.
       lightboxCaption.textContent = note.text || '';
       lightboxCaption.scrollTop = 0;
       lightboxPrevBtn.disabled = findAdjacentPhotoIndex(lightboxIndex, -1) === -1;
       lightboxNextBtn.disabled = findAdjacentPhotoIndex(lightboxIndex, 1) === -1;
+
+      if (!lightboxVoiceAudio.paused) lightboxVoiceAudio.pause();
+      if (note.voice_url) {
+        lightboxVoiceWrap.classList.remove('playing');
+        lightboxVoiceFill.style.width = '0%';
+        lightboxVoiceTime.textContent = '0:00';
+        if (lightboxVoiceAudio.getAttribute('data-note-id') !== String(note.id)) {
+          lightboxVoiceAudio.src = note.voice_url;
+          lightboxVoiceAudio.setAttribute('data-note-id', String(note.id));
+        }
+        lightboxVoiceWrap.style.display = 'flex';
+      } else {
+        lightboxVoiceWrap.style.display = 'none';
+        lightboxVoiceAudio.removeAttribute('src');
+        lightboxVoiceAudio.removeAttribute('data-note-id');
+      }
 
       // Long notes scroll inside the caption box rather than overflowing
       // the lightbox — this bouncing arrow is the only sign that's the
@@ -3721,6 +3967,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     function openLightbox(index) {
       var note = notes[index];
       if (!note || !note.photo_url) return;
+      pauseAllVoice(); // don't let the card behind the lightbox keep playing
       lightboxIndex = index;
       renderLightbox();
       photoLightbox.classList.add('open');
@@ -3730,6 +3977,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       photoLightbox.classList.remove('open');
       lightboxImg.src = '';
       lightboxImg.classList.remove('loaded');
+      if (!lightboxVoiceAudio.paused) lightboxVoiceAudio.pause();
       lightboxIndex = null;
     }
 
@@ -3921,7 +4169,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       var overlay = document.createElement('div');
       overlay.className = 'main-grid-overlay';
       var overlayDay = document.createElement('div'); overlayDay.className = 'main-grid-overlay-day'; overlayDay.textContent = 'Note ' + (idx + 1);
-      var overlayQuote = document.createElement('div'); overlayQuote.className = 'main-grid-overlay-quote'; overlayQuote.textContent = note.text;
+      var overlayQuote = document.createElement('div'); overlayQuote.className = 'main-grid-overlay-quote'; overlayQuote.textContent = noteDisplayText(note);
       overlay.appendChild(overlayDay); overlay.appendChild(overlayQuote);
       item.appendChild(overlay);
 
@@ -4120,7 +4368,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
       var body    = document.createElement('div'); body.className = 'fav-item-body';
       var dayEl   = document.createElement('div'); dayEl.className = 'fav-item-day'; dayEl.textContent = 'Note ' + (idx+1);
-      var quoteEl = document.createElement('div'); quoteEl.className = 'fav-item-quote'; quoteEl.textContent = note.text;
+      var quoteEl = document.createElement('div'); quoteEl.className = 'fav-item-quote'; quoteEl.textContent = noteDisplayText(note);
       body.appendChild(dayEl); body.appendChild(quoteEl);
       item.appendChild(body);
 
@@ -4164,7 +4412,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       overlayDay.textContent = 'Note ' + (idx+1);
       var overlayQuote = document.createElement('div');
       overlayQuote.className = 'fav-grid-overlay-quote';
-      overlayQuote.textContent = note.text;
+      overlayQuote.textContent = noteDisplayText(note);
       overlay.appendChild(overlayDay);
       overlay.appendChild(overlayQuote);
       item.appendChild(overlay);
@@ -4269,6 +4517,28 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         slot.placeholderEl.style.display = 'flex';
         if (slot.phHintEl) slot.phHintEl.textContent = '';
       }
+
+      if (slot.voiceWrapEl) {
+        if (note.voice_url) {
+          // Stop whatever this card's audio was doing before it's
+          // repointed at a different note — otherwise the old clip could
+          // keep playing under the new note's content.
+          if (!slot.audioEl.paused) slot.audioEl.pause();
+          slot.voiceWrapEl.classList.remove('playing');
+          slot.voiceFillEl.style.width = '0%';
+          slot.voiceTimeEl.textContent = '0:00';
+          if (slot.audioEl.getAttribute('data-note-id') !== String(note.id)) {
+            slot.audioEl.src = note.voice_url;
+            slot.audioEl.setAttribute('data-note-id', String(note.id));
+          }
+          slot.voiceWrapEl.style.display = 'flex';
+        } else {
+          if (!slot.audioEl.paused) slot.audioEl.pause();
+          slot.voiceWrapEl.style.display = 'none';
+          slot.audioEl.removeAttribute('src');
+          slot.audioEl.removeAttribute('data-note-id');
+        }
+      }
     }
 
     function applyRole(slot) {
@@ -4362,6 +4632,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     function goTo(newIndex) {
       if (newIndex < 0 || newIndex > todayNoteIndex || newIndex === currentIndex) return;
+      pauseAllVoice(); // leaving this note behind — don't let its voice note keep playing off-screen
       var dir = newIndex - currentIndex;
       currentIndex = newIndex;
       if (Math.abs(dir) === 1) rotateSlots(dir > 0 ? 1 : -1);
