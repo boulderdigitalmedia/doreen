@@ -147,6 +147,12 @@ exports.handler = async (event) => {
     line_items:  [{ price: priceId, quantity: 1 }],
     success_url: SITE_URL + '/account?addon=success',
     cancel_url:  SITE_URL + '/account',
+    // Same as the base-plan checkout in create-checkout.js — shows a
+    // "promotion code" field on the Stripe-hosted page. Codes still have
+    // to actually exist (Stripe Dashboard → Product catalog → Coupons /
+    // Promotion codes) for there to be anything to redeem; this just
+    // turns the field on.
+    allow_promotion_codes: true,
     metadata: {
       gift_addon:          'true',
       supabase_uid:        user.id,
