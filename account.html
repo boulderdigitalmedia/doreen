@@ -252,7 +252,24 @@
        prefix of the list (lower order_index = sent earlier), so this
        never interleaves with the draggable rows below it. */
     .note-row.locked { opacity: 0.6; }
-    .note-row.note-dragging { box-shadow: 0 8px 20px rgba(20,26,20,0.18); border-color: var(--sage-light); position: relative; z-index: 5; }
+    /* Lifted state while actively being dragged: bigger, closer shadow so
+       the row visibly rises off the list, plus scale (applied via inline
+       style, alongside translateY, from JS below) so it "hovers" above its
+       neighbors instead of just sitting flush with them. No transform
+       transition here — during an active drag the row must track the
+       pointer 1:1 with zero lag. */
+    .note-row.note-dragging {
+      box-shadow: 0 16px 32px rgba(20,26,20,0.24), 0 4px 10px rgba(20,26,20,0.14);
+      border-color: var(--sage-light);
+      position: relative;
+      z-index: 5;
+      transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    /* Applied only for the brief settle animation right after drop, so the
+       row eases back to flat/flush instead of snapping. */
+    .note-row.note-drag-settle {
+      transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s, border-color 0.22s;
+    }
     .note-drag-handle {
       cursor: grab; touch-action: none; color: var(--ink-soft); font-size: 18px;
       line-height: 1; padding: 2px 4px; margin-top: 1px; user-select: none; flex-shrink: 0;
@@ -1340,17 +1357,36 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var row = document.querySelector('.note-row[data-note-id="' + noteId + '"]');
     if (!row || row.classList.contains('locked')) return;
 
-    NOTE_DRAG = { row: row };
+    // grabOffsetY = where within the row the pointer landed, so the row
+    // stays glued to that exact point under the finger for the whole drag
+    // instead of re-centering itself under the pointer.
+    var rect = row.getBoundingClientRect();
+    NOTE_DRAG = { row: row, grabOffsetY: e.clientY - rect.top };
+
+    row.classList.remove('note-drag-settle');
     row.classList.add('note-dragging');
+    // Lift immediately on press, before any movement — a slight scale plus
+    // the .note-dragging shadow above is what reads as "picked up".
+    row.style.transform = 'translateY(0px) scale(1.03)';
+
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
+
     try { row.setPointerCapture(e.pointerId); } catch (err) {}
     e.preventDefault();
   }
 
   function onNoteDragMove(e) {
     if (!NOTE_DRAG) return;
+    var row = NOTE_DRAG.row;
     var list = document.getElementById('notesList');
+
+    // Clear the transform before measuring so the reorder check below (and
+    // the rect we re-measure after it) reads the row's real flow position,
+    // not last frame's translated one.
+    row.style.transform = '';
+
     var others = Array.prototype.slice.call(list.querySelectorAll('.note-row:not(.locked)'))
-      .filter(function(r) { return r !== NOTE_DRAG.row; });
+      .filter(function(r) { return r !== row; });
 
     var y = e.clientY;
     var target = null;
@@ -1360,18 +1396,42 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     }
 
     if (target) {
-      list.insertBefore(NOTE_DRAG.row, target);
+      list.insertBefore(row, target);
     } else {
       // Dragged below every other unsent row — locked rows are always
       // first, so appending as the list's last child is always correct.
-      list.appendChild(NOTE_DRAG.row);
+      list.appendChild(row);
     }
+
+    // Re-lift the row from wherever it just landed in the flow, offset so
+    // it stays under the pointer — this is what makes it feel like it's
+    // hovering above the list rather than teleporting between slots.
+    var newRect = row.getBoundingClientRect();
+    var dy = y - NOTE_DRAG.grabOffsetY - newRect.top;
+    row.style.transform = 'translateY(' + dy + 'px) scale(1.03)';
   }
 
   async function onNoteDragEnd(e) {
     if (!NOTE_DRAG) return;
     var row = NOTE_DRAG.row;
+
+    // Ease back down to flat instead of snapping — the settle class turns
+    // on a transform transition that's otherwise off during the drag itself.
+    row.classList.add('note-drag-settle');
     row.classList.remove('note-dragging');
+    row.style.transform = 'translateY(0px) scale(1)';
+    (function() {
+      var cleanup = function() {
+        row.classList.remove('note-drag-settle');
+        row.style.transform = '';
+        row.removeEventListener('transitionend', cleanup);
+      };
+      row.addEventListener('transitionend', cleanup);
+      // Fallback in case transitionend doesn't fire (e.g. no visual change
+      // needed because it was dropped back in place).
+      setTimeout(cleanup, 260);
+    })();
+
     try { row.releasePointerCapture(e.pointerId); } catch (err) {}
     NOTE_DRAG = null;
 
