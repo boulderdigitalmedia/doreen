@@ -2220,13 +2220,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     syncVoiceUI(mode);
   }
 
+  // Bucket name deliberately has no hyphen ('voicenotes', not 'voice-notes')
+  // — a diagnostic swap while chasing a persistent, unexplained RLS
+  // rejection on the original bucket that survived a matching/confirmed
+  // policy, a valid token, and a full project pause/resume. If this bucket
+  // works where the old one didn't, that isolates the problem to something
+  // about that specific bucket row rather than the app/policy setup.
   async function uploadVoice(blob, giftId) {
     var ext      = (blob.type || '').indexOf('mp4') !== -1 ? 'm4a' : 'webm';
     var filename = USER.id + '/' + giftId + '/' + Date.now() + '-voice.' + ext;
     var file     = new File([blob], filename.split('/').pop(), { type: blob.type || 'audio/webm' });
-    var { error } = await sb.storage.from('voice-notes').upload(filename, file, { upsert: true });
+    var { error } = await sb.storage.from('voicenotes').upload(filename, file, { upsert: true });
     if (error) { showToast('Voice note upload failed: ' + error.message); return null; }
-    var { data } = sb.storage.from('voice-notes').getPublicUrl(filename);
+    var { data } = sb.storage.from('voicenotes').getPublicUrl(filename);
     return data.publicUrl;
   }
 
