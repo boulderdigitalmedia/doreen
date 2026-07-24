@@ -2038,11 +2038,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // or animation for no size benefit; falls back to the original file on
   // any decode error (e.g. a format the browser can't open) rather than
   // blocking the upload.
+  // Only bail up front for formats re-encoding would actively hurt (gif —
+  // loses animation; svg — vector, rasterising it is pointless). Anything
+  // else gets a real compression attempt regardless of the file's declared
+  // MIME type — phones are inconsistent about what they report (empty
+  // string, application/octet-stream, image/heic already transcoded by the
+  // OS, etc.), and bailing on an unrecognised type was letting full-size
+  // 3-10MB originals slip through untouched and upload as-is. The decode
+  // step below is already wrapped in try/catch, so a format the browser
+  // genuinely can't open still falls back safely to the original file.
   async function compressImage(file, maxDim, quality) {
     maxDim  = maxDim  || 1600;
     quality = quality || 0.82;
 
-    if (!file.type || !/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) return file;
+    if (/^image\/(gif|svg\+xml)$/i.test(file.type || '')) return file;
     if (file.size < 300 * 1024) return file; // already small — not worth the round-trip
 
     var objectUrl = null;
@@ -2084,12 +2093,28 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     }
   }
 
+  // Belt-and-suspenders for anything compressImage() couldn't shrink (a
+  // decode failure, or a format that just doesn't compress well): force one
+  // more, harder pass — smaller dimensions, lower quality — rather than
+  // silently shipping a multi-MB file and hoping nothing upstream rejects
+  // it on size.
+  async function ensureUploadable(file) {
+    if (file.size <= 4 * 1024 * 1024) return file;
+    var smaller = await compressImage(file, 1200, 0.7);
+    return (smaller && smaller.size < file.size) ? smaller : file;
+  }
+
   async function uploadPhoto(file, giftId) {
     file = await compressImage(file);
+    file = await ensureUploadable(file);
     var ext      = file.name.split('.').pop();
     var filename = USER.id + '/' + giftId + '/' + Date.now() + '.' + ext;
     var { error } = await sb.storage.from('photos').upload(filename, file, { upsert: true });
-    if (error) { showToast('Photo upload failed: ' + error.message); return null; }
+    if (error) {
+      console.error('Photo upload failed:', error, '— file:', file.name, file.size + ' bytes', file.type);
+      showToast('Photo upload failed: ' + error.message);
+      return null;
+    }
     var { data } = sb.storage.from('photos').getPublicUrl(filename);
     return data.publicUrl;
   }
