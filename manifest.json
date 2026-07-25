@@ -1,7 +1,7 @@
 {
-  "name": "From Jake, With Love",
-  "short_name": "From Jake",
-  "description": "Daily love notes from Jake",
+  "name": "A Note For You",
+  "short_name": "A Note For You",
+  "description": "Daily notes, delivered for someone you care about",
   "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#f5f2ec",
