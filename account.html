@@ -1992,13 +1992,25 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var toFix = NOTES.filter(function(n, i) { return n.order_index !== i; });
     var renumberFailed = 0;
     if (toFix.length) {
-      var results = await Promise.all(
+      // Two-phase update, same reason as persistNoteOrder() above: notes has
+      // UNIQUE (gift_id, order_index), and these are separate updates, not
+      // one atomic transaction. A straight one-phase reassignment hits that
+      // constraint the instant one note's new order_index still belongs to
+      // another note in this batch that hasn't been updated yet — exactly
+      // what a delete does, since everything after the gap shifts down by
+      // one into a slot another note here currently occupies.
+      var phase1 = await Promise.all(
+        toFix.map(function(n, i) {
+          return sb.from('notes').update({ order_index: -(i + 1) }).eq('id', n.id);
+        })
+      );
+      var phase2 = await Promise.all(
         toFix.map(function(n) {
           var newIndex = NOTES.indexOf(n);
           return sb.from('notes').update({ order_index: newIndex }).eq('id', n.id);
         })
       );
-      renumberFailed = results.filter(function(r) { return r.error; }).length;
+      renumberFailed = phase1.concat(phase2).filter(function(r) { return r.error; }).length;
     }
 
     const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
