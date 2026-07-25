@@ -482,6 +482,17 @@
       flex-direction: column;
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
+      /* The card-stack carousel's peek cards (previous/next note, fanned out
+         behind the front card) are positioned via left:11%/width:78% plus a
+         further translate(±58%) — on a typical phone width that puts each
+         one roughly 90px past its own screen edge. html/body already have
+         overflow-x:hidden, but that alone doesn't reliably clip a
+         transformed, absolutely-positioned descendant this many layers
+         down on mobile Safari specifically, which is what let the page
+         become horizontally scrollable. Clipping here, at the actual
+         full-screen app wrapper, is the fix — nothing should be visible
+         past the physical edge of the screen anyway. */
+      overflow-x: hidden;
     }
 
     /* TOP BAR */
@@ -786,13 +797,33 @@
        .card-stack (not any single .card) and given a higher z-index than
        the front card (3) so it always floats over whichever physical
        element currently holds that role. */
+    /* Sizing box only (no visible content of its own) — pointer-events:none
+       so it doesn't swallow clicks/taps over the rest of the photo. Its
+       inset (16px) matches .card's own padding and its aspect-ratio
+       matches .card-img/.photo-placeholder, so — since all three share
+       the same width basis — this box's rendered HEIGHT always equals the
+       image's rendered height, whatever that happens to be at the current
+       viewport width. That's what lets .card-quick-actions below anchor to
+       the image's bottom edge specifically, rather than the bottom of the
+       whole card (image + quote text), which is a different, non-constant
+       height once the quote's line count varies. */
+    .card-quick-actions-zone {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      aspect-ratio: 1/1;
+      z-index: 5;
+      pointer-events: none;
+    }
+
     .card-quick-actions {
       position: absolute;
-      top: 28px;
-      right: 28px;
-      z-index: 5;
+      bottom: 12px;
+      right: 12px;
       display: flex;
       gap: 8px;
+      pointer-events: auto;
     }
 
     .card-quick-actions .heart-btn,
@@ -2158,21 +2189,27 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
       </div>
 
-      <!-- Positioned relative to .card-stack itself (not any one of the
-           three rotating .card elements) so it always sits over whichever
-           physical card is currently playing "front" — same fix as the
-           lightbox open-on-click bug, same underlying cause avoided. -->
-      <div class="card-quick-actions">
-        <button class="heart-btn" id="heartBtn">
-          <svg class="icon-svg icon-heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>
-        </button>
-        <button class="share-btn" id="shareBtn" title="Share this note" aria-label="Share this note">
-          <svg class="icon-svg icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/>
-            <polyline points="16 6 12 2 8 6"/>
-            <line x1="12" y1="2" x2="12" y2="15"/>
-          </svg>
-        </button>
+      <!-- The outer zone is positioned relative to .card-stack itself (not
+           any one of the three rotating .card elements) so it always sits
+           over whichever physical card is currently playing "front" — same
+           fix as the lightbox open-on-click bug, same underlying cause
+           avoided. It's sized to match the photo exactly (see
+           .card-quick-actions-zone above) so the buttons inside can anchor
+           to the photo's bottom-right corner instead of the top of the
+           whole card. -->
+      <div class="card-quick-actions-zone">
+        <div class="card-quick-actions">
+          <button class="heart-btn" id="heartBtn">
+            <svg class="icon-svg icon-heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>
+          </button>
+          <button class="share-btn" id="shareBtn" title="Share this note" aria-label="Share this note">
+            <svg class="icon-svg icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/>
+              <polyline points="16 6 12 2 8 6"/>
+              <line x1="12" y1="2" x2="12" y2="15"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
