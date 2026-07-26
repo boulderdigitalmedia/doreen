@@ -2,6 +2,14 @@
   publish = "."
   functions = "netlify/functions"
 
+# transcode-voice.js shells out to the ffmpeg-static binary rather than
+# calling it as a JS module — without this, Netlify's function bundler
+# (esbuild) can rewrite/exclude the native binary asset since it only
+# understands JS by default, leaving ffmpeg-static's exported path pointing
+# at a file that didn't actually get shipped.
+[functions]
+  external_node_modules = ["ffmpeg-static"]
+
 # Never let the browser/CDN cache HTML pages — a service worker is already
 # registered on this site (sw.js, for push notifications), and stale HTML
 # served underneath it is very hard to notice ("hard refresh" doesn't
@@ -105,6 +113,11 @@
 [[redirects]]
   from   = "/api/touch-activity"
   to     = "/.netlify/functions/touch-activity"
+  status = 200
+
+[[redirects]]
+  from   = "/api/transcode-voice"
+  to     = "/.netlify/functions/transcode-voice"
   status = 200
 
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
