@@ -85,11 +85,24 @@ exports.handler = async (event) => {
   try {
     await fs.writeFile(inPath, inputBuffer);
 
-    // ffmpeg-static's binary routinely loses its executable bit when a
-    // bundler zips/repackages node_modules for deploy (a well-documented
-    // recurring issue on Lambda-based platforms, which is what Netlify
-    // Functions run on) — re-asserting it here is cheap, idempotent, and
-    // guards against that regardless of which build step actually stripped it.
+    // Confirmed in production: without netlify.toml's included_files
+    // setting, the ffmpeg-static binary doesn't make it into the deployed
+    // function bundle at all (ENOENT at spawn time, not a permissions
+    // error) — this check exists so that specific failure mode is
+    // unmistakable in the logs rather than looking like a generic exec
+    // failure, if the bundling config ever regresses.
+    try {
+      await fs.access(ffmpegPath);
+    } catch {
+      console.error('ffmpeg binary missing from deployed bundle at:', ffmpegPath,
+        '— check netlify.toml [functions].included_files covers node_modules/ffmpeg-static/**');
+      return err('Could not process this recording — try recording again', 500);
+    }
+
+    // ffmpeg-static's binary can also lose its executable bit when a
+    // bundler zips/repackages node_modules for deploy (a separate,
+    // well-documented issue on Lambda-based platforms) — re-asserting it
+    // here is cheap, idempotent, and guards against that too.
     try { await fs.chmod(ffmpegPath, 0o755); } catch (chmodErr) {
       console.error('could not chmod ffmpeg binary:', chmodErr.message);
     }
