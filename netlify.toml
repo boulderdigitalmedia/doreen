@@ -3,12 +3,15 @@
   functions = "netlify/functions"
 
 # transcode-voice.js shells out to the ffmpeg-static binary rather than
-# calling it as a JS module — without this, Netlify's function bundler
-# (esbuild) can rewrite/exclude the native binary asset since it only
-# understands JS by default, leaving ffmpeg-static's exported path pointing
-# at a file that didn't actually get shipped.
+# calling it as a JS module. Two separate settings are needed, not one:
+# external_node_modules keeps esbuild from trying to parse/rewrite the
+# module as JS, but that alone doesn't make Netlify's function bundler
+# actually ship a raw binary asset — confirmed in production as an ENOENT
+# at runtime, spawn-ing a path that simply wasn't in the deployed bundle.
+# included_files is what forces that binary to be packaged.
 [functions]
   external_node_modules = ["ffmpeg-static"]
+  included_files = ["node_modules/ffmpeg-static/**"]
 
 # Never let the browser/CDN cache HTML pages — a service worker is already
 # registered on this site (sw.js, for push notifications), and stale HTML
