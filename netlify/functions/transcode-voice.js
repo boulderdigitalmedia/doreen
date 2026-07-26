@@ -85,6 +85,15 @@ exports.handler = async (event) => {
   try {
     await fs.writeFile(inPath, inputBuffer);
 
+    // ffmpeg-static's binary routinely loses its executable bit when a
+    // bundler zips/repackages node_modules for deploy (a well-documented
+    // recurring issue on Lambda-based platforms, which is what Netlify
+    // Functions run on) — re-asserting it here is cheap, idempotent, and
+    // guards against that regardless of which build step actually stripped it.
+    try { await fs.chmod(ffmpegPath, 0o755); } catch (chmodErr) {
+      console.error('could not chmod ffmpeg binary:', chmodErr.message);
+    }
+
     // 96kbps mono AAC — plenty for spoken voice, keeps the file small.
     // +faststart moves the moov atom to the front so it starts playing
     // without waiting on the whole file, same reason it's used for web video.
@@ -100,7 +109,14 @@ exports.handler = async (event) => {
         outPath,
       ], { timeout: 25000 });
     } catch (ffmpegError) {
-      console.error('ffmpeg transcode failed:', ffmpegError.message);
+      // Logged in full server-side (Netlify function logs) for real
+      // diagnosis — the client only ever sees the generic message below,
+      // since raw ffmpeg/stderr output isn't something a recipient-facing
+      // error toast should expose.
+      console.error('ffmpeg transcode failed. path:', ffmpegPath,
+        '| code:', ffmpegError.code,
+        '| message:', ffmpegError.message,
+        '| stderr:', ffmpegError.stderr);
       return err('Could not process this recording — try recording again', 500);
     }
 
