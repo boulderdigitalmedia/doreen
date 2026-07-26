@@ -368,7 +368,7 @@
     .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
 
     /* ── TOAST ── */
-    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 16px; transition: transform 0.3s ease; pointer-events: none; max-width: min(90vw, 480px); text-align: center; z-index: 99; }
+    #toast { position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 16px; transition: transform 0.3s ease; pointer-events: none; max-width: min(90vw, 480px); max-height: 40vh; overflow-y: auto; text-align: center; z-index: 99; }
     #toast.show { transform: translateX(-50%) translateY(0); }
 
     .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
@@ -2576,6 +2576,16 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
   var toastTimer;
   function showToast(msg) {
+    // Most toasts fire right after submitting a field (email, phone, slug,
+    // etc.) — if the on-screen keyboard is still open, this fixed-position
+    // toast anchors against the full layout viewport, not the smaller area
+    // actually visible above the keyboard, and can render partly or fully
+    // hidden behind it with no way to scroll it into view. Blurring
+    // whatever's focused closes the keyboard first, so the toast always
+    // has the full screen to sit in.
+    var active = document.activeElement;
+    if (active && active !== document.body && typeof active.blur === 'function') active.blur();
+
     var el = document.getElementById('toast');
     el.textContent = msg;
     el.classList.add('show');
