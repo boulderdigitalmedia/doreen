@@ -2264,14 +2264,49 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // policy, a valid token, and a full project pause/resume. If this bucket
   // works where the old one didn't, that isolates the problem to something
   // about that specific bucket row rather than the app/policy setup.
+  // Reads a Blob into a base64 string (no data: prefix) for JSON transport
+  // to transcode-voice.js — plain fetch(Blob) upload would need multipart
+  // handling on the Netlify Functions side, which is more moving parts for
+  // no real benefit at these file sizes (a 3-min voice note comes in well
+  // under Netlify's function payload ceiling even after base64's ~33% bloat).
+  function blobToBase64(blob) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload  = function() { resolve(reader.result.split(',').pop()); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Uploads through transcode-voice.js rather than straight to Storage —
+  // see that function's header comment: it re-encodes whatever the
+  // sender's browser recorded (webm/opus on Chrome, mp4/aac on Safari)
+  // into one universal format, so playback on gift.html never depends on
+  // what device the note was recorded on.
   async function uploadVoice(blob, giftId) {
-    var ext      = (blob.type || '').indexOf('mp4') !== -1 ? 'm4a' : 'webm';
-    var filename = USER.id + '/' + giftId + '/' + Date.now() + '-voice.' + ext;
-    var file     = new File([blob], filename.split('/').pop(), { type: blob.type || 'audio/webm' });
-    var { error } = await sb.storage.from('voicenotes').upload(filename, file, { upsert: true });
-    if (error) { showToast('Voice note upload failed: ' + error.message); return null; }
-    var { data } = sb.storage.from('voicenotes').getPublicUrl(filename);
-    return data.publicUrl;
+    var base64;
+    try {
+      base64 = await blobToBase64(blob);
+    } catch (e) {
+      showToast('Voice note upload failed: could not read the recording');
+      return null;
+    }
+
+    var res, data;
+    try {
+      res = await fetch('/api/transcode-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': await authHeader() },
+        body: JSON.stringify({ giftId: giftId, audioBase64: base64, mimeType: blob.type || 'audio/webm' }),
+      });
+      data = await res.json();
+    } catch (e) {
+      showToast('Voice note upload failed: could not reach the server');
+      return null;
+    }
+
+    if (!res.ok) { showToast('Voice note upload failed: ' + (data.error || 'unknown error')); return null; }
+    return data.url;
   }
 
   // ── PHOTO REPOSITION (drag to reframe) ───────────────────────
