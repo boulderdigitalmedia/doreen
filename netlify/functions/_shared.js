@@ -578,6 +578,71 @@ async function sendGiftSetupReminderEmail(profile, autoStartDate) {
   }
 }
 
+// ── Annual trial payment failed (retry pending) ─────────────────────
+// Annual's trial is self-managed (see the 7-DAY FREE TRIAL block in
+// schema.sql and process-annual-trials.js) since its Stripe Price is
+// one-time, not recurring — there's no native subscription trial to
+// fall back on the way installment gets for free. When the saved card
+// fails at trial end (or a retry), this tells the
+// buyer their card was declined and how many more automatic attempts
+// remain before the trial simply expires — called from
+// process-annual-trials.js right after each failed attempt.
+async function sendTrialPaymentFailedEmail(profile, attemptsRemaining) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for trial-payment-failed notice, profile ${profile.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `Your free trial ended — we couldn't charge your card`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Your free trial just ended, and the card on file couldn't be charged for your annual plan.</p>
+        <p style="font-size:16px;">We'll try again automatically over the next few days (${attemptsRemaining} more attempt${attemptsRemaining === 1 ? '' : 's'}) — updating your payment method now is the fastest way to make sure it goes through.</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Update payment method →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send trial-payment-failed notice for profile ${profile.id}:`, err.message);
+  }
+}
+
+// ── Annual trial expired (all retries exhausted) ────────────────────
+// Sent once, when process-annual-trials.js gives up after
+// TRIAL_CHARGE_MAX_ATTEMPTS failed charge attempts and cuts off access
+// (gifts deactivated, same as a lapsed installment subscription).
+async function sendTrialExpiredEmail(profile) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for trial-expired notice, profile ${profile.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `Your free trial has ended`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Your free trial ended and we still weren't able to charge your card after several attempts, so your gift has stopped sending new notes.</p>
+        <p style="font-size:16px;">Anything already sent stays visible to your recipient — update your payment method and subscribe again any time to pick up where you left off.</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Go to your account →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send trial-expired notice for profile ${profile.id}:`, err.message);
+  }
+}
+
 // Looks one day ahead (in the gift's own day-counting) and warns the buyer
 // early if tomorrow's slot needs a *new* note that doesn't exist yet. If
 // tomorrow's note index is the same as today's (e.g. mid-week for a weekly
@@ -813,6 +878,8 @@ module.exports = {
   sendRenewalReminderEmail,
   sendGiftSetupReminderEmail,
   sendReengagementEmail,
+  sendTrialPaymentFailedEmail,
+  sendTrialExpiredEmail,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
