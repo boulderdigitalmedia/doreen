@@ -35,6 +35,12 @@
 //     before it would ever auto-renew this way).
 //   invoice.payment_failed → mark past_due, log 'payment_failed'
 //
+// A genuine first-ever enrollment (installment/annual checkout, or the
+// annual one-time purchase) also calls maybeRewardReferral, which
+// grants a free bonus gift_type='referral' credit to both this buyer
+// and whoever referred them, if anyone did — see the REFERRAL PROGRAM
+// block in schema.sql and record-referral.js for the rest of that flow.
+//
 // The subscription_events inserts feed the internal admin dashboard
 // (admin.html / admin-metrics.js) — profiles only holds current status,
 // so this append-only log is the only place enrollment/renewal/
@@ -158,6 +164,10 @@ exports.handler = async (event) => {
           if (profileId) await handleNewTermStarted(profileId, session.customer, sub.id, plan);
         } else {
           await logEvent(profileId, session.customer, 'enrollment', plan, planAmount(sub));
+          // Only a genuine first-ever enrollment can reward a referral —
+          // see maybeRewardReferral for why this is keyed off "first
+          // payment succeeded" rather than signup alone.
+          if (profileId) await maybeRewardReferral(profileId);
         }
         break;
       }
@@ -472,7 +482,48 @@ async function handleAnnualOneTimePurchase(session) {
     if (profileId) await handleNewTermStarted(profileId, session.customer, null, 'annual');
   } else {
     await logEvent(profileId, session.customer, 'enrollment', 'annual', amount);
+    if (profileId) await maybeRewardReferral(profileId);
   }
+}
+
+// Checks whether this buyer (identified here by profileId, the
+// REFEREE) was referred by someone, and — if so, and if it hasn't
+// already been rewarded — grants both sides one free bonus
+// gift_type='referral' credit. Only ever called right after a buyer's
+// very first successful enrollment (see the two call sites above), so
+// this naturally never fires for renewals or add-on purchases.
+//
+// The conditional `.eq('status', 'pending')` update is what makes this
+// safe to call more than once for the same buyer (Stripe redelivers
+// webhooks on retry): the first successful call flips the row to
+// 'rewarded' and returns it; every subsequent call matches zero rows
+// and `updated` comes back null, so credits never get double-granted.
+async function maybeRewardReferral(profileId) {
+  if (!profileId) return;
+
+  const { data: updated, error } = await sb
+    .from('referrals')
+    .update({ status: 'rewarded', rewarded_at: new Date().toISOString() })
+    .eq('referee_id', profileId)
+    .eq('status', 'pending')
+    .select('referrer_id, referee_id')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Referral reward check failed for profile', profileId, error.message);
+    return;
+  }
+  if (!updated) return; // not referred by anyone, or already rewarded
+
+  try {
+    await sb.rpc('increment_referral_credits', { target_id: updated.referrer_id });
+    await sb.rpc('increment_referral_credits', { target_id: updated.referee_id });
+  } catch (e) {
+    console.error('CRITICAL: referral marked rewarded but credit increment failed', profileId, e.message);
+  }
+
+  await logEvent(updated.referrer_id, null, 'referral_reward', null, null);
+  await logEvent(updated.referee_id, null, 'referral_reward', null, null);
 }
 
 // Sets every currently-active gift for this buyer to 'cancelled' — no
@@ -530,11 +581,14 @@ async function handleNewTermStarted(profileId, stripeCustomerId, subscriptionId,
     .update({ access_term_end: newTermEndISO })
     .eq('id', profileId);
 
-  // Keep the included gift's term in sync.
+  // Keep the included gift's term in sync — and any free referral-reward
+  // gift(s) too, which ride along on the same term for free rather than
+  // being repurchased like an add-on (see the REFERRAL PROGRAM block in
+  // schema.sql).
   await sb.from('gifts')
     .update({ term_end_date: newTermEndISO })
     .eq('user_id', profileId)
-    .eq('gift_type', 'included');
+    .in('gift_type', ['included', 'referral']);
 
   // Any add-on still active from the old term carries over automatically,
   // rebilled at the flat $20 renewal rate regardless of its original
