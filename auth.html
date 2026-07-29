@@ -168,7 +168,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       email:    document.getElementById('signupEmail').value.trim(),
       password: document.getElementById('signupPw').value,
       options: {
-        data: { terms_accepted_at: new Date().toISOString() }
+        data: { terms_accepted_at: new Date().toISOString() },
+        // Without this, Supabase sends the confirmation link to whatever
+        // "Site URL" is set in the dashboard (Authentication > URL
+        // Configuration) — which is the bare homepage, so confirming just
+        // dead-ends there instead of continuing the funnel. Sending them
+        // to /account moves them forward into the paywall/plan-picker
+        // (account.html's boot() already handles a fresh, just-confirmed
+        // session with no profile row yet, and already preserves a
+        // pending ?ref= code across this exact redirect — see its boot()
+        // comment).
+        emailRedirectTo: window.location.origin + '/account'
       }
     });
 
