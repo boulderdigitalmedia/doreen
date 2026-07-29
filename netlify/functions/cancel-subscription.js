@@ -2,27 +2,31 @@
 // Body: { action: 'preview' | 'confirm' }
 // Header: Authorization: Bearer <supabase_access_token>
 //
-// Mid-term cancellation for the 12-month base plan. Only the installment
-// plan actually has anything to cancel:
+// Mid-term cancellation for the 12-month base plan. Three cases:
 //
-//   installment ($4.50/mo) — this is the plan the "not cancel-anytime"
-//   term actually binds. Cancelling early costs a fee: half of the
-//   remaining installments left in the 12-month term, capped at $20
-//   (whichever is LESS). Access to send new notes ends immediately;
-//   already-sent notes stay visible to the recipient either way (see
-//   the gifts RLS policy in schema.sql). The fee is charged as a
-//   one-time invoice before the subscription is actually canceled — if
-//   that charge fails, nothing is canceled, so they're never left
-//   without access AND without having paid the fee.
+//   still in the free trial (either plan) — nothing has been charged
+//   yet, so cancelling never costs anything. Cancels the subscription
+//   outright (not "at period end") so it never converts to a real
+//   charge at all.
 //
-//   annual ($45) — paid in full upfront as a one-time charge (see
-//   create-checkout.js) with no Stripe subscription behind it at all,
-//   and it doesn't auto-renew on its own either — there is genuinely
-//   nothing left to cancel. account.html doesn't show a cancel option
-//   for annual buyers at all; this just returns an informational
-//   no-op if it's ever called for one anyway (stale UI, manual testing,
-//   etc.) rather than trying to operate on a subscription that doesn't
-//   exist.
+//   installment ($4.50/mo), already converted — this is the plan the
+//   "not cancel-anytime" term actually binds once real money is
+//   involved. Cancelling early costs a fee: half of the remaining
+//   installments left in the 12-month term, capped at $20 (whichever is
+//   LESS). Access to send new notes ends immediately; already-sent
+//   notes stay visible to the recipient either way (see the gifts RLS
+//   policy in schema.sql). The fee is charged as a one-time invoice
+//   before the subscription is actually canceled — if that charge
+//   fails, nothing is canceled, so they're never left without access
+//   AND without having paid the fee.
+//
+//   annual ($45/yr), already converted (or a legacy buyer from before
+//   annual had a trial/subscription at all) — paid in full for the
+//   year already, so there's nothing further owed and no fee either
+//   way. cancel_at (see stripe-webhook.js) already guarantees it won't
+//   auto-renew regardless of whether this is ever called; this just
+//   lets a buyer close it out early/explicitly, or is a no-op for a
+//   legacy buyer with no subscription object at all.
 //
 // Call with { action: 'preview' } first to show the fee before charging
 // anything; call again with { action: 'confirm' } once the buyer's
@@ -97,9 +101,65 @@ exports.handler = async (event) => {
   // (the two haven't had a chance to diverge yet anyway).
   const termEnd = profile.access_term_end || profile.current_period_end;
 
-  // ── Annual — paid in full, one-time, already doesn't auto-renew ──
-  // Nothing to cancel. Returned as an informational 200 rather than an
-  // error since it isn't really a failure state, just a no-op.
+  // ── Still in the free trial — nothing charged yet, so cancelling is
+  // always free, for either plan. Cancels outright (rather than "at
+  // period end") so the trial never converts to a real charge at all.
+  if (profile.stripe_status === 'trialing') {
+    if (action === 'preview') {
+      return ok({
+        plan: profile.plan,
+        fee: 0,
+        message: 'You\'re still in your free trial — cancelling now won\'t cost you anything, and your card will never be charged.',
+      });
+    }
+
+    if (profile.stripe_subscription_id) {
+      // Installment's native Stripe trial — cancelling the subscription
+      // fires customer.subscription.deleted, which is what actually
+      // flips stripe_status and deactivates gifts (see this file's
+      // header comment: the webhook is the single place that touches
+      // gift status, to avoid two code paths racing each other).
+      try {
+        await stripe.subscriptions.cancel(profile.stripe_subscription_id);
+      } catch (e) {
+        return err('Could not cancel your trial: ' + e.message, 500);
+      }
+    } else {
+      // Annual's self-managed trial (see create-checkout.js /
+      // stripe-webhook.js's handleAnnualTrialSetup) has no Stripe
+      // subscription object at all, so there's no webhook coming to flip
+      // status the way there is for installment above — do it directly
+      // here instead, and stop process-annual-trials.js from ever
+      // attempting to charge this buyer by clearing trial_ends_at too.
+      await sb.from('profiles')
+        .update({ stripe_status: 'canceled', trial_ends_at: null })
+        .eq('id', user.id);
+      await sb.from('gifts')
+        .update({ status: 'cancelled' })
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+    }
+
+    try {
+      await sb.from('subscription_events').insert({
+        profile_id: user.id,
+        event_type: 'early_cancellation',
+        plan:       profile.plan,
+        amount:     0,
+      });
+    } catch (e) {
+      console.error('Failed to log early_cancellation event:', e.message);
+    }
+
+    return ok({ plan: profile.plan, fee: 0, message: 'Canceled — your free trial ends now. You were never charged.' });
+  }
+
+  // ── Annual, already converted (or a legacy one-time buyer) — paid in
+  // full for the year, nothing further owed, no fee either way. Annual
+  // never has a stripe_subscription_id at all (the self-managed trial
+  // above and the immediate one-time charge in create-checkout.js both
+  // leave it null), so there's nothing left here to actually cancel on
+  // Stripe's side — this is purely informational.
   if (profile.plan === 'annual') {
     return ok({
       plan: 'annual',
@@ -111,11 +171,11 @@ exports.handler = async (event) => {
     });
   }
 
-  // ── Installment — the only plan with anything to actually cancel ──
+  // ── Installment, already converted — the only case with an actual fee ──
   if (!profile.stripe_subscription_id) {
     return err('No active subscription found', 409);
   }
-  if (!['active', 'trialing', 'past_due'].includes(profile.stripe_status)) {
+  if (!['active', 'past_due'].includes(profile.stripe_status)) {
     return err('Subscription is not currently active', 409);
   }
   if (!termEnd) return err('Could not determine your term end date — contact support', 500);
