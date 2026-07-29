@@ -1,52 +1,79 @@
 // Stripe webhook handler — POST /.netlify/functions/stripe-webhook
 // (mapped to /api/stripe-webhook in netlify.toml)
 //
-// Handles, for the 12-month-term pricing model:
-//   checkout.session.completed (mode 'subscription') → activate the
-//     INSTALLMENT plan, enforce its 12-month cancel_at, log 'enrollment'
-//     (first-ever) or 'renewal' + carry over add-on gifts and the SMS
-//     add-on (returning buyer starting a fresh term after a lapse)
+// A first-time buyer gets a 7-day free trial on either plan, but the two
+// plans get there completely differently — installment's Price is a
+// real recurring monthly price, so it uses a genuine Stripe subscription
+// trial; annual's Price is one-time, so its trial is entirely
+// self-managed (see create-checkout.js's header comment for the full
+// rationale). That split runs through everything below:
+//
+//   checkout.session.completed (mode 'subscription') → INSTALLMENT ONLY
+//     now (annual never creates one of these). Activates the
+//     subscription, enforces its 12-month cancel_at (offset past the
+//     trial if this checkout got one). A first-time buyer's subscription
+//     lands here in 'trialing' status with NOTHING charged yet —
+//     enrollment logging, the referral reward, and add-on/SMS carryover
+//     are all deliberately deferred until invoice.payment_succeeded
+//     below, once the trial actually converts. A returning buyer's
+//     renewal checkout (no trial — see create-checkout.js's eligibility
+//     check) is charged immediately, so it's logged right here.
+//   checkout.session.completed (mode 'setup', annual_trial metadata) →
+//     ANNUAL ONLY, first-time/trial-eligible buyers. No charge, no
+//     subscription — just saves the card and starts the self-managed
+//     trial clock (handleAnnualTrialSetup). process-annual-trials.js (a
+//     separate scheduled function) is what actually charges that saved
+//     card once the trial ends — nothing here or on Stripe's side does
+//     that automatically for a one-time price.
 //   checkout.session.completed (mode 'payment', gift_addon metadata) →
 //     create the paid add-on gift, log 'addon_purchase'
 //   checkout.session.completed (mode 'payment', plan_type 'annual') →
-//     the ANNUAL plan's one-time $45 charge — no subscription exists for
-//     it at all. Saves the card as the customer's default payment method
-//     (required for any later off-session charge to work at all, since
-//     there's no subscription to have attached one automatically), then
-//     logs 'enrollment' or 'renewal' the same way the installment path
-//     does and carries over add-ons/SMS via handleNewTermStarted.
-//   customer.subscription.updated  → sync status/period, mirror the
-//     included gift's term_end_date. Only ever fires for installment-plan
-//     subscriptions now (and any pre-migration annual subscriptions still
-//     live from before annual became a one-time charge).
-//   customer.subscription.deleted  → term truly over (no successor) —
-//     deactivate ALL of this buyer's gifts (still viewable, no more
-//     sends), log 'cancellation'. Same caveat as above: installment-only
-//     going forward. The annual plan's equivalent lapse (term end with no
-//     renewal checkout) is caught by send-daily.js's scheduled sweep
-//     instead, since there's no subscription event to fire it here.
-//   invoice.payment_succeeded (subscription_cycle) → renewal handling for
-//     any subscription that reaches an actual new billing period. In
-//     practice this now only ever fires for pre-migration annual
-//     subscriptions still auto-renewing under the old model — new annual
-//     purchases are one-time payments and never reach this event, and the
-//     installment plan's monthly cycles are explicitly skipped (routine
-//     payments within the SAME term, not a new term — cancel_at ends it
-//     before it would ever auto-renew this way).
-//   invoice.payment_failed → mark past_due, log 'payment_failed'
+//     ANNUAL ONLY, buyers who AREN'T trial-eligible (a returning member
+//     renewing after a lapse) — the original one-time $45 charge,
+//     immediate, no trial.
+//   customer.subscription.updated  → sync status/period (including
+//     installment's 'trialing' → 'active' transition itself), mirror
+//     the included gift's term_end_date. Installment only — annual has
+//     no subscription to fire this at all.
+//   customer.subscription.deleted  → installment's term truly over (no
+//     successor, or its trial canceled before converting) — deactivate
+//     ALL of this buyer's gifts (still viewable, no more sends), log
+//     'cancellation'. Annual's equivalent (self-managed trial expiring
+//     after failed retries, or an already-converted term simply
+//     lapsing) is handled directly in process-annual-trials.js /
+//     send-daily.js instead, since there's no subscription event to
+//     fire here for it.
+//   invoice.payment_succeeded (subscription_cycle) → installment only.
+//     This is where its trial ACTUALLY CONVERTS to the buyer's first
+//     real charge — billing_reason is 'subscription_cycle' rather than
+//     'subscription_create' specifically because no invoice exists at
+//     all while a subscription sits in 'trialing'. Distinguishes that
+//     genuinely-new charge from a routine mid-term cycle (monthly
+//     payments #2-12 within an already-established term) by checking
+//     whether ANY event has already been recorded against this exact
+//     stripe_subscription_id — only the very first successful invoice
+//     for a given subscription is new, everything after that is already
+//     accounted for.
+//   invoice.payment_failed → installment only. Marks past_due, logs
+//     'payment_failed' (also what fires if its trial's card gets
+//     declined at conversion).
 //
-// A genuine first-ever enrollment (installment/annual checkout, or the
-// annual one-time purchase) also calls maybeRewardReferral, which
-// grants a free bonus gift_type='referral' credit to both this buyer
-// and whoever referred them, if anyone did — see the REFERRAL PROGRAM
-// block in schema.sql and record-referral.js for the rest of that flow.
+// A genuine first-ever enrollment (however it's detected — installment
+// via invoice.payment_succeeded, or annual via
+// process-annual-trials.js's own charge-success path) also calls
+// maybeRewardReferral, which grants a free bonus gift_type='referral'
+// credit to both this buyer and whoever referred them, if anyone did —
+// see the REFERRAL PROGRAM block in schema.sql and record-referral.js
+// for the rest of that flow.
 //
 // The subscription_events inserts feed the internal admin dashboard
 // (admin.html / admin-metrics.js) — profiles only holds current status,
 // so this append-only log is the only place enrollment/renewal/
 // cancellation/add-on history lives. IMPORTANT: invoice.payment_succeeded
 // must be enabled on the Stripe webhook endpoint (Dashboard → Developers
-// → Webhooks → this endpoint → Add events) for renewals to be tracked.
+// → Webhooks → this endpoint → Add events) — with trials in the picture
+// this is no longer just "for renewals," it's how every first-time
+// installment trial conversion gets recorded at all.
 
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
@@ -115,9 +142,22 @@ exports.handler = async (event) => {
           break;
         }
 
+        // Annual, trial-eligible — a Checkout 'setup' session just saved
+        // the buyer's card with nothing charged and no subscription
+        // created at all (see create-checkout.js). Starts the
+        // self-managed trial clock instead of anything below, which is
+        // entirely about real Stripe subscriptions (installment only,
+        // now that annual never creates one).
+        if (session.mode === 'setup' && session.metadata?.annual_trial === 'true') {
+          await handleAnnualTrialSetup(session);
+          break;
+        }
+
         if (session.mode !== 'subscription') break;
 
-        // Fetch the full subscription to get period end
+        // Only installment reaches here now — annual never creates a
+        // mode 'subscription' session any more (see create-checkout.js
+        // and handleAnnualTrialSetup/handleAnnualOneTimePurchase above).
         const sub = await stripe.subscriptions.retrieve(session.subscription);
         const plan = getPlan(sub);
         const periodEnd = periodEndISO(sub);
@@ -128,46 +168,55 @@ exports.handler = async (event) => {
           current_period_end:     periodEnd,
         });
 
-        // Enforce the installment plan's fixed 12-month term — under the
-        // hood it's a normal recurring monthly subscription, but it
-        // shouldn't auto-renew at $4.50/mo forever. cancel_at stops it
-        // automatically after 12 payments; continuing past that means
-        // checking out again for a fresh term (handled as a 'renewal'
-        // below, the next time this case runs for the same buyer).
-        if (plan === 'installment') {
-          const startTs = sub.start_date || Math.floor(Date.now() / 1000);
-          const cancelAt = startTs + 12 * 30 * 24 * 60 * 60; // ~12 months
-          try {
-            await stripe.subscriptions.update(sub.id, { cancel_at: cancelAt });
-          } catch (e) {
-            console.error('Failed to set cancel_at for installment subscription', sub.id, e.message);
+        // Installment shouldn't silently auto-renew at $4.50/mo forever —
+        // cancel_at stops it a fixed 12 months out from whenever the
+        // trial ends (or from creation, for a renewal checkout that
+        // didn't get a trial — see create-checkout.js's eligibility
+        // check). Continuing past that point means checking out again
+        // for a fresh term (handled as a 'renewal', below or in
+        // invoice.payment_succeeded, whichever detects it).
+        const baseTs = sub.trial_end || sub.start_date || Math.floor(Date.now() / 1000);
+        const cancelAt = baseTs + 12 * 30 * 24 * 60 * 60; // ~12 months of $4.50 payments
+        try {
+          await stripe.subscriptions.update(sub.id, { cancel_at: cancelAt });
+        } catch (e) {
+          console.error('Failed to set cancel_at for subscription', sub.id, e.message);
+        }
+
+        // A subscription still in 'trialing' status hasn't charged the
+        // buyer anything yet — enrollment/renewal logging, the referral
+        // reward, and term/add-on carryover all wait for the trial to
+        // actually convert to a real payment, which shows up as
+        // invoice.payment_succeeded instead (see that case below). This
+        // branch only reaches the logging below for a subscription that
+        // was never trialing at all — a returning buyer's renewal
+        // checkout, charged immediately (see create-checkout.js).
+        if (sub.status !== 'trialing') {
+          // A profile with prior enrollment history is a returning buyer
+          // completing a fresh checkout for a new term (their previous one
+          // lapsed) — that's a renewal, not a first-time enrollment, and
+          // triggers add-on carryover. Otherwise this is their very first
+          // subscription.
+          let priorEnrollments = 0;
+          if (profileId) {
+            const res = await sb
+              .from('subscription_events')
+              .select('id', { count: 'exact', head: true })
+              .eq('profile_id', profileId)
+              .eq('event_type', 'enrollment');
+            priorEnrollments = res.count || 0;
           }
-        }
 
-        // A profile with prior enrollment history is a returning buyer
-        // completing a fresh checkout for a new term (their previous one
-        // lapsed) — that's a renewal, not a first-time enrollment, and
-        // triggers add-on carryover. Otherwise this is their very first
-        // subscription.
-        let priorEnrollments = 0;
-        if (profileId) {
-          const res = await sb
-            .from('subscription_events')
-            .select('id', { count: 'exact', head: true })
-            .eq('profile_id', profileId)
-            .eq('event_type', 'enrollment');
-          priorEnrollments = res.count || 0;
-        }
-
-        if (priorEnrollments > 0) {
-          await logEvent(profileId, session.customer, 'renewal', plan, planAmount(sub));
-          if (profileId) await handleNewTermStarted(profileId, session.customer, sub.id, plan);
-        } else {
-          await logEvent(profileId, session.customer, 'enrollment', plan, planAmount(sub));
-          // Only a genuine first-ever enrollment can reward a referral —
-          // see maybeRewardReferral for why this is keyed off "first
-          // payment succeeded" rather than signup alone.
-          if (profileId) await maybeRewardReferral(profileId);
+          if (priorEnrollments > 0) {
+            await logEvent(profileId, session.customer, 'renewal', plan, planAmount(sub), sub.id);
+            if (profileId) await handleNewTermStarted(profileId, session.customer, sub.id, plan);
+          } else {
+            await logEvent(profileId, session.customer, 'enrollment', plan, planAmount(sub), sub.id);
+            // Only a genuine first-ever enrollment can reward a referral —
+            // see maybeRewardReferral for why this is keyed off "first
+            // payment succeeded" rather than signup alone.
+            if (profileId) await maybeRewardReferral(profileId);
+          }
         }
         break;
       }
@@ -206,32 +255,51 @@ exports.handler = async (event) => {
         // Already-sent notes stay visible to recipients regardless (see
         // the gifts RLS policy in schema.sql).
         if (profileId) await deactivateAllGifts(profileId);
-        await logEvent(profileId, sub.customer, 'cancellation', plan, null);
+        await logEvent(profileId, sub.customer, 'cancellation', plan, null, sub.id);
         break;
       }
 
       // Fires on every successful invoice, including the very first one —
-      // billing_reason distinguishes a brand-new subscription
-      // ('subscription_create', already logged as 'enrollment' above) from
-      // an actual renewal charge ('subscription_cycle'). Proration invoices
-      // from mid-cycle plan/add-on changes ('subscription_update') are
-      // deliberately not counted as renewals here.
+      // billing_reason distinguishes a brand-new NO-TRIAL subscription's
+      // first invoice ('subscription_create', already logged as
+      // 'enrollment' by checkout.session.completed directly) from
+      // everything else ('subscription_cycle'), which now covers BOTH a
+      // trial converting to a real charge for the first time AND a
+      // routine mid-term cycle (installment's monthly payments #2-12).
+      // The alreadyRecorded check below is what tells those two apart —
+      // see the file header comment.
       case 'invoice.payment_succeeded': {
         const invoice = stripeEvent.data.object;
         if (!invoice.subscription || invoice.billing_reason !== 'subscription_cycle') break;
         const sub = await stripe.subscriptions.retrieve(invoice.subscription);
         const plan = getPlan(sub);
-
-        // Only the annual plan actually reaches a new term via this
-        // event — the installment plan's monthly cycles fire it too, but
-        // each one is just a routine payment within the SAME
-        // already-counted 12-month term (cancel_at ends it before it
-        // would ever auto-renew this way).
-        if (plan !== 'annual') break;
-
         const profileId = await findProfileId(invoice.customer);
-        await logEvent(profileId, invoice.customer, 'renewal', plan, (invoice.amount_paid || 0) / 100);
-        if (profileId) await handleNewTermStarted(profileId, invoice.customer, sub.id, plan);
+
+        const { count: alreadyRecorded } = await sb
+          .from('subscription_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('stripe_subscription_id', sub.id);
+        if (alreadyRecorded) break; // routine cycle within an already-established term
+
+        let priorEnrollments = 0;
+        if (profileId) {
+          const res = await sb
+            .from('subscription_events')
+            .select('id', { count: 'exact', head: true })
+            .eq('profile_id', profileId)
+            .eq('event_type', 'enrollment');
+          priorEnrollments = res.count || 0;
+        }
+
+        if (priorEnrollments > 0) {
+          await logEvent(profileId, invoice.customer, 'renewal', plan, (invoice.amount_paid || 0) / 100, sub.id);
+          if (profileId) await handleNewTermStarted(profileId, invoice.customer, sub.id, plan);
+        } else {
+          // This subscription's first-ever successful charge, and this
+          // profile has never enrolled before — a trial just converted.
+          await logEvent(profileId, invoice.customer, 'enrollment', plan, (invoice.amount_paid || 0) / 100, sub.id);
+          if (profileId) await maybeRewardReferral(profileId);
+        }
         break;
       }
 
@@ -242,7 +310,7 @@ exports.handler = async (event) => {
         const profileId = await upsertProfile(sub.customer, {
           stripe_status: 'past_due',
         });
-        await logEvent(profileId, sub.customer, 'payment_failed', getPlan(sub), (invoice.amount_due || 0) / 100);
+        await logEvent(profileId, sub.customer, 'payment_failed', getPlan(sub), (invoice.amount_due || 0) / 100, sub.id);
         break;
       }
 
@@ -303,14 +371,15 @@ async function findProfileId(stripeCustomerId) {
 // renewal/cancellation/add-on history lives (see schema.sql comment).
 // Never throws: a logging failure shouldn't turn into a 500 that makes
 // Stripe retry a webhook whose actual work already succeeded.
-async function logEvent(profileId, stripeCustomerId, eventType, plan, amount) {
+async function logEvent(profileId, stripeCustomerId, eventType, plan, amount, stripeSubscriptionId) {
   try {
     const { error } = await sb.from('subscription_events').insert({
-      profile_id:         profileId || null,
-      stripe_customer_id: stripeCustomerId || null,
-      event_type:         eventType,
-      plan:               plan || null,
-      amount:             amount != null ? amount : null,
+      profile_id:             profileId || null,
+      stripe_customer_id:     stripeCustomerId || null,
+      event_type:             eventType,
+      plan:                   plan || null,
+      amount:                 amount != null ? amount : null,
+      stripe_subscription_id: stripeSubscriptionId || null,
     });
     if (error) console.error('Failed to log subscription event:', eventType, error.message);
   } catch (err) {
@@ -421,11 +490,16 @@ async function handleAddonPurchaseCompleted(session) {
   await logEvent(profileId, session.customer, 'addon_purchase', 'addon', tierPrice);
 }
 
-// Handles the annual plan's one-time $45 checkout. There's no
-// subscription behind this at all — it's a genuine one-time payment, so
-// nothing about it can auto-renew even by accident. Two things this has
-// to do that the (real-subscription) installment path gets from Stripe
-// for free:
+// Handles the annual plan's one-time $45 checkout — still very much a
+// live path (create-checkout.js uses this for any buyer who ISN'T
+// trial-eligible: a returning member renewing after a lapse, charged
+// immediately with no trial). A first-time, trial-eligible buyer takes
+// a different path entirely (handleAnnualTrialSetup, above/below) that
+// defers this exact charge until their trial converts. There's no
+// subscription behind either path — annual has never been a Stripe
+// subscription — so nothing about it can auto-renew even by accident.
+// Two things this has to do that the (real-subscription) installment
+// path gets from Stripe for free:
 //   1. Save the card used as the customer's default payment method. A
 //      one-time Checkout Session doesn't do this on its own — without
 //      it, every later off-session charge for this buyer (add-on gifts,
@@ -484,6 +558,54 @@ async function handleAnnualOneTimePurchase(session) {
     await logEvent(profileId, session.customer, 'enrollment', 'annual', amount);
     if (profileId) await maybeRewardReferral(profileId);
   }
+}
+
+// Starts the annual plan's SELF-MANAGED trial for a first-time,
+// trial-eligible buyer (see create-checkout.js's mode 'setup' session —
+// there's no subscription behind this at all, and nothing is charged
+// here). Saves the card the SetupIntent collected as the customer's
+// default payment method (required for the off-session charge
+// process-annual-trials.js makes later), then sets
+// profiles.trial_ends_at 7 days out and stripe_status='trialing' —
+// exactly what account.html's existing "you're on a free trial" banner
+// already checks for, same as installment's native trial.
+//
+// Deliberately does NOT log 'enrollment' or reward a referral here —
+// nothing has been charged yet. That only happens once
+// process-annual-trials.js successfully charges the saved card when
+// trial_ends_at arrives.
+const ANNUAL_TRIAL_DAYS = 7; // duplicated from create-checkout.js's TRIAL_DAYS — matching this file's per-function style (see chargeOneTimeFee)
+async function handleAnnualTrialSetup(session) {
+  const uid = session.metadata?.supabase_uid;
+  if (!uid) {
+    console.error('CRITICAL: annual trial setup completed with no supabase_uid in metadata', session.id);
+    return;
+  }
+
+  try {
+    const setupIntent = await stripe.setupIntents.retrieve(session.setup_intent);
+    if (setupIntent.payment_method) {
+      await stripe.customers.update(session.customer, {
+        invoice_settings: { default_payment_method: setupIntent.payment_method },
+      });
+    } else {
+      console.error('CRITICAL: annual trial setup completed with no payment_method on its SetupIntent', session.id);
+      return; // nothing to charge later without this — don't start a trial clock we can't collect on
+    }
+  } catch (e) {
+    console.error('Failed to save default payment method for annual trial', session.customer, e.message);
+    return;
+  }
+
+  const trialEndsAt = new Date(Date.now() + ANNUAL_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  await upsertProfile(session.customer, {
+    stripe_subscription_id: null,
+    stripe_status:          'trialing',
+    plan:                   'annual',
+    trial_ends_at:          trialEndsAt,
+    trial_charge_attempts:  0,
+  });
 }
 
 // Checks whether this buyer (identified here by profileId, the
