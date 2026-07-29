@@ -77,6 +77,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     </div>
 
     <div id="signupForm" style="display:none">
+      <p class="success" id="referralBanner" style="display:none;margin-bottom:16px;text-align:center;">🎁 You were invited by a friend — subscribe after signing up and you'll both get a free gift.</p>
       <div class="field"><label>Email</label><input type="email" id="signupEmail" placeholder="you@example.com" /></div>
       <div class="field"><label>Password</label><input type="password" id="signupPw" placeholder="At least 8 characters" /></div>
       <div class="legal-check">
@@ -103,6 +104,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session) window.location.href = '/account';
   });
+
+  // A ?ref=CODE link is almost always someone who doesn't have an
+  // account yet — stash the code so account.html's boot() can apply it
+  // once they're actually signed in (there's no profiles row, and no
+  // Supabase session, to attach it to yet at this point), default to the
+  // signup tab, and show a quick heads-up so it's clear something
+  // special is happening.
+  var refCode = new URLSearchParams(window.location.search).get('ref');
+  if (refCode) {
+    localStorage.setItem('pendingReferralCode', refCode.toUpperCase());
+    switchTab('signup');
+    document.getElementById('referralBanner').style.display = 'block';
+  }
 
   function switchTab(tab) {
     document.getElementById('tabLogin').classList.toggle('active',  tab === 'login');
