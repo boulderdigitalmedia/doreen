@@ -123,6 +123,11 @@
   to     = "/.netlify/functions/transcode-voice"
   status = 200
 
+[[redirects]]
+  from   = "/api/record-referral"
+  to     = "/.netlify/functions/record-referral"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
