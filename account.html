@@ -510,6 +510,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <div class="feature-row"><span class="feature-check">✓</span> Custom vanity URLs</div>
       </div>
 
+      <div class="field" style="max-width:320px;margin:0 auto 20px;">
+        <label style="text-align:left">Have a referral code?</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="referralCodeInput" placeholder="e.g. 7F3K9Q" style="text-transform:uppercase" />
+          <button class="btn btn-gold btn-sm" onclick="applyReferralCode()">Apply</button>
+        </div>
+        <p class="section-sub" id="referralApplyMsg" style="margin-top:6px"></p>
+      </div>
+
       <button class="btn btn-primary" style="font-size:20px;padding:16px 36px" onclick="startCheckout()" id="checkoutBtn">
         Get started →
       </button>
@@ -538,6 +547,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
     </div>
     <div class="gift-grid" id="giftGrid"></div>
+
+    <div class="panel" id="referralCard" style="display:none">
+      <div class="panel-title">Refer a friend</div>
+      <p style="font-size:16px;color:var(--ink-mid);margin-bottom:14px;line-height:1.5;">
+        Share your code. When someone signs up with it and completes their first payment, you <em>and</em> they each get another gift — free for as long as you're both members.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <div style="font-family:'DM Sans',sans-serif;font-size:22px;font-weight:500;letter-spacing:0.08em;background:var(--sage-pale);border-radius:10px;padding:10px 16px;" id="referralCodeDisplay">—</div>
+        <button class="btn btn-gold btn-sm" onclick="copyReferralLink()">Copy invite link</button>
+      </div>
+      <div class="section-sub" id="referralStats"></div>
+    </div>
+
     <footer class="site-footer">
       © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
       <br><a href="/terms">Terms</a>·<a href="/privacy">Privacy</a>·<a href="/conduct">Code of Conduct</a>
@@ -890,14 +912,46 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     SESSION = session;
     USER    = session.user;
 
+    // Capture ?ref=CODE the moment we land here — works whether this is
+    // a fresh signup redirected in from auth.html, or an existing,
+    // already-logged-in tab just clicking a friend's link — and persist
+    // it so it survives the auth.html <-> account.html hop and any
+    // email-confirmation redirect in between. Cleaned off the URL right
+    // away so refreshing or re-sharing the page doesn't keep re-applying
+    // it.
+    var refFromUrl = new URLSearchParams(window.location.search).get('ref');
+    if (refFromUrl) {
+      localStorage.setItem('pendingReferralCode', refFromUrl.toUpperCase());
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
     // Load subscription profile
     const { data: profile } = await sb
       .from('profiles')
-      .select('stripe_status, plan, current_period_end, access_term_end, extra_gift_slots')
+      .select('stripe_status, plan, current_period_end, access_term_end, extra_gift_slots, referral_code, referred_by_code, referral_gift_credits')
       .eq('id', USER.id)
       .maybeSingle();
 
     PROFILE = profile;
+
+    // If this buyer has a code sitting in localStorage (from the capture
+    // above, or from an earlier visit before they ever logged in) and
+    // hasn't already redeemed one, apply it now, silently — a signup
+    // that arrived via a friend's link shouldn't have to do anything
+    // else to get credit for it.
+    var pendingCode = localStorage.getItem('pendingReferralCode');
+    if (pendingCode && (!profile || !profile.referred_by_code)) {
+      await tryApplyReferralCode(pendingCode, true);
+    }
+
+    if (profile && profile.referral_code) {
+      const { count: rewardedCount } = await sb
+        .from('referrals')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_id', USER.id)
+        .eq('status', 'rewarded');
+      PROFILE.referrals_rewarded_count = rewardedCount || 0;
+    }
 
     // Fire-and-forget "buyer is actually using the app" beacon — powers
     // send-daily.js's dormancy nudge email. Never awaited/blocked on:
@@ -927,6 +981,64 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   async function signOut() {
     await sb.auth.signOut();
     window.location.href = '/login';
+  }
+
+  // ── REFERRALS ─────────────────────────────────────────────────
+
+  // Shared by the silent auto-apply in boot() (silent=true — no error
+  // toast if the stored code turns out to be stale/invalid/already
+  // used) and the "Have a referral code?" field on the paywall
+  // (silent=false — the buyer typed it in, they should hear back either
+  // way). Actual validation/rejection reasons all come from
+  // record-referral.js → redeem_referral_code (schema.sql).
+  async function tryApplyReferralCode(code, silent) {
+    var msgEl = document.getElementById('referralApplyMsg');
+    try {
+      var res = await fetch('/api/record-referral', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': await authHeader() },
+        body: JSON.stringify({ code: code }),
+      });
+      var data = await res.json();
+
+      // Whether it succeeded or failed, a stored code has now been acted
+      // on once — don't keep silently retrying it on every future boot.
+      localStorage.removeItem('pendingReferralCode');
+
+      if (!res.ok) {
+        if (!silent && msgEl) { msgEl.textContent = data.error || 'Could not apply code'; msgEl.style.color = 'var(--red)'; }
+        return;
+      }
+
+      if (PROFILE) PROFILE.referred_by_code = code;
+      if (!silent && msgEl) {
+        msgEl.textContent = 'Code applied — you\'ll both get a free gift once you complete checkout.';
+        msgEl.style.color = 'var(--sage)';
+      }
+    } catch (e) {
+      if (!silent && msgEl) { msgEl.textContent = 'Could not reach server'; msgEl.style.color = 'var(--red)'; }
+    }
+  }
+
+  async function applyReferralCode() {
+    var input = document.getElementById('referralCodeInput');
+    var code  = (input.value || '').trim().toUpperCase();
+    if (!code) return;
+    await tryApplyReferralCode(code, false);
+  }
+
+  function copyReferralLink() {
+    if (!PROFILE || !PROFILE.referral_code) return;
+    var link = SITE_URL + '/login?ref=' + PROFILE.referral_code;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(function() {
+        showToast('Invite link copied!');
+      }).catch(function() {
+        showToast(link);
+      });
+    } else {
+      showToast(link);
+    }
   }
 
   // ── PAYWALL ───────────────────────────────────────────────────
@@ -1071,6 +1183,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     GIFTS = data || [];
     renderGiftGrid();
+
+    var referralCard = document.getElementById('referralCard');
+    if (PROFILE && PROFILE.referral_code) {
+      referralCard.style.display = 'block';
+      document.getElementById('referralCodeDisplay').textContent = PROFILE.referral_code;
+      var usedReferralGifts = GIFTS.filter(function(g) { return g.gift_type === 'referral'; }).length;
+      var unusedCredits     = Math.max((PROFILE.referral_gift_credits || 0) - usedReferralGifts, 0);
+      var rewardedCount     = PROFILE.referrals_rewarded_count || 0;
+      document.getElementById('referralStats').textContent =
+        rewardedCount + ' successful referral' + (rewardedCount === 1 ? '' : 's') +
+        ' · ' + unusedCredits + ' free gift' + (unusedCredits === 1 ? '' : 's') + ' available';
+    } else {
+      referralCard.style.display = 'none';
+    }
   }
 
   // ── CANCEL SUBSCRIPTION (with early-cancellation fee, if applicable) ──
@@ -1197,8 +1323,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         termNote = '<div class="gift-meta-row" style="color:var(--red)">No longer sending — notes already delivered stay visible</div>';
       }
 
+      var giftTypeTag = g.gift_type === 'addon'    ? ' <span style="font-size:14px;color:var(--ink-soft);font-weight:400">(add-on)</span>'
+                      : g.gift_type === 'referral' ? ' <span style="font-size:14px;color:var(--ink-soft);font-weight:400">(referral gift)</span>'
+                      : '';
       card.innerHTML =
-        '<div class="gift-name">' + esc(g.display_name) + (g.gift_type === 'addon' ? ' <span style="font-size:14px;color:var(--ink-soft);font-weight:400">(add-on)</span>' : '') + '</div>' +
+        '<div class="gift-name">' + esc(g.display_name) + giftTypeTag + '</div>' +
         '<div class="gift-slug">/' + esc(g.slug) + '</div>' +
         '<div class="gift-meta">' +
           '<div class="gift-meta-row">Notifications: ' + channelPills + '</div>' +
@@ -1216,6 +1345,21 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       add.innerHTML = '<div class="plus">+</div><div>New gift</div>';
       grid.appendChild(add);
       return;
+    }
+
+    // A free bonus gift earned through the referral program (schema.sql's
+    // enforce_gift_limit gates the actual insert — this tile just doesn't
+    // show once there's nothing left to spend). Shown ahead of the paid
+    // add-on tile below since it costs nothing.
+    var usedReferralGifts = GIFTS.filter(function(g) { return g.gift_type === 'referral'; }).length;
+    var unusedReferralCredits = Math.max((PROFILE && PROFILE.referral_gift_credits || 0) - usedReferralGifts, 0);
+    if (unusedReferralCredits > 0) {
+      var refSlot = document.createElement('div');
+      refSlot.className = 'gift-card gift-card-new';
+      refSlot.onclick   = function() { openCreateModal('referral'); };
+      refSlot.innerHTML = '<div class="plus">🎁</div><div>Free referral gift' +
+        (unusedReferralCredits > 1 ? ' (' + unusedReferralCredits + ' available)' : '') + '</div>';
+      grid.appendChild(refSlot);
     }
 
     var tier = addonTierInfo();
@@ -2493,9 +2637,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // ── CREATE GIFT ───────────────────────────────────────────────
 
   var ADDON_MODE = false;
+  // 'included' | 'addon' | 'referral' — openCreateModal accepts either
+  // the original booleans (false/true, from the empty-state and paid
+  // add-on tiles) or the string 'referral' (from the free referral-gift
+  // tile in renderGiftGrid), so existing call sites don't need to change.
+  var GIFT_CREATE_MODE = 'included';
 
-  function openCreateModal(isAddon) {
-    ADDON_MODE = !!isAddon;
+  function openCreateModal(mode) {
+    GIFT_CREATE_MODE = mode === 'referral' ? 'referral' : (mode ? 'addon' : 'included');
+    ADDON_MODE = GIFT_CREATE_MODE === 'addon';
     document.getElementById('newName').value      = '';
     document.getElementById('newSender').value    = '';
     document.getElementById('newSlug').value      = '';
@@ -2508,12 +2658,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     updateNewSlugPreview();
 
     var tier = ADDON_MODE ? addonTierInfo() : null;
-    document.getElementById('createModalTitle').textContent = ADDON_MODE
-      ? 'New add-on gift — ' + (tier ? tier.label + ' one-time' : '')
-      : 'New gift';
-    document.getElementById('createSubmitBtn').textContent = ADDON_MODE
-      ? 'Continue to payment' + (tier ? ' — ' + tier.label : '')
-      : 'Create gift';
+    document.getElementById('createModalTitle').textContent =
+      GIFT_CREATE_MODE === 'addon'    ? 'New add-on gift — ' + (tier ? tier.label + ' one-time' : '') :
+      GIFT_CREATE_MODE === 'referral' ? 'New gift — free (referral reward)' :
+                                         'New gift';
+    document.getElementById('createSubmitBtn').textContent =
+      GIFT_CREATE_MODE === 'addon'    ? 'Continue to payment' + (tier ? ' — ' + tier.label : '') :
+      GIFT_CREATE_MODE === 'referral' ? 'Create free gift' :
+                                         'Create gift';
 
     document.getElementById('createModal').classList.add('open');
   }
@@ -2574,15 +2726,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     // term_end_date is deliberately left unset here — it's established
     // once this gift's first note actually sends (or, failing that, 30
     // days after signup), not at creation time. See schema.sql /
-    // _shared.js's ensureTermStarted.
+    // _shared.js's ensureTermStarted. Same applies to a 'referral' gift —
+    // it anchors/mirrors the same way an 'included' gift does (see
+    // anchor_term_from_gift_start). enforce_gift_limit is what actually
+    // checks there's an unspent referral credit to spend; a race against
+    // another tab/device surfaces here as a normal insert error.
+    var giftType = GIFT_CREATE_MODE === 'referral' ? 'referral' : 'included';
     var { error } = await sb.from('gifts').insert({
       user_id: USER.id, slug, display_name: name, sender_name: sender, start_date: startDate, frequency,
       delivery_time: deliveryTime, timezone: timezone, planned_notes_count: plannedCount, status: 'active',
-      gift_type: 'included',
+      gift_type: giftType,
     });
     if (error) { errEl.textContent = error.code === '23505' ? 'That slug is already taken' : error.message; errEl.style.display = 'block'; return; }
     closeCreateModal();
-    showToast('Gift created! 💚');
+    showToast(giftType === 'referral' ? 'Free gift created! 🎁' : 'Gift created! 💚');
     await showGiftList();
   }
 
