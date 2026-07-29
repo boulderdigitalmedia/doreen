@@ -68,10 +68,23 @@
     .ls-icon-wrap { position: relative; width: 200px; height: 160px; display: flex; align-items: center; justify-content: center; }
     .ls-trail { position: absolute; left: 0; top: 0; overflow: visible; }
     .ls-trail path { stroke-dasharray: 44; animation: ls-trail 5.2s ease-in-out infinite; }
-    .ls-env { position: relative; width: 148px; height: 108px; animation: ls-fly 5.2s cubic-bezier(.22,.61,.36,1) infinite; }
+    /* Height (and the inner svg's viewBox — see the markup below) is
+       taller than the envelope graphic itself needs on its own: the
+       popped-up note (.ls-note) animates above the envelope's top edge,
+       and some mobile browsers clip SVG child content that's
+       transformed outside the viewBox even when overflow is set to
+       visible on the svg element — a real WebKit/iOS quirk, not just a
+       missing CSS rule. Giving the svg extra vertical room (viewBox
+       starting above y=0) sidesteps that clipping entirely instead of
+       depending on overflow:visible being honored consistently. The
+       badge's `top` offset is adjusted to match so it still sits in the
+       same visual spot relative to the envelope, not the (now taller)
+       box.
+    */
+    .ls-env { position: relative; width: 148px; height: 130px; animation: ls-fly 5.2s cubic-bezier(.22,.61,.36,1) infinite; }
     .ls-note { transform-box: fill-box; transform-origin: 50% 100%; animation: ls-note 5.2s cubic-bezier(.34,1.1,.4,1) infinite; }
     .ls-badge {
-      position: absolute; top: -13px; right: -13px;
+      position: absolute; top: 9.5px; right: -13px;
       width: 42px; height: 42px; border-radius: 50%;
       background: #d08a6a;
       border: 3.5px solid var(--bg);
@@ -436,7 +449,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <path d="M4 138 q34 -9 58 -15" stroke="#C7D3BF" stroke-width="4.5" stroke-linecap="round"></path>
     </svg>
     <div class="ls-env">
-      <svg width="148" height="108" viewBox="0 0 132 96" fill="none" style="overflow: visible;">
+      <svg width="148" height="130" viewBox="0 -20 132 116" fill="none" style="overflow: visible;">
         <rect x="3" y="6" width="126" height="84" rx="12" fill="#7E9576"></rect>
         <path d="M3 18 C3 11 8 6 15 6 H117 C124 6 129 11 129 18 L72 54 C68 57 64 57 60 54 Z" fill="#93A98A"></path>
         <g class="ls-note">
