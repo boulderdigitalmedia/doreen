@@ -482,7 +482,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <div class="paywall-wrap">
       <div class="paywall-icon">💌</div>
       <div class="paywall-title">Start sending love</div>
-      <div class="paywall-sub">A 12-month subscription. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
+      <div class="paywall-sub">A 12-month subscription, free for your first 7 days. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
 
       <div class="pricing-grid">
         <div class="pricing-card" id="planInstallment" onclick="selectPlan('installment')">
@@ -499,7 +499,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
 
       <p style="font-size:16px;color:var(--ink-mid);background:var(--sage-pale);border-radius:10px;padding:10px 14px;margin:4px 0 20px;line-height:1.5;">
-        Both plans are a 12-month commitment. The monthly option spreads that commitment over 12 payments of $4.50 — it isn't a cancel-anytime plan. Early cancellation is available for a fee (half of your remaining installments, capped at $20).
+        🎁 First-time subscribers get a 7-day free trial — your card is only charged once it ends, and you can cancel anytime before then at no cost. (Returning members restarting after a lapse are charged right away.) After the trial, both plans are a 12-month commitment. The monthly option spreads that commitment over 12 payments of $4.50 — it isn't a cancel-anytime plan. Early cancellation once charged is available for a fee (half of your remaining installments, capped at $20). SMS delivery is a separate paid add-on and unlocks once your trial converts.
       </p>
 
       <div class="feature-list">
@@ -520,9 +520,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
 
       <button class="btn btn-primary" style="font-size:20px;padding:16px 36px" onclick="startCheckout()" id="checkoutBtn">
-        Get started →
+        Start your free trial →
       </button>
-      <p style="font-size:16px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe.</p>
+      <p style="font-size:16px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Card required to start, nothing charged for 7 days.</p>
     </div>
     <footer class="site-footer">
       © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
@@ -928,7 +928,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     // Load subscription profile
     const { data: profile } = await sb
       .from('profiles')
-      .select('stripe_status, plan, current_period_end, access_term_end, extra_gift_slots, referral_code, referred_by_code, referral_gift_credits')
+      .select('stripe_status, plan, current_period_end, access_term_end, extra_gift_slots, referral_code, referred_by_code, referral_gift_credits, trial_ends_at')
       .eq('id', USER.id)
       .maybeSingle();
 
@@ -1076,12 +1076,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       } else {
         showToast('Error: ' + (data.error || 'Could not start checkout'));
         btn.disabled = false;
-        btn.textContent = 'Get started →';
+        btn.textContent = 'Start your free trial →';
       }
     } catch (e) {
       showToast('Could not reach server');
       btn.disabled = false;
-      btn.textContent = 'Get started →';
+      btn.textContent = 'Start your free trial →';
     }
   }
 
@@ -1147,9 +1147,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         bannerDetail.textContent = 'Please update your payment method to keep your gifts active.';
       } else if (PROFILE.stripe_status === 'trialing') {
         banner.style.display = 'flex';
-        var trialEnd = PROFILE.current_period_end ? new Date(PROFILE.current_period_end).toLocaleDateString() : '';
+        // Installment's native Stripe trial reports its end via
+        // current_period_end; annual's self-managed trial (see
+        // schema.sql's 7-DAY FREE TRIAL block) has no Stripe subscription
+        // behind it at all, so it's tracked in trial_ends_at instead —
+        // current_period_end is always null for it.
+        var trialEndRaw = PROFILE.current_period_end || PROFILE.trial_ends_at;
+        var trialEnd = trialEndRaw ? new Date(trialEndRaw).toLocaleDateString() : '';
         bannerText.textContent   = '🎉 You\'re on a free trial';
-        bannerDetail.textContent = trialEnd ? 'Trial ends ' + trialEnd : '';
+        bannerDetail.textContent = trialEnd ? 'Trial ends ' + trialEnd + ' — your card will be charged then' : '';
       } else {
         banner.style.display = 'none';
       }
