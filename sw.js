@@ -80,17 +80,30 @@ self.addEventListener('push', e => {
   );
 });
 
-// Tap notification → open app
+// Tap notification → open THIS gift's page, not just whatever the app
+// happened to already be showing. Previously this focused any already-open
+// window for the site without ever navigating it, so a recipient who kept
+// the PWA open in the background (common) would just get bounced back to
+// whatever page it was last on — usually the homepage — instead of the
+// specific gift the note belongs to.
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const targetUrl  = e.notification.data.url || '/';
+  const targetPath = new URL(targetUrl, self.location.origin).pathname;
+
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
+          const alreadyThere = new URL(client.url).pathname === targetPath;
+          if (!alreadyThere && 'navigate' in client) {
+            // Navigate the existing window to the right gift, then focus it.
+            return client.navigate(targetUrl).then(navigated => (navigated || client).focus());
+          }
           return client.focus();
         }
       }
-      if (clients.openWindow) return clients.openWindow(e.notification.data.url || '/');
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });
