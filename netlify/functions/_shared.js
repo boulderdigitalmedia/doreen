@@ -121,11 +121,15 @@ function isDeliveryWindow(gift, recipient, windowMinutes = 15) {
 
 // ── Push ────────────────────────────────────────────────────────
 
-async function sendPush(pushSubscription, noteNum, senderName) {
+async function sendPush(pushSubscription, noteNum, senderName, giftUrl) {
   const payload = JSON.stringify({
     title: `💚 A note from ${senderName || 'Your Favorite'}`,
     body:  `Note ${noteNum} — tap to read today's reason`,
-    url:   '/'
+    // This gift's own page, e.g. https://yoursite.com/jake-and-doreen —
+    // NOT the homepage. sw.js's notificationclick reads this straight
+    // through as the tap destination; falls back to '/' only if a caller
+    // ever omits it.
+    url:   giftUrl || '/'
   });
   await webpush.sendNotification(pushSubscription, payload);
 }
@@ -729,7 +733,7 @@ async function sendGiftNotifications(gift, force = false) {
   // Push
   if (recipient.channels.includes('push') && recipient.push_subscription) {
     try {
-      await sendPush(recipient.push_subscription, noteNum, gift.sender_name);
+      await sendPush(recipient.push_subscription, noteNum, gift.sender_name, giftUrl);
       results.push = 'sent';
     } catch (err) {
       if (err.statusCode === 410 || err.statusCode === 404) {
