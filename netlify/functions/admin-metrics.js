@@ -93,6 +93,20 @@ async function monthlyRevenueForSubscription(stripeSubscriptionId) {
   }
 }
 
+// BRUTE-FORCE LOCKOUT: this is a single shared password with no
+// per-user row to attach a counter to, so the attempt count/lockout
+// lives on the single-row admin_login_attempts table instead (see
+// schema.sql). Same shape as the gift-password lockout in
+// verify-gift-password.js / update-gift-password.js, just against
+// one shared row rather than one row per gift.
+const MAX_ADMIN_ATTEMPTS = 5;
+const ADMIN_LOCKOUT_MS   = 15 * 60 * 1000; // 15 minutes
+
+function lockedMessage(lockedUntil) {
+  const minutesLeft = Math.max(1, Math.ceil((new Date(lockedUntil).getTime() - Date.now()) / 60000));
+  return `Too many attempts — try again in ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}.`;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return preflight();
   if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
@@ -108,8 +122,35 @@ exports.handler = async (event) => {
     return err('Invalid request body');
   }
 
+  const { data: loginState } = await sb
+    .from('admin_login_attempts')
+    .select('attempts, locked_until')
+    .eq('id', true)
+    .maybeSingle();
+
+  if (loginState && loginState.locked_until && new Date(loginState.locked_until) > new Date()) {
+    return err(lockedMessage(loginState.locked_until), 429);
+  }
+
   if (body.password !== process.env.ADMIN_DASHBOARD_PASSWORD) {
-    return err('Unauthorized', 401);
+    const nextAttempts = (loginState ? loginState.attempts : 0) + 1;
+    const updates = { attempts: nextAttempts };
+    let responseMsg = 'Unauthorized';
+
+    if (nextAttempts >= MAX_ADMIN_ATTEMPTS) {
+      const lockedUntil = new Date(Date.now() + ADMIN_LOCKOUT_MS).toISOString();
+      updates.attempts = 0; // the lockout window is the gate now, not the counter
+      updates.locked_until = lockedUntil;
+      responseMsg = lockedMessage(lockedUntil);
+    }
+
+    await sb.from('admin_login_attempts').update(updates).eq('id', true);
+    return err(responseMsg, nextAttempts >= MAX_ADMIN_ATTEMPTS ? 429 : 401);
+  }
+
+  // Correct password — clear any stale counter from earlier wrong guesses.
+  if (loginState && (loginState.attempts > 0 || loginState.locked_until)) {
+    await sb.from('admin_login_attempts').update({ attempts: 0, locked_until: null }).eq('id', true);
   }
 
   const { data: profiles, error: profilesErr } = await sb
