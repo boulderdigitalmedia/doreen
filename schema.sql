@@ -666,3 +666,433 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gift_setup_reminder_sent_at TIMEST
 --     a lifetime cap like gift_setup_reminder_sent_at.
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reengagement_email_sent_at TIMESTAMPTZ;
+
+-- ══════════════════════════════════════════════════════════════
+-- REFERRAL PROGRAM — every buyer gets their own shareable code. When
+-- someone they referred completes their FIRST successful payment (not
+-- just signs up — see maybeRewardReferral in stripe-webhook.js), BOTH
+-- the referrer and the new buyer earn one free bonus gift each, active
+-- for as long as their own membership stays active (mirrors the
+-- included gift's term — see gift_type below, not a fixed-term
+-- purchase like an add-on).
+-- ══════════════════════════════════════════════════════════════
+
+-- Each buyer's own shareable code, e.g. "7F3K9Q" — auto-assigned the
+-- moment their profiles row is created (see trg_assign_referral_code
+-- below), regardless of which code path creates that row.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE;
+
+-- The code THIS buyer redeemed at signup, if any (set once, ever, by
+-- redeem_referral_code — see below). NULL for anyone who signed up
+-- without a code, or who was already a customer before trying to apply
+-- one (redeem_referral_code rejects that case — this program is for new
+-- members, not existing ones backfilling a code after the fact).
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS referred_by_code TEXT REFERENCES profiles(referral_code);
+
+-- How many free bonus gift_type='referral' gifts this buyer has earned
+-- so far — incremented by 1 for BOTH sides the moment a referral
+-- actually pays off (maybeRewardReferral in stripe-webhook.js). This is
+-- the only thing gift_type='referral' creation spends against (see
+-- enforce_gift_limit below) — it's a running balance, not a one-time
+-- flag, so referring multiple people who each convert keeps earning
+-- more free gifts.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS referral_gift_credits INTEGER NOT NULL DEFAULT 0;
+
+-- Auto-generates a 6-character code (no 0/O/1/I — avoids look-alike
+-- characters when read aloud or typed from a screenshot) and retries on
+-- the rare random collision.
+CREATE OR REPLACE FUNCTION generate_referral_code()
+RETURNS TEXT AS $$
+DECLARE
+  chars TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  code TEXT;
+  already_taken BOOLEAN;
+BEGIN
+  LOOP
+    code := '';
+    FOR i IN 1..6 LOOP
+      code := code || substr(chars, floor(random() * length(chars) + 1)::int, 1);
+    END LOOP;
+    SELECT EXISTS(SELECT 1 FROM profiles WHERE referral_code = code) INTO already_taken;
+    EXIT WHEN NOT already_taken;
+  END LOOP;
+  RETURN code;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Fires on every profiles insert, from whichever code path creates the
+-- row first (record-referral's redeem_referral_code, create-checkout.js,
+-- or stripe-webhook.js's upsertProfile) — a table-level trigger is the
+-- only place guaranteed to catch all of them, rather than duplicating
+-- "assign a code" logic into three separate JS files.
+CREATE OR REPLACE FUNCTION assign_referral_code()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.referral_code IS NULL THEN
+    NEW.referral_code := generate_referral_code();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_assign_referral_code ON profiles;
+CREATE TRIGGER trg_assign_referral_code
+  BEFORE INSERT ON profiles
+  FOR EACH ROW EXECUTE FUNCTION assign_referral_code();
+
+-- Backfill codes for any profiles rows that already existed as of this
+-- migration (the trigger above only fires on new inserts going forward).
+UPDATE profiles SET referral_code = generate_referral_code() WHERE referral_code IS NULL;
+
+-- Append-only record of each referral, one row per referee (a buyer can
+-- only ever be referred once — enforced by the UNIQUE on referee_id).
+-- Written entirely by redeem_referral_code (status='pending', at
+-- signup) and updated to 'rewarded' by stripe-webhook.js's
+-- maybeRewardReferral the instant the referee's first payment actually
+-- clears. Kept separate from profiles.referred_by_code so a referral's
+-- outcome and timestamps survive even past a buyer's later
+-- cancellation, and so the admin dashboard has real history to report
+-- on (see subscription_events below for the matching event log entry).
+CREATE TABLE IF NOT EXISTS referrals (
+  id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  referrer_id   UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  referee_id    UUID        NOT NULL UNIQUE REFERENCES profiles(id) ON DELETE CASCADE,
+  code          TEXT        NOT NULL,
+  status        TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','rewarded')),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  rewarded_at   TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_status   ON referrals(status);
+
+ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
+
+-- Buyers can see referrals they made (powers the "X successful
+-- referrals" stat on account.html) but not the reverse — a referee has
+-- no need to see this row via this table; their own referred_by_code
+-- is already readable off their own profiles row.
+DROP POLICY IF EXISTS "referral_referrer_read" ON referrals;
+CREATE POLICY "referral_referrer_read" ON referrals
+  FOR SELECT TO authenticated
+  USING (auth.uid() = referrer_id);
+
+-- All writes come from record-referral.js and stripe-webhook.js using
+-- the service role key, which bypasses RLS — no write policy needed.
+
+-- New gift_type: a free bonus gift earned through the referral program.
+-- Term-wise it behaves exactly like an 'included' gift — mirrors its
+-- owner's own profiles.access_term_end (see anchor_term_from_gift_start
+-- and handleNewTermStarted, both extended below) — but it's never
+-- itself charged for, and a buyer can hold more than one (one per
+-- earned credit, gated by enforce_gift_limit below).
+ALTER TABLE gifts DROP CONSTRAINT IF EXISTS gifts_gift_type_check;
+ALTER TABLE gifts ADD CONSTRAINT gifts_gift_type_check
+  CHECK (gift_type IN ('included','addon','referral'));
+
+-- Extends enforce_gift_limit (originally defined in the PRICING
+-- OVERHAUL block above) rather than replacing its 'included' branch —
+-- CREATE OR REPLACE swaps the function body in place, the trigger
+-- itself doesn't need to change since it already calls this function by
+-- name.
+--
+-- The referral branch requires the buyer to currently be an
+-- active/trialing member themselves (not just holding an unspent
+-- credit) — "another gift, free for the duration of THEIR membership"
+-- only means something if they have one right now. In practice this is
+-- already guaranteed by the time a credit exists (credits are only
+-- granted post-payment — see maybeRewardReferral), but this makes it a
+-- real database-level guarantee rather than something that just
+-- happens to be true today, including for a referrer whose membership
+-- has since lapsed.
+CREATE OR REPLACE FUNCTION enforce_gift_limit()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.gift_type = 'included' THEN
+    IF (SELECT COUNT(*) FROM gifts WHERE user_id = NEW.user_id AND gift_type = 'included') >= 1 THEN
+      RAISE EXCEPTION 'Only one included gift per account — additional gifts are purchased separately.';
+    END IF;
+  ELSIF NEW.gift_type = 'referral' THEN
+    IF COALESCE((SELECT stripe_status FROM profiles WHERE id = NEW.user_id), '') NOT IN ('active', 'trialing') THEN
+      RAISE EXCEPTION 'Referral gifts are only available to active members.';
+    END IF;
+    IF (SELECT COUNT(*) FROM gifts WHERE user_id = NEW.user_id AND gift_type = 'referral')
+       >= (SELECT COALESCE(referral_gift_credits, 0) FROM profiles WHERE id = NEW.user_id) THEN
+      RAISE EXCEPTION 'No unused referral credit — refer another member to earn another free gift.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Extends anchor_term_from_gift_start (PRICING OVERHAUL block above) so
+-- a 'referral' gift anchors/mirrors the buyer's access_term_end exactly
+-- like an 'included' gift does — same CREATE OR REPLACE-in-place
+-- pattern as enforce_gift_limit above.
+CREATE OR REPLACE FUNCTION anchor_term_from_gift_start()
+RETURNS TRIGGER AS $$
+DECLARE
+  existing_start TIMESTAMPTZ;
+BEGIN
+  IF NEW.gift_type IN ('included', 'referral') THEN
+    SELECT term_start_date INTO existing_start FROM profiles WHERE id = NEW.user_id;
+
+    IF existing_start IS NULL THEN
+      UPDATE profiles
+      SET term_start_date = NEW.start_date::timestamptz,
+          access_term_end = NEW.start_date::timestamptz + INTERVAL '365 days',
+          renewal_reminder_sent_at = NULL
+      WHERE id = NEW.user_id;
+    END IF;
+
+    SELECT access_term_end INTO NEW.term_end_date FROM profiles WHERE id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- New event type, logged once per side (referrer + referee) by
+-- maybeRewardReferral the moment a referral is rewarded — feeds the
+-- same admin dashboard history subscription_events already powers for
+-- enrollments/renewals/cancellations.
+ALTER TABLE subscription_events DROP CONSTRAINT IF EXISTS subscription_events_event_type_check;
+ALTER TABLE subscription_events ADD CONSTRAINT subscription_events_event_type_check
+  CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed',
+                         'addon_purchase','addon_renewal','early_cancellation',
+                         'sms_purchase','sms_renewal','referral_reward'));
+
+-- Atomic credit increment, called twice by maybeRewardReferral (once
+-- for the referrer, once for the referee) — a real SQL function rather
+-- than a Node read-then-write so two referrals for the same referrer
+-- being rewarded around the same moment can't race and silently lose
+-- one of the increments.
+CREATE OR REPLACE FUNCTION increment_referral_credits(target_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE profiles SET referral_gift_credits = referral_gift_credits + 1 WHERE id = target_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Does all the work of applying a referral code for one referee, in a
+-- single atomic statement rather than several round trips from
+-- record-referral.js (which would otherwise race against itself on a
+-- double-submit, or leave a half-applied state on a failure partway
+-- through). Handles both "this buyer has no profiles row yet at all"
+-- (the common case — most buyers haven't checked out the first time
+-- they'd plausibly enter a code) and "row already exists" in the same
+-- INSERT ... ON CONFLICT.
+--
+-- Returns a short status string rather than raising, since "code
+-- doesn't exist" / "already applied" / "already a customer" are
+-- expected, common outcomes that record-referral.js needs to turn into
+-- a specific user-facing message — not exceptional failures.
+--
+-- Deliberately does NOT grant anything here — redeeming a code just
+-- records who referred whom (status='pending'). The actual reward (one
+-- free bonus gift each) only happens once this referee's first payment
+-- succeeds — see maybeRewardReferral in stripe-webhook.js. Someone who
+-- redeems a code and never pays never triggers a reward for either
+-- side.
+CREATE OR REPLACE FUNCTION redeem_referral_code(referee_id_in UUID, code_in TEXT)
+RETURNS TEXT AS $$
+DECLARE
+  referrer_id_found    UUID;
+  existing_referred_by TEXT;
+  existing_customer_id TEXT;
+BEGIN
+  SELECT id INTO referrer_id_found FROM profiles WHERE referral_code = code_in;
+  IF referrer_id_found IS NULL THEN
+    RETURN 'not_found';
+  END IF;
+  IF referrer_id_found = referee_id_in THEN
+    RETURN 'self';
+  END IF;
+
+  SELECT referred_by_code, stripe_customer_id INTO existing_referred_by, existing_customer_id
+  FROM profiles WHERE id = referee_id_in;
+
+  IF existing_referred_by IS NOT NULL THEN
+    RETURN 'already_applied';
+  END IF;
+  -- A non-null stripe_customer_id means this buyer has already been
+  -- through checkout at least once before (even if they later
+  -- cancelled) — referral codes are for new members, not existing ones
+  -- retroactively crediting a friend.
+  IF existing_customer_id IS NOT NULL THEN
+    RETURN 'already_customer';
+  END IF;
+
+  INSERT INTO profiles (id, referred_by_code) VALUES (referee_id_in, code_in)
+  ON CONFLICT (id) DO UPDATE
+    SET referred_by_code = EXCLUDED.referred_by_code
+    WHERE profiles.referred_by_code IS NULL;
+
+  -- referee_id's UNIQUE constraint turns a double-submit race into a
+  -- harmless no-op here rather than an error.
+  INSERT INTO referrals (referrer_id, referee_id, code)
+  VALUES (referrer_id_found, referee_id_in, code_in)
+  ON CONFLICT (referee_id) DO NOTHING;
+
+  RETURN 'ok';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ══════════════════════════════════════════════════════════════
+-- 7-DAY FREE TRIAL — both plans are now real Stripe subscriptions
+-- (annual switched from a one-time payment back to a recurring yearly
+-- subscription specifically so it can carry a trial too — see
+-- create-checkout.js). A first-time buyer's card isn't charged until
+-- the trial converts; stripe-webhook.js's invoice.payment_succeeded
+-- handler is what actually logs 'enrollment' for that buyer at that
+-- point, not checkout.session.completed (which now only fires with the
+-- subscription still in 'trialing' status for anyone who gets a trial).
+-- ══════════════════════════════════════════════════════════════
+
+-- Which Stripe subscription a subscription_events row belongs to, if any
+-- (add-on/SMS/referral events have no subscription behind them, hence
+-- nullable). stripe-webhook.js's invoice.payment_succeeded handler uses
+-- this to tell "this subscription's first successful charge" (the
+-- trial converting, or a legacy no-trial subscription's very first
+-- cycle) apart from a routine mid-term cycle already accounted for —
+-- checking "does ANY event already exist for this exact subscription
+-- id" is a simpler and more robust signal than trying to infer it from
+-- Stripe's billing_reason/trial_end fields alone, which don't
+-- distinguish those cases on their own.
+ALTER TABLE subscription_events ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_sub_events_subscription ON subscription_events(stripe_subscription_id);
+
+-- ── ANNUAL'S TRIAL IS SELF-MANAGED, NOT A STRIPE SUBSCRIPTION TRIAL ──
+-- The annual Price in Stripe is a genuine one-time price, not recurring —
+-- Stripe's native trial_period_days only works on a subscription, which
+-- requires a recurring price. Rather than force a new recurring Price
+-- into existence just for this, annual's trial is tracked here instead:
+-- stripe-webhook.js's handleAnnualTrialSetup sets trial_ends_at (7 days
+-- out) and stripe_status='trialing' the moment a trial-eligible buyer's
+-- card is saved (via a Stripe Checkout 'setup' session — see
+-- create-checkout.js), with NO stripe_subscription_id at all. A
+-- dedicated scheduled function (process-annual-trials.js) is what
+-- actually charges the saved card once trial_ends_at arrives — nothing
+-- on Stripe's side does this automatically for a one-time price the way
+-- it would for a real subscription. Installment is unaffected by any of
+-- this — its Price is already recurring, so it keeps using Stripe's
+-- native subscription trial exactly as before.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+
+-- How many times process-annual-trials.js has attempted to charge the
+-- saved card for this trial. Retry policy: charge once when trial_ends_at
+-- first arrives; if that fails (card declined, etc.), retry once a day,
+-- emailing the buyer each time, up to a fixed attempt cap — after which
+-- the trial is treated as expired (access cut off, gifts deactivated)
+-- rather than retried forever. Reset to 0 automatically has no need here
+-- since a profile only ever goes through this once (trial eligibility —
+-- see create-checkout.js — is a one-time thing per buyer).
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS trial_charge_attempts INTEGER NOT NULL DEFAULT 0;
+
+-- ============================================================
+-- SECURITY HARDENING (round 1) — closes every finding from the
+-- Supabase security advisor without changing any existing app
+-- behavior. Every real caller of the functions below already uses
+-- the service-role key (record-referral.js, stripe-webhook.js,
+-- process-annual-trials.js), and trigger functions don't need an
+-- EXECUTE grant to fire as triggers — so revoking client access to
+-- all of them is purely a hardening step, not a functional one.
+-- ============================================================
+
+-- Referral RPCs + internal trigger/helper functions: no legitimate
+-- caller is anon/authenticated — revoke direct client access so the
+-- anon key alone can no longer be used to mint free referral credits
+-- or redeem codes on someone else's behalf.
+REVOKE EXECUTE ON FUNCTION increment_referral_credits(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION redeem_referral_code(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION create_profile_on_signup()        FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION enforce_gift_limit()               FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION anchor_term_from_gift_start()      FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION generate_referral_code()           FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION assign_referral_code()              FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION touch_updated_at()                 FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION update_updated_at()                FROM PUBLIC, anon, authenticated;
+
+-- Pin search_path on the same functions so none of them can be tricked
+-- into resolving an object from an attacker-controlled schema earlier
+-- on the path. Every reference inside them is already an unqualified
+-- public-schema name, so this is purely additive.
+ALTER FUNCTION increment_referral_credits(uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION redeem_referral_code(uuid, text) SET search_path = public, pg_temp;
+ALTER FUNCTION create_profile_on_signup()        SET search_path = public, pg_temp;
+ALTER FUNCTION enforce_gift_limit()               SET search_path = public, pg_temp;
+ALTER FUNCTION anchor_term_from_gift_start()      SET search_path = public, pg_temp;
+ALTER FUNCTION generate_referral_code()           SET search_path = public, pg_temp;
+ALTER FUNCTION assign_referral_code()             SET search_path = public, pg_temp;
+ALTER FUNCTION touch_updated_at()                 SET search_path = public, pg_temp;
+ALTER FUNCTION update_updated_at()                SET search_path = public, pg_temp;
+
+-- recipients: drop the two legacy, totally unscoped policies. Both are
+-- fully superseded by policies already in place ("recipients: public
+-- update active", "recipients: public upsert active",
+-- "recipient_public_upsert", "recipient_owner_write"), which already
+-- cover every real path: an anonymous recipient onboarding/updating
+-- prefs on an active (or, for the anon-specific policy, cancelled)
+-- gift, and the signed-in buyer managing their own gift's recipient
+-- row. Postgres OR's permissive policies together, so these unscoped
+-- "true" policies were silently overriding the scoped ones — dropping
+-- them just restores the scoping, with no loss of function.
+DROP POLICY IF EXISTS "recipients: public update" ON recipients;
+DROP POLICY IF EXISTS "recipients: public upsert" ON recipients;
+
+-- storage.objects: drop the broad SELECT policies that let any
+-- anon/authenticated caller LIST every file in these public buckets.
+-- This does not affect viewing a photo or voice note — photos/voice-
+-- notes/voicenotes are all public buckets, so a GET on a known
+-- /object/public/... URL (all account.html's getPublicUrl() and
+-- gift.html's <img>/<audio> tags ever produce) is served straight off
+-- the bucket's public flag and never consults these RLS policies at
+-- all. The one caller that does call .list() on these buckets
+-- (scripts/compress-existing-photos.js) explicitly runs on the
+-- service-role key, which bypasses RLS entirely, so it's unaffected.
+DROP POLICY IF EXISTS "photos: public read"            ON storage.objects;
+DROP POLICY IF EXISTS "public_read_photos"             ON storage.objects;
+DROP POLICY IF EXISTS "authenticated_read_voice_notes"  ON storage.objects;
+DROP POLICY IF EXISTS "public_read_voice_notes"         ON storage.objects;
+DROP POLICY IF EXISTS "authenticated_read_voicenotes"   ON storage.objects;
+DROP POLICY IF EXISTS "public_read_voicenotes"          ON storage.objects;
+
+-- Not covered above — needs a dashboard toggle, not SQL: "Leaked
+-- Password Protection" under Supabase Dashboard > Authentication >
+-- Attack Protection > "Prevent use of leaked passwords" > Configure in
+-- email provider. Checks new passwords against HaveIBeenPwned; doesn't
+-- touch this schema at all.
+
+-- ============================================================
+-- SECURITY HARDENING (round 2) — BRUTE-FORCE PROTECTION for the two
+-- password gates found in the app-level follow-up review: gift page
+-- passwords (gifts.access_password, checked by verify-gift-
+-- password.js / update-gift-password.js) and the admin dashboard
+-- password (admin-metrics.js). Both had zero rate limiting — gift
+-- slugs are low-entropy (auto-generated from the recipient's name,
+-- e.g. "mom" — see autoSlug() in account.html), so an unthrottled
+-- guessing script was a real risk. Purely additive: new nullable/
+-- defaulted columns and a new table, so nothing changes behavior on
+-- its own — see the Netlify functions for the actual lockout logic.
+-- ============================================================
+
+-- gifts: per-gift guess counter + lockout timestamp, same shape as
+-- the existing trial_charge_attempts pattern on profiles. Shared by
+-- verify-gift-password.js and update-gift-password.js so a burst of
+-- wrong guesses through either endpoint counts against one budget.
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS password_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS password_locked_until TIMESTAMPTZ;
+
+-- admin dashboard: a single shared password with no per-row owner to
+-- attach a counter to, so this is a deliberately single-row table
+-- (id is always `true`, enforced by the CHECK constraint below). RLS
+-- is enabled with NO policies — same pattern as subscription_events /
+-- abuse_reports — so only the service-role key admin-metrics.js
+-- already uses can ever touch it; anon/authenticated get nothing.
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  id BOOLEAN PRIMARY KEY DEFAULT TRUE,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  locked_until TIMESTAMPTZ,
+  CONSTRAINT admin_login_attempts_single_row CHECK (id)
+);
+INSERT INTO admin_login_attempts (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
+ALTER TABLE admin_login_attempts ENABLE ROW LEVEL SECURITY;
