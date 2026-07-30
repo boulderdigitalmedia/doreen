@@ -314,6 +314,18 @@
       .note-actions .btn { padding: 6px 8px; font-size: 14px; }
     }
 
+    /* A note pinned to a specific date (see the edit-note modal's lock
+       toggle) — its own date is fixed regardless of what else changes,
+       so it gets the same "can't be dragged" treatment as an already-
+       sent row, plus a distinguishing tint and pin icon. */
+    .note-row.pinned { background: var(--gold-pale); border-color: #e8d070; }
+    .note-row.pinned .note-date { color: var(--gold); }
+    .note-pin-icon { flex-shrink: 0; margin-top: 2px; }
+
+    .lock-date-toggle { display: flex; align-items: center; gap: 8px; font-size: 16px; color: var(--ink); cursor: pointer; }
+    .lock-date-toggle input { accent-color: var(--sage); width: 16px; height: 16px; }
+    .lock-date-error { font-size: 14px; color: var(--red); margin-top: 6px; }
+
     /* ── NOTES GROUPING (Sent / Today / Tomorrow / by month) ── */
     /* Native <details>/<summary> — no extra JS needed for expand-collapse,
        and closed groups still keep their rows in the DOM (just zero
@@ -911,6 +923,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     </div>
     <div class="field" style="margin-top:12px;">
       <textarea id="editNoteText" placeholder="Write your note…" style="min-height:120px;"></textarea>
+    </div>
+    <div class="lock-date-field" id="lockDateField" style="margin-top:12px;">
+      <label class="lock-date-toggle">
+        <input type="checkbox" id="editLockToggle" onchange="onLockToggleChange()" />
+        📌 Lock this note to a specific date
+      </label>
+      <p style="font-size:14px;color:var(--ink-soft);margin-top:2px;">Other notes will shift around it as you add, remove, or reorder them — this one won't move.</p>
+      <div id="lockDateInputWrap" style="display:none;margin-top:8px;">
+        <input type="date" id="editLockDate" oninput="clearLockDateError()" />
+        <p class="lock-date-error" id="lockDateError" style="display:none;"></p>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1" id="saveEditBtn" onclick="saveEditNote()">Save</button>
@@ -1538,16 +1561,38 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   var TODAY_NOTE_INDEX = 0;
   function isNoteLocked(note) { return note.order_index < TODAY_NOTE_INDEX; }
 
+  function parseYmd(dateStr) {
+    var parts = String(dateStr).split('-').map(Number);
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
   // Forward version of computeTodayNoteIndex/_shared.js's getNoteIndex —
   // "which calendar date does order_index N actually go out on," used to
   // group the notes list into Sent / Today / Tomorrow / upcoming-by-month
-  // (see renderNotes() below). Same client-side-approximate caveat as
+  // (see renderNotes() below), and to check a locked-note date against
+  // what its slot will actually resolve to (see dateToSlotIndex / the
+  // note-locking UI). Same client-side-approximate caveat as
   // computeTodayNoteIndex: fine for browsing/organizing, not what actually
   // governs delivery (that's _shared.js's recipient-timezone-aware version).
+  //
+  // IMPORTANT for monthly: this must mirror getNoteIndex's actual math —
+  // (yearDiff*12 + monthDiff), i.e. the month simply advances by
+  // orderIndex regardless of whether that month has the start date's
+  // day-of-month at all. An earlier version of this function instead
+  // skipped months that didn't have that day, which produced dates that
+  // disagreed with what _shared.js's shouldSendToday/getNoteIndex would
+  // actually deliver — for a gift starting on the 31st, that meant the
+  // list showed note #2 landing in March when the real system would
+  // deliver note #3 in March and never send note #2 at all (shouldSendToday
+  // only fires on a day whose date matches the start day-of-month, so a
+  // month without that day is silently skipped by the sender too, not
+  // just renumbered around — that order_index slot really is never
+  // delivered). Matching getNoteIndex here, rather than "fixing" it, is
+  // what makes that visible instead of hiding it.
   function noteSendDate(gift, orderIndex) {
-    var parts = String(gift.start_date).split('-').map(Number);
-    var start = new Date(parts[0], parts[1] - 1, parts[2]);
-    start.setHours(0, 0, 0, 0);
+    var start = parseYmd(gift.start_date);
 
     if (gift.frequency === 'weekly') {
       var w = new Date(start); w.setDate(w.getDate() + orderIndex * 7); return w;
@@ -1556,26 +1601,42 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       var b = new Date(start); b.setDate(b.getDate() + orderIndex * 14); return b;
     }
     if (gift.frequency === 'monthly') {
-      // Mirrors _shared.js's shouldSendToday, which only fires on a date
-      // whose day-of-month matches the start date's — so a month that
-      // doesn't have that day at all (e.g. no Feb 31) is skipped
-      // entirely rather than clamped to month-end. Walk forward one
-      // calendar month at a time, only counting months where the day
-      // actually exists, until we've found the orderIndex'th one.
-      var day = start.getDate();
-      var y = start.getFullYear(), m = start.getMonth();
-      var found = 0;
-      while (true) {
-        var candidate = new Date(y, m, day);
-        if (candidate.getMonth() === m) { // day didn't overflow into the next month
-          if (found === orderIndex) return candidate;
-          found++;
-        }
-        m++;
-      }
+      var totalMonths = start.getMonth() + orderIndex;
+      var y = start.getFullYear() + Math.floor(totalMonths / 12);
+      var m = ((totalMonths % 12) + 12) % 12;
+      // JS's Date constructor auto-normalizes an out-of-range day (e.g.
+      // Feb 31 rolls into early March) — a real, if rare, sign that this
+      // slot's month doesn't actually have the start day at all, so
+      // shouldSendToday will never fire for it in real life. See
+      // dateToSlotIndex below, which is what locking validates against.
+      return new Date(y, m, start.getDate());
     }
     // daily (default)
     var d = new Date(start); d.setDate(d.getDate() + orderIndex); return d;
+  }
+
+  // Inverse of noteSendDate — given a target calendar date, which
+  // order_index slot would a note need to occupy for that to actually be
+  // its delivery date? Returns null if the date isn't a legitimate send
+  // day for this gift's frequency at all (e.g. a weekly gift only lands
+  // every 7th day from start; a monthly gift only lands on start's
+  // day-of-month, in months that have it) — used to validate a buyer's
+  // date choice before locking a note to it.
+  function dateToSlotIndex(gift, dateStr) {
+    var target = parseYmd(dateStr);
+    var start  = parseYmd(gift.start_date);
+    if (target < start) return null;
+
+    var days = Math.round((target - start) / 86400000);
+
+    if (gift.frequency === 'weekly')   return (days % 7  === 0) ? days / 7  : null;
+    if (gift.frequency === 'biweekly') return (days % 14 === 0) ? days / 14 : null;
+    if (gift.frequency === 'monthly') {
+      if (target.getDate() !== start.getDate()) return null; // this month never sends on this date
+      var slot = (target.getFullYear() - start.getFullYear()) * 12 + (target.getMonth() - start.getMonth());
+      return slot >= 0 ? slot : null;
+    }
+    return days; // daily — every date from start onward is a valid slot
   }
 
   function isSameCalendarDay(a, b) {
@@ -1592,19 +1653,27 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // attributes) — shared by every group (Sent / Today / Tomorrow /
   // upcoming-by-month) so the row markup only lives in one place.
   function buildNoteRowHtml(note, locked) {
+    var pinned = !locked && !!note.locked_send_date;
+
     var thumb = note.photo_url
       ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" style="object-position:' + esc(note.photo_position || '50% 50%') + '" />'
       : '<div class="note-thumb-ph">🌿</div>';
 
-    // Only unsent notes get a drag handle — already-sent ones get a
-    // same-width blank spacer instead, so the row content still lines
-    // up rather than shifting left.
+    // Already-sent AND pinned rows get a same-width blank spacer instead
+    // of a drag handle, so the row content still lines up rather than
+    // shifting left — neither can be picked up (sent notes are history;
+    // a pinned note's slot comes from its date, not the drag).
     var handle = locked
       ? '<span class="note-drag-placeholder" title="Already sent — can\'t be reordered"></span>'
-      : '<span class="note-drag-handle" title="Drag to reorder" onpointerdown="startNoteDrag(event, \'' + note.id + '\')">⠿</span>';
+      : pinned
+        ? '<span class="note-drag-placeholder" title="Locked to this date — won\'t move"></span>'
+        : '<span class="note-drag-handle" title="Drag to reorder" onpointerdown="startNoteDrag(event, \'' + note.id + '\')">⠿</span>';
 
     var voiceTag = note.voice_url
       ? '<span class="note-voice-tag" title="Includes a voice recording">🎤</span> '
+      : '';
+    var pinTag = pinned
+      ? '<span class="note-pin-icon" title="Locked to this date">📌</span> '
       : '';
 
     // Date badge stacked above the existing #N order label (rather than
@@ -1621,7 +1690,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
       '</div>' +
       thumb +
-      '<div class="note-text-preview">' + voiceTag + esc(note.text) + '</div>' +
+      '<div class="note-text-preview">' + pinTag + voiceTag + esc(note.text) + '</div>' +
       '<div class="note-actions">' +
         '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
         '<button class="btn btn-danger btn-sm" onclick="deleteNote(\'' + note.id + '\')">✕</button>' +
@@ -1629,7 +1698,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
 
   function noteRowDiv(note, locked) {
-    return '<div class="note-row' + (locked ? ' locked' : '') + '" data-note-id="' + note.id + '">' +
+    var pinned = !locked && !!note.locked_send_date;
+    return '<div class="note-row' + (locked ? ' locked' : '') + (pinned ? ' pinned' : '') + '" data-note-id="' + note.id + '">' +
       buildNoteRowHtml(note, locked) +
     '</div>';
   }
@@ -1742,7 +1812,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   function startNoteDrag(e, noteId) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     var row = document.querySelector('.note-row[data-note-id="' + noteId + '"]');
-    if (!row || row.classList.contains('locked')) return;
+    // .locked = already sent, .pinned = locked to a specific date by the
+    // buyer (see the note-locking UI) — neither can be picked up. A
+    // pinned note's slot comes from its date, not its position, so
+    // dragging it wouldn't do anything meaningful anyway.
+    if (!row || row.classList.contains('locked') || row.classList.contains('pinned')) return;
 
     // grabOffsetY = where within the row the pointer landed, so the row
     // stays glued to that exact point under the finger for the whole drag
@@ -1834,46 +1908,106 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     NOTE_DRAG = null;
 
     var list = document.getElementById('notesList');
-    var newIdOrder = Array.prototype.slice.call(list.querySelectorAll('.note-row'))
+    // Pinned notes never participate in reordering — their slot comes
+    // from their locked date, not the drag — so the new relative order
+    // that actually matters is just the floating (unsent, unpinned) rows,
+    // in whatever order they landed in visually.
+    var floatingIdsInNewOrder = Array.prototype.slice.call(list.querySelectorAll('.note-row:not(.locked):not(.pinned)'))
       .map(function(r) { return r.getAttribute('data-note-id'); });
 
-    var lockedCount = NOTES.filter(isNoteLocked).length;
-    var unsentIdsInNewOrder = newIdOrder.slice(lockedCount);
-    // The exact set of order_index values in play doesn't change — only
-    // which note sits at each one. Re-assign that same sorted set of
-    // slots according to the new drag order.
-    var unsentIndexValues = NOTES.filter(function(n) { return !isNoteLocked(n); })
-      .map(function(n) { return n.order_index; })
-      .sort(function(a, b) { return a - b; });
-
-    await persistNoteOrder(unsentIdsInNewOrder, unsentIndexValues);
+    var failed = await resequenceUnsentNotes(floatingIdsInNewOrder);
+    if (failed) {
+      showToast('Reorder partially failed — refresh and check the numbering');
+    } else {
+      showToast('Notes reordered ✓');
+    }
   }
 
   document.addEventListener('pointermove', onNoteDragMove);
   document.addEventListener('pointerup', onNoteDragEnd);
 
-  async function persistNoteOrder(idsInNewOrder, indexValues) {
-    var updates = [];
-    for (var i = 0; i < idsInNewOrder.length; i++) {
-      var note = NOTES.find(function(n) { return n.id === idsInNewOrder[i]; });
-      if (note && note.order_index !== indexValues[i]) {
-        updates.push({ id: idsInNewOrder[i], order_index: indexValues[i] });
-      }
-    }
-    if (!updates.length) return; // dropped back where it started
+  // Recomputes order_index for every currently-unsent note: a note
+  // locked to a date (note.locked_send_date) keeps exactly the slot that
+  // date resolves to via dateToSlotIndex, no matter what else changes.
+  // Every floating note fills in the remaining slots, in their relative
+  // order, routing around whichever slots the locked notes have claimed.
+  // Already-sent notes are never touched.
+  //
+  // Call this after anything that changes the unsent set's shape or
+  // order: adding, deleting, dragging, or locking/unlocking a note.
+  // `explicitFloatingOrderIds` lets a caller (drag-end) specify a brand
+  // new relative order for the floating notes; omit it to just keep
+  // their current relative order while closing whatever gap a delete
+  // left (or opening room a lock/unlock created).
+  //
+  // Returns the count of any failed writes (0 on full success), same
+  // signal the old persistNoteOrder() gave callers to toast about.
+  async function resequenceUnsentNotes(explicitFloatingOrderIds) {
+    TODAY_NOTE_INDEX = computeTodayNoteIndex(CURRENT_GIFT);
 
-    // Two-phase update (push everything to temporary negative slots first,
-    // then to their real final values) — REQUIRED, not just tidy: notes
-    // has UNIQUE (gift_id, order_index) (see schema.sql), and these are
-    // ordinary separate updates, not one atomic transaction. A straight
-    // one-phase reassignment (e.g. swapping two adjacent notes) would hit
-    // that constraint the instant one note's new order_index still
-    // belongs to another note that hasn't been updated yet.
+    var unsent = NOTES.filter(function(n) { return !isNoteLocked(n); });
+    if (!unsent.length) { renderNotes(); return 0; }
+
+    var lockedNotes   = unsent.filter(function(n) { return n.locked_send_date; });
+    var floatingNotes = unsent.filter(function(n) { return !n.locked_send_date; });
+
+    // Each locked note's fixed slot. This should always resolve (the
+    // lock UI validates it up front) — if a gift's start date or
+    // frequency ever changed after the fact and this genuinely no
+    // longer resolves to a valid slot, fall back to wherever the note
+    // currently sits rather than silently dropping it from the sequence.
+    var lockedSlots = {}; // slot number -> note
+    lockedNotes.forEach(function(n) {
+      var slot = dateToSlotIndex(CURRENT_GIFT, n.locked_send_date);
+      lockedSlots[slot != null ? slot : n.order_index] = n;
+    });
+
+    var floatingQueue;
+    if (explicitFloatingOrderIds) {
+      floatingQueue = explicitFloatingOrderIds
+        .map(function(id) { return floatingNotes.find(function(n) { return n.id === id; }); })
+        .filter(Boolean);
+    } else {
+      floatingQueue = floatingNotes.slice().sort(function(a, b) { return a.order_index - b.order_index; });
+    }
+
+    var lockedSlotNums = Object.keys(lockedSlots).map(Number);
+    var maxLockedSlot  = lockedSlotNums.length ? Math.max.apply(null, lockedSlotNums) : -1;
+
+    // Walk every slot starting at today's, claiming locked notes at
+    // their fixed slot and handing everything else to the next floating
+    // note in the queue — keep going until the queue's empty AND we've
+    // passed the furthest-out locked slot, so a locked note far in the
+    // future still gets its slot even if there aren't enough floating
+    // notes to fill every gap before it.
+    var assignments = [];
+    var slot  = TODAY_NOTE_INDEX;
+    var queue = floatingQueue.slice();
+    while (queue.length || slot <= maxLockedSlot) {
+      if (lockedSlots[slot]) {
+        assignments.push({ id: lockedSlots[slot].id, order_index: lockedSlots[slot].order_index, slot: slot });
+      } else if (queue.length) {
+        var n = queue.shift();
+        assignments.push({ id: n.id, order_index: n.order_index, slot: slot });
+      }
+      slot++;
+    }
+
+    var updates = assignments.filter(function(a) { return a.order_index !== a.slot; });
+    if (!updates.length) { renderNotes(); return 0; }
+
+    // Two-phase update (push everything to temporary negative slots
+    // first, then to their real final values) — REQUIRED, not just
+    // tidy: notes has UNIQUE (gift_id, order_index) (see schema.sql),
+    // and these are ordinary separate updates, not one atomic
+    // transaction. A straight one-phase reassignment would hit that
+    // constraint the instant one note's new order_index still belongs
+    // to another note in this batch that hasn't been updated yet.
     var phase1 = await Promise.all(updates.map(function(u, i) {
       return sb.from('notes').update({ order_index: -(i + 1) }).eq('id', u.id);
     }));
     var phase2 = await Promise.all(updates.map(function(u) {
-      return sb.from('notes').update({ order_index: u.order_index }).eq('id', u.id);
+      return sb.from('notes').update({ order_index: u.slot }).eq('id', u.id);
     }));
     var failed = phase1.concat(phase2).filter(function(r) { return r.error; }).length;
 
@@ -1881,11 +2015,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     NOTES = notes || [];
     renderNotes();
 
-    if (failed) {
-      showToast('Reorder partially failed — refresh and check the numbering');
-    } else {
-      showToast('Notes reordered ✓');
-    }
+    return failed;
   }
 
   // ── SAVE SETTINGS ─────────────────────────────────────────────
@@ -2116,6 +2246,23 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     }
   }
 
+  // A safe, always-non-colliding order_index to insert a brand-new note
+  // at. NOTES.length used to be enough for this (just "append past
+  // everything"), but a note locked to a far-future date (see
+  // resequenceUnsentNotes above) can leave a gap between the last
+  // floating note and that locked slot — NOTES.length no longer
+  // reflects "one past the last floating note" once that gap exists,
+  // and could even collide with a locked note's order_index outright.
+  // One past the highest order_index that exists anywhere (sent,
+  // floating, or locked) is always safe to insert at; the caller then
+  // has to run the result through resequenceUnsentNotes() to pull the
+  // new note down into its real, correct position — right after the
+  // last floating note, before whatever's locked further out.
+  function nextSafeOrderIndex() {
+    if (!NOTES.length) return 0;
+    return Math.max.apply(null, NOTES.map(function(n) { return n.order_index; })) + 1;
+  }
+
   async function saveBulkPhotos() {
     if (!BULK_PHOTO_FILES.length) { showToast('Choose at least one photo first'); return; }
 
@@ -2154,8 +2301,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         }
       } else {
         // "create" mode — every photo becomes its own new, text-less note,
-        // appended after whatever's already in the list.
-        var nextIndex = NOTES.length;
+        // appended after whatever's already in the list. nextSafeOrderIndex()
+        // (rather than NOTES.length) guarantees no collision even if a
+        // locked note sits at a far-future order_index — resequenceUnsentNotes()
+        // below pulls these down into their real position afterward.
+        var nextIndex = nextSafeOrderIndex();
         for (var j = 0; j < BULK_PHOTO_FILES.length; j++) {
           btn.textContent = 'Uploading ' + (j + 1) + ' of ' + BULK_PHOTO_FILES.length + '…';
           var url = await uploadPhoto(BULK_PHOTO_FILES[j], CURRENT_GIFT.id);
@@ -2173,7 +2323,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       cancelBulkPhotoAdd();
       const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
       NOTES = notes || [];
-      renderNotes();
+      if (mode === 'create' && uploaded) {
+        // New notes went in at safe-but-temporary high slots — pull them
+        // down into their real position (right after the last floating
+        // note, before anything locked further out).
+        await resequenceUnsentNotes();
+      } else {
+        renderNotes();
+      }
 
       var msg = uploaded + ' photo' + (uploaded === 1 ? '' : 's') + (mode === 'create' ? ' added as new notes ✓' : ' added ✓');
       if (leftover > 0) msg += ' · ' + leftover + ' left over (not enough notes without a photo)';
@@ -2191,8 +2348,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     if (!lines.length) { showToast('Paste at least one note first'); return; }
 
+    var base = nextSafeOrderIndex();
     var rows = lines.map(function(text, i) {
-      return { gift_id: CURRENT_GIFT.id, order_index: NOTES.length + i, text: text, photo_url: null };
+      return { gift_id: CURRENT_GIFT.id, order_index: base + i, text: text, photo_url: null };
     });
 
     var { error } = await sb.from('notes').insert(rows);
@@ -2201,7 +2359,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     cancelBulkAdd();
     const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
     NOTES = notes || [];
-    renderNotes();
+    // Inserted at safe-but-temporary high slots (see nextSafeOrderIndex) —
+    // pull them down into their real position, after the last existing
+    // floating note and before anything locked further out.
+    await resequenceUnsentNotes();
     showToast(lines.length + ' note' + (lines.length === 1 ? '' : 's') + ' added ✓');
   }
 
@@ -2234,7 +2395,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       }
 
       var { error } = await sb.from('notes').insert({
-        gift_id: CURRENT_GIFT.id, order_index: NOTES.length, text, photo_url: photoUrl,
+        gift_id: CURRENT_GIFT.id, order_index: nextSafeOrderIndex(), text, photo_url: photoUrl,
         photo_position: photoUrl ? (PHOTO_POS.add.x + '% ' + PHOTO_POS.add.y + '%') : null,
         voice_url: voiceUrl,
       });
@@ -2243,7 +2404,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       cancelAddNote();
       const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
       NOTES = notes || [];
-      renderNotes();
+      // Inserted at a safe-but-temporary high slot (see nextSafeOrderIndex)
+      // — pull it down into its real position, after the last existing
+      // floating note and before anything locked further out.
+      await resequenceUnsentNotes();
       showToast('Note added ✓');
     } finally {
       btn.disabled = false;
@@ -2271,12 +2435,63 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       hidePhotoPreview('edit');
     }
     resetVoiceState('edit', note.voice_url || null);
+
+    // Locking only makes sense for a note that hasn't gone out yet — an
+    // already-sent note's date is history, not something to pin. Hide
+    // the whole control for those rather than offering something that'd
+    // silently do nothing.
+    var lockField  = document.getElementById('lockDateField');
+    var lockToggle = document.getElementById('editLockToggle');
+    var lockWrap   = document.getElementById('lockDateInputWrap');
+    var lockDate   = document.getElementById('editLockDate');
+    var alreadySent = note.order_index < computeTodayNoteIndex(CURRENT_GIFT);
+
+    lockField.style.display = alreadySent ? 'none' : 'block';
+    document.getElementById('lockDateError').style.display = 'none';
+    lockToggle.checked = !!note.locked_send_date;
+    lockWrap.style.display = note.locked_send_date ? 'block' : 'none';
+    // Earliest date it makes sense to lock to is tomorrow's slot — pins
+    // to "today" are moot (that note's already effectively fixed by
+    // being today's), and anything earlier is already sent.
+    var earliest = new Date(); earliest.setDate(earliest.getDate() + 1);
+    lockDate.min = earliest.getFullYear() + '-' + String(earliest.getMonth() + 1).padStart(2, '0') + '-' + String(earliest.getDate()).padStart(2, '0');
+    lockDate.value = note.locked_send_date
+      || (function() { var d = noteSendDate(CURRENT_GIFT, note.order_index); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+
     document.getElementById('editNoteModal').classList.add('open');
   }
   function closeEditModal() {
     document.getElementById('editNoteModal').classList.remove('open');
     EDIT_PHOTO_FILE = null;
     stopVoiceRecordingIfActive('edit');
+  }
+  function onLockToggleChange() {
+    document.getElementById('lockDateInputWrap').style.display = document.getElementById('editLockToggle').checked ? 'block' : 'none';
+    clearLockDateError();
+  }
+  function clearLockDateError() {
+    document.getElementById('lockDateError').style.display = 'none';
+  }
+  // Validates a proposed lock date against this gift's actual send
+  // cadence and against every other note's existing lock, before
+  // saveEditNote() ever writes anything. Returns an error string, or
+  // null if the date's good to use.
+  function validateLockDate(dateStr, editingNoteId) {
+    if (!dateStr) return 'Pick a date first';
+    var slot = dateToSlotIndex(CURRENT_GIFT, dateStr);
+    if (slot === null) {
+      var cadence = CURRENT_GIFT.frequency === 'daily' ? 'every day'
+        : CURRENT_GIFT.frequency === 'weekly' ? 'every 7 days from ' + formatNoteDate(parseYmd(CURRENT_GIFT.start_date))
+        : CURRENT_GIFT.frequency === 'biweekly' ? 'every 14 days from ' + formatNoteDate(parseYmd(CURRENT_GIFT.start_date))
+        : 'on the ' + parseYmd(CURRENT_GIFT.start_date).getDate() + (function(n){ return (n%10===1&&n%100!==11)?'st':(n%10===2&&n%100!==12)?'nd':(n%10===3&&n%100!==13)?'rd':'th'; })(parseYmd(CURRENT_GIFT.start_date).getDate()) + ' of each month';
+      return 'This gift only sends ' + cadence + ' — pick one of its actual send dates';
+    }
+    if (slot <= TODAY_NOTE_INDEX) return "Pick a date after today's note — this one's too soon to lock";
+    var conflict = NOTES.find(function(n) {
+      return n.id !== editingNoteId && n.locked_send_date === dateStr;
+    });
+    if (conflict) return 'Another note is already locked to that date';
+    return null;
   }
   async function saveEditNote() {
     var id   = document.getElementById('editNoteId').value;
@@ -2286,6 +2501,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     if (!text && !hasPhoto && !hasVoice) {
       showToast('Add some text, a photo, or a voice note first');
       return;
+    }
+
+    var locking = document.getElementById('lockDateField').style.display !== 'none'
+      && document.getElementById('editLockToggle').checked;
+    var lockDateVal = document.getElementById('editLockDate').value;
+    var originalNote = NOTES.find(function(n) { return n.id === id; });
+    var lockStateChanged = locking
+      ? lockDateVal !== (originalNote && originalNote.locked_send_date)
+      : !!(originalNote && originalNote.locked_send_date);
+
+    if (locking) {
+      var lockErr = validateLockDate(lockDateVal, id);
+      if (lockErr) {
+        var errEl = document.getElementById('lockDateError');
+        errEl.textContent = lockErr;
+        errEl.style.display = 'block';
+        return;
+      }
     }
 
     var btn = document.getElementById('saveEditBtn');
@@ -2318,13 +2551,26 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         text, photo_url: photoUrl,
         photo_position: photoUrl ? (PHOTO_POS.edit.x + '% ' + PHOTO_POS.edit.y + '%') : null,
         voice_url: voiceUrl,
+        locked_send_date: locking ? lockDateVal : null,
       }).eq('id', id);
       if (error) { showToast('Error: ' + error.message); return; }
       closeEditModal();
-      const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
-      NOTES = notes || [];
-      renderNotes();
-      showToast('Note saved ✓');
+
+      if (lockStateChanged) {
+        // Locking, unlocking, or moving a note's pinned date changes
+        // where every other unsent note has to sit — reload first so
+        // resequenceUnsentNotes() sees this note's new locked_send_date,
+        // then let it recompute and persist everyone's final order_index.
+        const { data: freshNotes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
+        NOTES = freshNotes || [];
+        var failed = await resequenceUnsentNotes();
+        showToast(failed ? 'Note saved, but reflowing other notes around it failed — refresh and check the numbering' : 'Note saved ✓');
+      } else {
+        const { data: notes } = await sb.from('notes').select('*').eq('gift_id', CURRENT_GIFT.id).order('order_index');
+        NOTES = notes || [];
+        renderNotes();
+        showToast('Note saved ✓');
+      }
     } finally {
       btn.disabled = false;
       btn.textContent = originalLabel;
@@ -2332,27 +2578,46 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
   async function deleteNote(noteId) {
     if (!confirm('Delete this note?')) return;
+    var deletedNote = NOTES.find(function(n) { return n.id === noteId; });
     var { error } = await sb.from('notes').delete().eq('id', noteId);
     if (error) { showToast('Error: ' + error.message); return; }
     NOTES = NOTES.filter(function(n) { return n.id !== noteId; });
 
-    // Renumber everything after the gap back to a contiguous 0..N-1, so
-    // "today's note" and the on-page numbering never drift apart. Only
-    // touch rows that actually need to move — and check every result,
-    // because Promise.all doesn't reject on a Supabase {error} response,
-    // it only rejects on a thrown/network error. Silently swallowing a
-    // partial-failure here is exactly what leaves a gap in order_index
-    // with no indication anything went wrong.
+    var wasSent = deletedNote && deletedNote.order_index < computeTodayNoteIndex(CURRENT_GIFT);
+
+    if (!wasSent) {
+      // Deleting an unsent note just closes the gap it left among the
+      // remaining unsent notes — resequenceUnsentNotes() keeps any
+      // locked note fixed at its date and reflows everything else
+      // around it (see that function above).
+      var failed = await resequenceUnsentNotes();
+      showToast(failed
+        ? 'Note deleted, but renumbering ' + failed + ' note' + (failed === 1 ? '' : 's') + ' failed — numbers may be off until you retry'
+        : 'Note deleted');
+      return;
+    }
+
+    // Deleting an already-sent note is a rare edge case that predates
+    // note-locking — preserved exactly as before: dense-renumber every
+    // remaining note (sent and unsent alike) back to a contiguous 0..N-1
+    // by array position. Locking only ever applies to unsent notes, so
+    // it never enters into this path. Only touch rows that actually need
+    // to move — and check every result, because Promise.all doesn't
+    // reject on a Supabase {error} response, it only rejects on a
+    // thrown/network error. Silently swallowing a partial failure here
+    // is exactly what leaves a gap in order_index with no indication
+    // anything went wrong.
     var toFix = NOTES.filter(function(n, i) { return n.order_index !== i; });
     var renumberFailed = 0;
     if (toFix.length) {
-      // Two-phase update, same reason as persistNoteOrder() above: notes has
-      // UNIQUE (gift_id, order_index), and these are separate updates, not
-      // one atomic transaction. A straight one-phase reassignment hits that
-      // constraint the instant one note's new order_index still belongs to
-      // another note in this batch that hasn't been updated yet — exactly
-      // what a delete does, since everything after the gap shifts down by
-      // one into a slot another note here currently occupies.
+      // Two-phase update, same reason as resequenceUnsentNotes() above:
+      // notes has UNIQUE (gift_id, order_index), and these are separate
+      // updates, not one atomic transaction. A straight one-phase
+      // reassignment hits that constraint the instant one note's new
+      // order_index still belongs to another note in this batch that
+      // hasn't been updated yet — exactly what a delete does, since
+      // everything after the gap shifts down by one into a slot another
+      // note here currently occupies.
       var phase1 = await Promise.all(
         toFix.map(function(n, i) {
           return sb.from('notes').update({ order_index: -(i + 1) }).eq('id', n.id);
