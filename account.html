@@ -297,6 +297,38 @@
     .note-voice-tag { color: var(--sage); font-weight: 500; }
     .note-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+    /* Send-date badge — shown on every note row so notes are easy to find
+       by month/day rather than just a bare #N count (see .note-num above,
+       kept alongside it as a secondary reference). */
+    .note-date { font-size: 13px; font-weight: 500; color: var(--sage); min-width: 46px; margin-top: 3px; flex-shrink: 0; }
+
+    /* ── NOTES GROUPING (Sent / Today / Tomorrow / by month) ── */
+    /* Native <details>/<summary> — no extra JS needed for expand-collapse,
+       and closed groups still keep their rows in the DOM (just zero
+       height), so the drag-to-reorder logic above (which queries the
+       whole #notesList by class, not per-group) keeps working unchanged
+       across group boundaries. */
+    .notes-group { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .notes-group + .notes-group { margin-top: 2px; }
+    .notes-group-summary {
+      list-style: none; cursor: pointer; padding: 12px 16px; font-size: 15px; font-weight: 500;
+      color: var(--ink); background: var(--bg); display: flex; align-items: center; gap: 8px; user-select: none;
+    }
+    .notes-group-summary::-webkit-details-marker { display: none; }
+    .notes-group-summary::before { content: '▸'; color: var(--ink-soft); font-size: 12px; transition: transform 0.15s; }
+    .notes-group[open] > .notes-group-summary::before { transform: rotate(90deg); }
+    .notes-group-count { font-weight: 400; color: var(--ink-soft); }
+    .notes-group-body { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+
+    /* Today / Tomorrow sit outside any dropdown — always visible, since
+       they're the two notes a buyer is most likely checking on. */
+    .notes-standalone { display: flex; flex-direction: column; gap: 6px; }
+    .notes-standalone-label { font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sage); padding-left: 2px; }
+    .notes-standalone-empty {
+      border: 1px dashed var(--sage-light); border-radius: 12px; padding: 12px 16px;
+      font-size: 15px; color: var(--ink-soft); background: var(--sage-pale);
+    }
+
     /* ── NOTE EDITOR ── */
     .note-editor { background: var(--sage-pale); border: 1px solid var(--sage-light); border-radius: 12px; padding: 16px; }
     .photo-upload-area { border: 2px dashed var(--sage-light); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; margin-bottom: 12px; font-size: 16px; color: var(--ink-soft); transition: border-color 0.15s; }
@@ -1494,6 +1526,109 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   var TODAY_NOTE_INDEX = 0;
   function isNoteLocked(note) { return note.order_index < TODAY_NOTE_INDEX; }
 
+  // Forward version of computeTodayNoteIndex/_shared.js's getNoteIndex —
+  // "which calendar date does order_index N actually go out on," used to
+  // group the notes list into Sent / Today / Tomorrow / upcoming-by-month
+  // (see renderNotes() below). Same client-side-approximate caveat as
+  // computeTodayNoteIndex: fine for browsing/organizing, not what actually
+  // governs delivery (that's _shared.js's recipient-timezone-aware version).
+  function noteSendDate(gift, orderIndex) {
+    var parts = String(gift.start_date).split('-').map(Number);
+    var start = new Date(parts[0], parts[1] - 1, parts[2]);
+    start.setHours(0, 0, 0, 0);
+
+    if (gift.frequency === 'weekly') {
+      var w = new Date(start); w.setDate(w.getDate() + orderIndex * 7); return w;
+    }
+    if (gift.frequency === 'biweekly') {
+      var b = new Date(start); b.setDate(b.getDate() + orderIndex * 14); return b;
+    }
+    if (gift.frequency === 'monthly') {
+      // Mirrors _shared.js's shouldSendToday, which only fires on a date
+      // whose day-of-month matches the start date's — so a month that
+      // doesn't have that day at all (e.g. no Feb 31) is skipped
+      // entirely rather than clamped to month-end. Walk forward one
+      // calendar month at a time, only counting months where the day
+      // actually exists, until we've found the orderIndex'th one.
+      var day = start.getDate();
+      var y = start.getFullYear(), m = start.getMonth();
+      var found = 0;
+      while (true) {
+        var candidate = new Date(y, m, day);
+        if (candidate.getMonth() === m) { // day didn't overflow into the next month
+          if (found === orderIndex) return candidate;
+          found++;
+        }
+        m++;
+      }
+    }
+    // daily (default)
+    var d = new Date(start); d.setDate(d.getDate() + orderIndex); return d;
+  }
+
+  function isSameCalendarDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  var NOTE_DATE_FMT       = { month: 'short', day: 'numeric' };
+  var NOTE_MONTH_YEAR_FMT = { month: 'long', year: 'numeric' };
+  function formatNoteDate(d)      { return d.toLocaleDateString('en-US', NOTE_DATE_FMT); }
+  function formatNoteMonthYear(d) { return d.toLocaleDateString('en-US', NOTE_MONTH_YEAR_FMT); }
+
+  // Inner content of a .note-row (everything except the wrapping div
+  // itself, which callers below build with the right locked/data-id
+  // attributes) — shared by every group (Sent / Today / Tomorrow /
+  // upcoming-by-month) so the row markup only lives in one place.
+  function buildNoteRowHtml(note, locked) {
+    var thumb = note.photo_url
+      ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" style="object-position:' + esc(note.photo_position || '50% 50%') + '" />'
+      : '<div class="note-thumb-ph">🌿</div>';
+
+    // Only unsent notes get a drag handle — already-sent ones get a
+    // same-width blank spacer instead, so the row content still lines
+    // up rather than shifting left.
+    var handle = locked
+      ? '<span class="note-drag-placeholder" title="Already sent — can\'t be reordered"></span>'
+      : '<span class="note-drag-handle" title="Drag to reorder" onpointerdown="startNoteDrag(event, \'' + note.id + '\')">⠿</span>';
+
+    var voiceTag = note.voice_url
+      ? '<span class="note-voice-tag" title="Includes a voice recording">🎤</span> '
+      : '';
+
+    // Date badge alongside the existing #N order label — # is still the
+    // precise, unambiguous reference (matches what the site/emails
+    // actually deliver by), the date is what makes browsing/finding a
+    // specific note fast.
+    var dateLabel = formatNoteDate(noteSendDate(CURRENT_GIFT, note.order_index));
+
+    return handle +
+      '<div class="note-date">' + esc(dateLabel) + '</div>' +
+      '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
+      thumb +
+      '<div class="note-text-preview">' + voiceTag + esc(note.text) + '</div>' +
+      '<div class="note-actions">' +
+        '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteNote(\'' + note.id + '\')">✕</button>' +
+      '</div>';
+  }
+
+  function noteRowDiv(note, locked) {
+    return '<div class="note-row' + (locked ? ' locked' : '') + '" data-note-id="' + note.id + '">' +
+      buildNoteRowHtml(note, locked) +
+    '</div>';
+  }
+
+  // Groups the list into: Sent (collapsed dropdown), Today (standalone),
+  // Tomorrow (standalone, only when a note's actual date is literally
+  // tomorrow — mostly relevant for daily-frequency gifts; weekly/biweekly/
+  // monthly gifts will usually have nothing there, which is correct, not
+  // a bug), and every remaining upcoming note grouped into per-month
+  // dropdowns. All rows stay flat descendants of #notesList regardless of
+  // which group they're visually in, so the drag-to-reorder logic above
+  // (which queries the whole list by class, not per-group) keeps working
+  // unchanged — dragging a note into a different position simply changes
+  // which group it's computed into on the next render, since that's
+  // driven entirely by order_index → date, not by which group it started in.
   function renderNotes() {
     var list  = document.getElementById('notesList');
     var hint  = document.getElementById('notesListHint');
@@ -1511,45 +1646,73 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var unsentCount = NOTES.filter(function(n) { return !isNoteLocked(n); }).length;
     hint.style.display = unsentCount > 1 ? 'block' : 'none';
 
-    NOTES.forEach(function(note, i) {
-      var row = document.createElement('div');
-      var locked = isNoteLocked(note);
-      row.className = 'note-row' + (locked ? ' locked' : '');
-      row.setAttribute('data-note-id', note.id);
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
-      var thumb = note.photo_url
-        ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" style="object-position:' + esc(note.photo_position || '50% 50%') + '" />'
-        : '<div class="note-thumb-ph">🌿</div>';
+    var sentNotes    = [];
+    var todayNote    = null;
+    var tomorrowNote = null;
+    var upcoming     = []; // everything else, still in order_index order
 
-      // Only unsent notes get a drag handle — already-sent ones get a
-      // same-width blank spacer instead, so the row content still lines
-      // up rather than shifting left.
-      var handle = locked
-        ? '<span class="note-drag-placeholder" title="Already sent — can\'t be reordered"></span>'
-        : '<span class="note-drag-handle" title="Drag to reorder" onpointerdown="startNoteDrag(event, \'' + note.id + '\')">⠿</span>';
-
-      // Label by the note's actual order_index, not its position in this
-      // array. They usually match, but if order_index ever has a gap (a
-      // note removed outside the normal delete flow, a bulk-upload race,
-      // etc.), position and order_index disagree — and this label is what
-      // you use to judge "is today's note right", so it has to reflect the
-      // same order_index the site and emails actually deliver by.
-      var voiceTag = note.voice_url
-        ? '<span class="note-voice-tag" title="Includes a voice recording">🎤</span> '
-        : '';
-
-      row.innerHTML =
-        handle +
-        '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
-        thumb +
-        '<div class="note-text-preview">' + voiceTag + esc(note.text) + '</div>' +
-        '<div class="note-actions">' +
-          '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="deleteNote(\'' + note.id + '\')">✕</button>' +
-        '</div>';
-
-      list.appendChild(row);
+    NOTES.forEach(function(note) {
+      if (isNoteLocked(note)) { sentNotes.push(note); return; }
+      if (note.order_index === TODAY_NOTE_INDEX) { todayNote = note; return; }
+      if (!tomorrowNote && isSameCalendarDay(noteSendDate(CURRENT_GIFT, note.order_index), tomorrow)) {
+        tomorrowNote = note;
+        return;
+      }
+      upcoming.push(note);
     });
+
+    var html = '';
+
+    if (sentNotes.length) {
+      html += '<details class="notes-group">' +
+        '<summary class="notes-group-summary">Sent <span class="notes-group-count">(' + sentNotes.length + ')</span></summary>' +
+        '<div class="notes-group-body">' +
+          sentNotes.map(function(n) { return noteRowDiv(n, true); }).join('') +
+        '</div>' +
+      '</details>';
+    }
+
+    html += '<div class="notes-standalone">' +
+      '<div class="notes-standalone-label">Today · ' + esc(formatNoteDate(today)) + '</div>' +
+      (todayNote ? noteRowDiv(todayNote, false) : '<div class="notes-standalone-empty">No note written for today yet — add one below ✍️</div>') +
+    '</div>';
+
+    html += '<div class="notes-standalone">' +
+      '<div class="notes-standalone-label">Tomorrow · ' + esc(formatNoteDate(tomorrow)) + '</div>' +
+      (tomorrowNote ? noteRowDiv(tomorrowNote, false) : '<div class="notes-standalone-empty">No note scheduled for tomorrow yet — add one below ✍️</div>') +
+    '</div>';
+
+    // Bucket the rest by calendar month. Upcoming is already in ascending
+    // order_index (== ascending date) order, so consecutive same-month
+    // notes always land in the same bucket without needing a separate sort.
+    var monthGroups = [];
+    upcoming.forEach(function(note) {
+      var d   = noteSendDate(CURRENT_GIFT, note.order_index);
+      var key = d.getFullYear() + '-' + d.getMonth();
+      var last = monthGroups[monthGroups.length - 1];
+      var group = (last && last.key === key) ? last : null;
+      if (!group) {
+        group = { key: key, label: formatNoteMonthYear(d), notes: [] };
+        monthGroups.push(group);
+      }
+      group.notes.push(note);
+    });
+
+    monthGroups.forEach(function(group, i) {
+      // Nearest upcoming month open by default so the most actionable
+      // notes are visible without a click; further-out months collapsed.
+      html += '<details class="notes-group"' + (i === 0 ? ' open' : '') + '>' +
+        '<summary class="notes-group-summary">' + esc(group.label) + ' <span class="notes-group-count">(' + group.notes.length + ')</span></summary>' +
+        '<div class="notes-group-body">' +
+          group.notes.map(function(n) { return noteRowDiv(n, false); }).join('') +
+        '</div>' +
+      '</details>';
+    });
+
+    list.innerHTML = html;
   }
 
   // ── DRAG-TO-REORDER (unsent notes only) ──────────────────────────
@@ -1603,13 +1766,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       if (y < rect.top + rect.height / 2) { target = others[i]; break; }
     }
 
+    // Rows now live nested inside Sent/Today/Tomorrow/month-group
+    // containers rather than directly under #notesList (see renderNotes()),
+    // so inserting has to happen relative to the target's actual parent —
+    // list.insertBefore(row, target) would throw if target isn't a direct
+    // child of list. Using target.parentNode here means a note dragged
+    // near a different group's rows moves into that group; which group a
+    // note ends up labeled under is recomputed correctly from scratch by
+    // renderNotes() right after drop anyway, based on its new order_index.
     if (target) {
-      list.insertBefore(row, target);
-    } else {
-      // Dragged below every other unsent row — locked rows are always
-      // first, so appending as the list's last child is always correct.
-      list.appendChild(row);
+      target.parentNode.insertBefore(row, target);
+    } else if (others.length) {
+      // Dragged below every other unsent row — insert right after the
+      // last one, inside whichever container currently holds it.
+      var lastOther = others[others.length - 1];
+      lastOther.parentNode.insertBefore(row, lastOther.nextSibling);
     }
+    // else: this row is the only unsent note there is — nothing to
+    // reorder against, so leave it exactly where it is.
 
     // Re-lift the row from wherever it just landed in the flow, offset so
     // it stays under the pointer — this is what makes it feel like it's
