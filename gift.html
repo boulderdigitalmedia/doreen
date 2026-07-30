@@ -2732,6 +2732,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       document.getElementById('loading').style.display = 'flex';
       await loadGiftContents(GIFT);
     } else {
+      // Too many wrong guesses locks the gift for a while server-side
+      // (see verify-gift-password.js) — show that reason specifically
+      // instead of the generic "wrong password" text so it's clear this
+      // isn't just another typo.
+      errEl.textContent = check.locked && check.message ? check.message : "That password isn't right — try again.";
       errEl.style.display = 'block';
       input.value = '';
       input.focus();
