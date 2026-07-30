@@ -1096,3 +1096,23 @@ CREATE TABLE IF NOT EXISTS admin_login_attempts (
 );
 INSERT INTO admin_login_attempts (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
 ALTER TABLE admin_login_attempts ENABLE ROW LEVEL SECURITY;
+
+-- ── LOCK A NOTE TO A SPECIFIC DATE ──
+-- Every note's send date has always been purely a function of its
+-- position in the sequence (order_index) — insert, delete, or drag-
+-- reorder anything before it, and its date shifts. Lets a buyer pin a
+-- specific note (an anniversary, a birthday) to an exact calendar date
+-- so it stops moving: account.html's resequenceUnsentNotes() keeps a
+-- locked note fixed at the order_index that date resolves to (via
+-- dateToSlotIndex), and reflows every floating note around it instead.
+-- NULL (the default) means "floating," exactly as every note has always
+-- behaved.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_send_date DATE;
+
+-- Only one note per gift can claim a given pinned date — there's only
+-- one send slot per date, so two locked notes targeting the same one
+-- would be an unresolvable conflict. Partial index (only enforced when
+-- locked_send_date IS NOT NULL) so floating notes (the overwhelming
+-- majority) aren't affected at all.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_locked_send_date_unique
+  ON notes(gift_id, locked_send_date) WHERE locked_send_date IS NOT NULL;
