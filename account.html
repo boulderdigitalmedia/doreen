@@ -1242,11 +1242,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
       var termInfo = document.getElementById('termInfo');
       var isBillable = ['active', 'trialing', 'past_due'].indexOf(PROFILE.stripe_status) !== -1;
-      // The annual plan is a one-time payment that already doesn't
-      // auto-renew — there's nothing to cancel, so no cancel link shows
-      // for it at all (cancel-subscription.js would just no-op anyway).
-      // Only the installment plan has an actual early-cancellation flow.
-      var cancelLink = PROFILE.plan === 'installment'
+      // A fully-paid annual buyer (already converted) has nothing to
+      // cancel — it's a one-time payment that already doesn't auto-renew,
+      // and cancel-subscription.js just no-ops for that case. But an
+      // annual buyer still in their free trial hasn't been charged yet at
+      // all, and needs a way to back out before it converts — same as
+      // installment's trial. So: show the link for installment always
+      // (trial or converted, both have a real cancel-subscription.js
+      // flow), and for annual only while still trialing.
+      var cancelLink = (PROFILE.plan === 'installment' || PROFILE.stripe_status === 'trialing')
         ? ' · <a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>'
         : '';
       if (isBillable && PROFILE.access_term_end) {
