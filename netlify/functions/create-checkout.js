@@ -163,6 +163,11 @@ exports.handler = async (event) => {
     session = await stripe.checkout.sessions.create({
       customer:    customerId,
       mode:        'setup',
+      // Stripe requires an explicit currency for mode:'setup' sessions —
+      // unlike the subscription/payment branches above and below, there's
+      // no line item price here to infer one from. 'usd' matches the
+      // annual Price's own currency everywhere else in the app.
+      currency:    'usd',
       success_url: SITE_URL + '/success?session_id={CHECKOUT_SESSION_ID}',
       cancel_url:  SITE_URL + '/account',
       metadata:    { supabase_uid: user.id, plan_type: 'annual', annual_trial: 'true' },
