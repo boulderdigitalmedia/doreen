@@ -114,8 +114,17 @@ async function attemptAnnualTrialCharge(profile) {
       auto_advance:        false,
     });
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
-    const result = await stripe.invoices.pay(finalized.id);
-    paid = result.status === 'paid';
+    // Same $0-invoice edge case as chargeOneTimeFee in stripe-webhook.js —
+    // a customer-level discount/credit can resolve this invoice to $0,
+    // which Stripe marks paid automatically at finalization. Calling
+    // .pay() on it again throws "Invoice is already paid" instead of
+    // confirming success, which would wrongly look like a declined card.
+    if (finalized.status === 'paid') {
+      paid = true;
+    } else {
+      const result = await stripe.invoices.pay(finalized.id);
+      paid = result.status === 'paid';
+    }
   } catch (e) {
     console.error('Annual trial conversion charge failed for profile', profile.id, e.message);
   }
