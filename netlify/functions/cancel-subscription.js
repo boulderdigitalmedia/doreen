@@ -213,9 +213,15 @@ exports.handler = async (event) => {
         auto_advance:       false,
       });
       const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
-      const paid = await stripe.invoices.pay(finalized.id);
-      if (paid.status !== 'paid') {
-        return err('The cancellation fee could not be charged — your subscription was not canceled. Update your payment method and try again.', 402);
+      // Same $0-invoice edge case as stripe-webhook.js's chargeOneTimeFee
+      // (see that comment) — only realistically reachable here if the fee
+      // itself ever computed to $0, but guarded the same way for safety
+      // rather than assuming it can't happen.
+      if (finalized.status !== 'paid') {
+        const paid = await stripe.invoices.pay(finalized.id);
+        if (paid.status !== 'paid') {
+          return err('The cancellation fee could not be charged — your subscription was not canceled. Update your payment method and try again.', 402);
+        }
       }
     } catch (e) {
       return err('The cancellation fee could not be charged — your subscription was not canceled. ' + e.message, 402);
