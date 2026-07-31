@@ -442,6 +442,12 @@ async function chargeOneTimeFee(customerId, amountDollars, description) {
     auto_advance:        false,
   });
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+  // A $0 invoice (fully offset by a customer-level discount/credit) is
+  // marked paid by Stripe automatically at finalization, before any
+  // explicit collection attempt — calling .pay() on it again throws
+  // "Invoice is already paid" instead of confirming the success it
+  // already is. Skip the redundant call in that case.
+  if (finalized.status === 'paid') return true;
   const paid = await stripe.invoices.pay(finalized.id);
   return paid.status === 'paid';
 }
