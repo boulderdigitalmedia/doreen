@@ -179,6 +179,25 @@
   to     = "/conduct.html"
   status = 200
 
+# ── Blog (proxied from the separate anoteforyou-blog Netlify site, so posts
+# stay on the anoteforyou.app domain for SEO instead of living on a
+# subdomain). Two rules, not one: a `/blog/*` splat alone does NOT match
+# the bare `/blog` path (Netlify only matches it against something WITH a
+# trailing segment) — without this exact-match rule too, `/blog` itself
+# falls through to the `/:slug` catch-all below and renders as a missing
+# gift instead of the blog index. ───────────────────────────────────────
+[[redirects]]
+  from   = "/blog"
+  to     = "https://anoteforyou-blog.netlify.app/blog"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/blog/*"
+  to     = "https://anoteforyou-blog.netlify.app/blog/:splat"
+  status = 200
+  force  = true
+
 # ── Vanity slug catch-all (MUST be last) ──────────────────────────────────────
 [[redirects]]
   from   = "/:slug"
