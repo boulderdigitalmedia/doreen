@@ -361,13 +361,17 @@
     /* ── WRITING PROMPT ── */
     .prompt-idea-row { margin-bottom: 10px; }
     .prompt-idea-box {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+      display: flex; flex-direction: column; gap: 10px; position: relative;
       background: var(--surface); border: 1px dashed var(--sage-light); border-radius: 10px;
-      padding: 12px 14px; margin-bottom: 12px;
+      padding: 14px 32px 12px 14px; margin-bottom: 12px;
     }
-    .prompt-idea-text { font-size: 15px; font-style: italic; color: var(--ink-mid); line-height: 1.5; flex: 1; }
-    .prompt-idea-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-    .prompt-idea-close { background: none; border: none; color: var(--ink-soft); font-size: 13px; cursor: pointer; padding: 4px 6px; line-height: 1; }
+    .prompt-idea-text { font-size: 15px; font-style: italic; color: var(--ink-mid); line-height: 1.5; }
+    .prompt-idea-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .prompt-idea-close {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: none; color: var(--ink-soft); font-size: 15px; cursor: pointer;
+      padding: 4px 6px; line-height: 1;
+    }
     .prompt-idea-close:hover { color: var(--ink); }
 
     /* ── VOICE NOTE RECORDING ── */
