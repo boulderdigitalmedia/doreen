@@ -128,6 +128,16 @@
   to     = "/.netlify/functions/record-referral"
   status = 200
 
+[[redirects]]
+  from   = "/api/send-note-reply"
+  to     = "/.netlify/functions/send-note-reply"
+  status = 200
+
+[[redirects]]
+  from   = "/api/submit-note-reply"
+  to     = "/.netlify/functions/submit-note-reply"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
