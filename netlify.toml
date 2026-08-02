@@ -185,16 +185,26 @@
 # the bare `/blog` path (Netlify only matches it against something WITH a
 # trailing segment) — without this exact-match rule too, `/blog` itself
 # falls through to the `/:slug` catch-all below and renders as a missing
-# gift instead of the blog index. ───────────────────────────────────────
+# gift instead of the blog index.
+#
+# Upstream targets do NOT repeat `/blog` — the blog project's
+# astro.config.mjs sets `base: '/blog'` so the pages it generates all
+# *link* to /blog/..., but that setting doesn't move the actual build
+# output into a /blog subfolder on disk. The files on
+# anoteforyou-blog.netlify.app live at that site's root (`/`,
+# `/one-note-at-a-time`, etc), so the proxy target has to be the root too
+# — pointing it at .../blog/... (as an earlier version of this file did)
+# proxies to a path that doesn't exist there and surfaces as Netlify's
+# own 404. ───────────────────────────────────────────────────────────────
 [[redirects]]
   from   = "/blog"
-  to     = "https://anoteforyou-blog.netlify.app/blog"
+  to     = "https://anoteforyou-blog.netlify.app/"
   status = 200
   force  = true
 
 [[redirects]]
   from   = "/blog/*"
-  to     = "https://anoteforyou-blog.netlify.app/blog/:splat"
+  to     = "https://anoteforyou-blog.netlify.app/:splat"
   status = 200
   force  = true
 
