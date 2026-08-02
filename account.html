@@ -358,6 +358,18 @@
     .photo-upload-area { border: 2px dashed var(--sage-light); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; margin-bottom: 12px; font-size: 16px; color: var(--ink-soft); transition: border-color 0.15s; }
     .photo-upload-area:hover { border-color: var(--sage); }
 
+    /* ── WRITING PROMPT ── */
+    .prompt-idea-row { margin-bottom: 10px; }
+    .prompt-idea-box {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+      background: var(--surface); border: 1px dashed var(--sage-light); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 12px;
+    }
+    .prompt-idea-text { font-size: 15px; font-style: italic; color: var(--ink-mid); line-height: 1.5; flex: 1; }
+    .prompt-idea-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .prompt-idea-close { background: none; border: none; color: var(--ink-soft); font-size: 13px; cursor: pointer; padding: 4px 6px; line-height: 1; }
+    .prompt-idea-close:hover { color: var(--ink); }
+
     /* ── VOICE NOTE RECORDING ── */
     .voice-note-area { margin-bottom: 12px; }
     .voice-record-btn.recording {
@@ -775,6 +787,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               <audio class="voice-note-audio" id="addVoiceAudio" controls></audio>
               <button type="button" class="btn btn-ghost btn-sm" onclick="toggleVoiceRecording('add')">Re-record</button>
               <button type="button" class="btn btn-ghost btn-sm" onclick="removeVoiceNote('add')">Remove</button>
+            </div>
+          </div>
+          <div class="prompt-idea-row">
+            <button type="button" class="btn btn-ghost btn-sm" id="promptIdeaBtn" onclick="showWritingPrompt()">💡 Need an idea?</button>
+          </div>
+          <div class="prompt-idea-box" id="promptIdeaBox" style="display:none;">
+            <span class="prompt-idea-text" id="promptIdeaText"></span>
+            <div class="prompt-idea-actions">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="showWritingPrompt()">↻ Another</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="usePromptAsStarter()">Use as starter</button>
+              <button type="button" class="prompt-idea-close" onclick="hideWritingPrompt()" aria-label="Close">✕</button>
             </div>
           </div>
           <textarea id="addNoteText" placeholder="Write your note…"></textarea>
@@ -2246,12 +2269,101 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     hidePhotoPreview('add');
     document.getElementById('addNoteText').value = '';
     resetVoiceState('add', null);
+    hideWritingPrompt();
   }
   function cancelAddNote() {
     document.getElementById('addNoteEditor').style.display = 'none';
     ADD_PHOTO_FILE = null;
     stopVoiceRecordingIfActive('add');
     resetVoiceState('add', null);
+    hideWritingPrompt();
+  }
+
+  // ── WRITING PROMPTS ───────────────────────────────────────────
+  // A curated bank of prompts to help a gift-giver who's staring at a
+  // blank textarea. Purely client-side — no server call, no per-gift
+  // personalization (yet). "Use as starter" inserts the prompt as an
+  // italic-free cue line the buyer is meant to write over/delete, it's
+  // never saved as-is unless they leave it, which is fine — better than
+  // an empty note.
+
+  var WRITING_PROMPTS = [
+    "Start with a photo you love and describe the memory.",
+    "What's a small, ordinary moment with them that you still think about?",
+    "Describe the first time you knew this person mattered to you.",
+    "What's something they do that always makes you laugh?",
+    "Tell them about a time they showed up for you without being asked.",
+    "What's a quality of theirs you wish more people had?",
+    "Describe them the way you'd brag about them to a stranger.",
+    "What's an inside joke or phrase only the two of you would get?",
+    "Tell them one thing you've never gotten around to saying out loud.",
+    "What's a memory with them you'd want to relive exactly as it happened?",
+    "Describe how it feels to walk into a room and see them there.",
+    "What's something they taught you, on purpose or by accident?",
+    "Tell them about a time they made a hard day easier just by being there.",
+    "What's a habit of theirs that used to annoy you and now you'd miss?",
+    "Describe the version of them that only you get to see.",
+    "What's something you're looking forward to doing with them?",
+    "Tell them what you'd want them to know if today were an ordinary Tuesday.",
+    "What's a compliment about them you've thought but never said?",
+    "Describe a moment you felt proud to know them.",
+    "What's something small they do that you don't think they realize matters?",
+    "Tell them about the last time they surprised you.",
+    "What's a song, place, or smell that reminds you of them?",
+    "Describe what your life would be missing without them in it.",
+    "What's a challenge you watched them get through that impressed you?",
+    "Tell them one way they've changed for the better since you've known them.",
+    "What's something you two used to do that you miss?",
+    "Describe them in the middle of doing something they love.",
+    "What's a piece of advice from them that actually stuck?",
+    "Tell them about a time you were grateful they were stubborn.",
+    "What's something about today, specifically, that made you think of them?",
+    "Describe the kind of friend/partner/parent/sibling they've been to you.",
+  ];
+
+  var LAST_PROMPT_INDEX = -1;
+
+  function pickWritingPrompt() {
+    if (WRITING_PROMPTS.length <= 1) return WRITING_PROMPTS[0] || '';
+    // The very first prompt shown each time the editor is opened is
+    // always WRITING_PROMPTS[0] (the photo-memory prompt) — it's the
+    // easiest one to act on since it doesn't require recalling a specific
+    // memory from scratch. "Another" clicks after that shuffle randomly.
+    if (LAST_PROMPT_INDEX === -1) {
+      LAST_PROMPT_INDEX = 0;
+      return WRITING_PROMPTS[0];
+    }
+    var idx;
+    do {
+      idx = Math.floor(Math.random() * WRITING_PROMPTS.length);
+    } while (idx === LAST_PROMPT_INDEX);
+    LAST_PROMPT_INDEX = idx;
+    return WRITING_PROMPTS[idx];
+  }
+
+  function showWritingPrompt() {
+    document.getElementById('promptIdeaText').textContent = pickWritingPrompt();
+    document.getElementById('promptIdeaBox').style.display = 'flex';
+  }
+
+  function hideWritingPrompt() {
+    document.getElementById('promptIdeaBox').style.display = 'none';
+    LAST_PROMPT_INDEX = -1;
+  }
+
+  function usePromptAsStarter() {
+    var promptText = document.getElementById('promptIdeaText').textContent;
+    var textarea = document.getElementById('addNoteText');
+    if (!promptText) return;
+    if (textarea.value.trim()) {
+      // Don't clobber anything they've already written — just focus so
+      // they can keep going.
+      textarea.focus();
+      return;
+    }
+    textarea.value = promptText + '\n\n';
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }
 
   // ── BULK ADD NOTES ────────────────────────────────────────────
