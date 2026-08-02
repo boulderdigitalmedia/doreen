@@ -763,13 +763,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     <div class="panel">
       <div class="panel-title">Notes <span id="noteCountBadge" style="font-weight:400;color:var(--ink-soft)"></span></div>
-      <div class="notes-list-hint" id="notesListHint" style="display:none">Drag <strong>⠿</strong> to reorder upcoming notes. Notes already sent can't be reordered.</div>
-      <div class="notes-list" id="notesList"></div>
-      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="showAddNote()">+ Add note</button>
         <button class="btn btn-secondary btn-sm" onclick="showBulkAdd()">+ Bulk notes</button>
         <button class="btn btn-secondary btn-sm" onclick="showBulkPhotoAdd()">+ Bulk photos</button>
       </div>
+      <div class="notes-list-hint" id="notesListHint" style="display:none">Drag <strong>⠿</strong> to reorder upcoming notes. Notes already sent can't be reordered.</div>
+      <div class="notes-list" id="notesList"></div>
       <div id="addNoteEditor" style="display:none;margin-top:16px;">
         <div class="note-editor">
           <div class="photo-upload-area" id="addPhotoUploadArea" onclick="document.getElementById('addPhotoInput').click()">
