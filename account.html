@@ -257,7 +257,12 @@
     /* ── NOTES LIST ── */
     .notes-list { display: flex; flex-direction: column; gap: 8px; }
     .notes-list-hint { font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; }
-    .note-row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: flex-start; gap: 12px; transition: box-shadow 0.15s, border-color 0.15s; }
+    .note-row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; transition: box-shadow 0.15s, border-color 0.15s; }
+    /* The actual flex row of handle/date/thumb/text/actions — split out
+       from .note-row itself so a reply thread (see .reply-thread below)
+       can sit underneath it, as a second block inside the same card,
+       instead of getting squeezed in as another flex item alongside them. */
+    .note-row-main { display: flex; align-items: flex-start; gap: 12px; }
     /* Already-sent notes can't be reordered — reordering them would
        retroactively change what a recipient already received (order_index
        is what getNoteIndex in _shared.js/gift.html uses to decide which
@@ -304,8 +309,20 @@
     .note-date-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex-shrink: 0; min-width: 44px; margin-top: 2px; }
     .note-date { font-size: 13px; font-weight: 500; color: var(--sage); }
 
+    /* ── NOTE REPLIES ── */
+    .reply-thread { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+    .reply-empty { font-size: 14px; color: var(--ink-soft); font-style: italic; }
+    .reply-msg { max-width: 82%; padding: 8px 12px; border-radius: 12px; }
+    .reply-msg-meta { font-size: 11px; color: var(--ink-soft); margin-bottom: 2px; }
+    .reply-msg-body { font-size: 15px; color: var(--ink); line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+    .reply-msg-buyer { align-self: flex-end; background: var(--sage-pale); border: 1px solid var(--sage-light); border-bottom-right-radius: 4px; }
+    .reply-msg-recipient { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .reply-compose { display: flex; gap: 8px; align-items: flex-end; margin-top: 2px; }
+    .reply-compose-input { flex: 1; min-height: 38px; max-height: 120px; resize: vertical; }
+
     @media (max-width: 480px) {
-      .note-row { gap: 8px; padding: 12px; }
+      .note-row-main { gap: 8px; }
+      .note-row { padding: 12px; }
       .note-date-wrap { min-width: 36px; }
       .note-date { font-size: 12px; }
       .note-num { font-size: 12px; }
@@ -1591,15 +1608,100 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     if (smsPriceEl) smsPriceEl.textContent = smsAddonPriceLabel();
     updateSlugPreview();
 
-    const [{ data: rec }, { data: notes }] = await Promise.all([
+    const [{ data: rec }, { data: notes }, { data: replies }] = await Promise.all([
       sb.from('recipients').select('*').eq('gift_id', gift.id).maybeSingle(),
-      sb.from('notes').select('*').eq('gift_id', gift.id).order('order_index')
+      sb.from('notes').select('*').eq('gift_id', gift.id).order('order_index'),
+      sb.from('note_replies').select('*').eq('gift_id', gift.id).order('created_at')
     ]);
 
     RECIPIENT = rec;
     NOTES     = notes || [];
+    setNoteReplies(replies || []);
     renderRecipient();
     renderNotes();
+  }
+
+  // ── NOTE REPLIES ──────────────────────────────────────────────
+  // NOTE_REPLIES groups the flat note_replies rows by note_id so
+  // buildNoteRowHtml can look up a given note's thread with a plain
+  // object lookup instead of filtering the whole list on every render.
+  // Reloaded whenever a gift is (re)opened (see openGift above); after
+  // sending a message, refreshNoteReplies() below re-fetches just this
+  // one gift's replies rather than the whole openGift() round-trip.
+
+  var NOTE_REPLIES = {};
+  var OPEN_REPLY_THREADS = {}; // noteId -> true while that thread panel is expanded, survives a re-render
+
+  function setNoteReplies(replies) {
+    NOTE_REPLIES = {};
+    replies.forEach(function(r) {
+      (NOTE_REPLIES[r.note_id] = NOTE_REPLIES[r.note_id] || []).push(r);
+    });
+  }
+
+  async function refreshNoteReplies() {
+    if (!CURRENT_GIFT) return;
+    const { data: replies } = await sb.from('note_replies').select('*').eq('gift_id', CURRENT_GIFT.id).order('created_at');
+    setNoteReplies(replies || []);
+    renderNotes();
+  }
+
+  function toggleReplyThread(noteId) {
+    OPEN_REPLY_THREADS[noteId] = !OPEN_REPLY_THREADS[noteId];
+    renderNotes();
+  }
+
+  function replyMsgDiv(r) {
+    var who = r.sender === 'buyer' ? 'You' : (CURRENT_GIFT.display_name || 'Recipient').split(/[&,]/)[0].trim();
+    var when = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+      ' · ' + new Date(r.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return '<div class="reply-msg reply-msg-' + (r.sender === 'buyer' ? 'buyer' : 'recipient') + '">' +
+      '<div class="reply-msg-meta">' + esc(who) + ' · ' + esc(when) + '</div>' +
+      '<div class="reply-msg-body">' + esc(r.body) + '</div>' +
+    '</div>';
+  }
+
+  function replyThreadHtml(note) {
+    var replies = NOTE_REPLIES[note.id] || [];
+    var open = !!OPEN_REPLY_THREADS[note.id];
+    return '<div class="reply-thread" style="display:' + (open ? 'block' : 'none') + '">' +
+      (replies.length
+        ? replies.map(replyMsgDiv).join('')
+        : '<div class="reply-empty">No messages on this note yet.</div>') +
+      '<div class="reply-compose">' +
+        '<textarea class="reply-compose-input" id="replyInput-' + note.id + '" placeholder="Reply…" rows="1"></textarea>' +
+        '<button class="btn btn-primary btn-sm" onclick="sendNoteReply(\'' + note.id + '\')">Send</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  async function sendNoteReply(noteId) {
+    var input = document.getElementById('replyInput-' + noteId);
+    var text = (input.value || '').trim();
+    if (!text) return;
+
+    input.disabled = true;
+    try {
+      var res = await fetch('/api/send-note-reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': await authHeader(),
+        },
+        body: JSON.stringify({ note_id: noteId, body: text }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast('Could not send: ' + (data.error || 'unknown error'));
+        input.disabled = false;
+        return;
+      }
+      OPEN_REPLY_THREADS[noteId] = true;
+      await refreshNoteReplies();
+    } catch (e) {
+      showToast('Could not reach server');
+      input.disabled = false;
+    }
   }
 
   function renderRecipient() {
@@ -1786,6 +1888,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     // specific note fast.
     var dateLabel = formatNoteDate(noteSendDate(CURRENT_GIFT, note.order_index));
 
+    // Replying only makes sense once the recipient has actually seen the
+    // note — an unsent/future note has nothing for them to respond to
+    // yet, so the button (and the thread itself) only shows on locked
+    // (already-sent) rows. See replyThreadHtml/noteRowDiv below.
+    var replyCount = (NOTE_REPLIES[note.id] || []).length;
+    var replyBtn = locked
+      ? '<button class="btn btn-ghost btn-sm" onclick="toggleReplyThread(\'' + note.id + '\')">💬' + (replyCount ? ' ' + replyCount : '') + '</button>'
+      : '';
+
     return handle +
       '<div class="note-date-wrap">' +
         '<div class="note-date">' + esc(dateLabel) + '</div>' +
@@ -1794,6 +1905,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       thumb +
       '<div class="note-text-preview">' + pinTag + voiceTag + esc(note.text) + '</div>' +
       '<div class="note-actions">' +
+        replyBtn +
         '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
         '<button class="btn btn-danger btn-sm" onclick="deleteNote(\'' + note.id + '\')">✕</button>' +
       '</div>';
@@ -1802,7 +1914,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   function noteRowDiv(note, locked) {
     var pinned = !locked && !!note.locked_send_date;
     return '<div class="note-row' + (locked ? ' locked' : '') + (pinned ? ' pinned' : '') + '" data-note-id="' + note.id + '">' +
-      buildNoteRowHtml(note, locked) +
+      '<div class="note-row-main">' + buildNoteRowHtml(note, locked) + '</div>' +
+      (locked ? replyThreadHtml(note) : '') +
     '</div>';
   }
 
