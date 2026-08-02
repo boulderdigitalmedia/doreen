@@ -1890,10 +1890,18 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     // Replying only makes sense once the recipient has actually seen the
     // note — an unsent/future note has nothing for them to respond to
-    // yet, so the button (and the thread itself) only shows on locked
-    // (already-sent) rows. See replyThreadHtml/noteRowDiv below.
+    // yet. This is deliberately NOT the same test as `locked`: `locked`
+    // (order_index < TODAY_NOTE_INDEX) only covers strictly-past notes,
+    // so it stays false for today's own note even though that note has
+    // already gone out and gift.html already lets the recipient reply to
+    // it the moment it's delivered (see its `i > todayNoteIndex` guard,
+    // which — unlike `<` here — includes today). Using `<=` against
+    // TODAY_NOTE_INDEX instead matches that: today's note gets the reply
+    // button/thread too, while `locked` itself is untouched for its other
+    // job (drag-lock / pin styling in buildNoteRowHtml and noteRowDiv).
+    var replied = note.order_index <= TODAY_NOTE_INDEX;
     var replyCount = (NOTE_REPLIES[note.id] || []).length;
-    var replyBtn = locked
+    var replyBtn = replied
       ? '<button class="btn btn-ghost btn-sm" onclick="toggleReplyThread(\'' + note.id + '\')">💬' + (replyCount ? ' ' + replyCount : '') + '</button>'
       : '';
 
@@ -1913,9 +1921,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   function noteRowDiv(note, locked) {
     var pinned = !locked && !!note.locked_send_date;
+    // See buildNoteRowHtml's `replied` comment above — same reasoning,
+    // today's own note needs its thread rendered even though `locked`
+    // (order-lock) is false for it.
+    var replied = note.order_index <= TODAY_NOTE_INDEX;
     return '<div class="note-row' + (locked ? ' locked' : '') + (pinned ? ' pinned' : '') + '" data-note-id="' + note.id + '">' +
       '<div class="note-row-main">' + buildNoteRowHtml(note, locked) + '</div>' +
-      (locked ? replyThreadHtml(note) : '') +
+      (replied ? replyThreadHtml(note) : '') +
     '</div>';
   }
 
