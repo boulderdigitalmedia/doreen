@@ -829,7 +829,8 @@
     }
 
     .card-quick-actions .heart-btn,
-    .card-quick-actions .share-btn {
+    .card-quick-actions .share-btn,
+    .card-quick-actions .reply-btn {
       width: 36px; height: 36px;
       border-radius: 50%;
       background: rgba(255,255,255,0.92);
@@ -846,6 +847,20 @@
 
     .card-quick-actions .icon-heart { width: 17px; height: 17px; }
     .card-quick-actions .icon-share { width: 15px; height: 15px; }
+    .card-quick-actions .icon-reply { width: 16px; height: 16px; }
+
+    /* Hidden entirely on a locked (future) note — nothing to reply to
+       yet, see updateReplyBtn. Kept as its own class rather than reusing
+       .hidden so it doesn't collide with the peek-card visibility toggle
+       that class already does elsewhere. */
+    .reply-btn.reply-btn-hidden { display: none; }
+    .reply-btn { position: relative; }
+    .reply-btn-badge {
+      position: absolute; top: -3px; right: -3px;
+      min-width: 16px; height: 16px; padding: 0 3px;
+      border-radius: 8px; background: var(--sage); color: #fff;
+      font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;
+    }
 
     /* BOTTOM CONTROLS */
     .card-actions {
@@ -910,6 +925,15 @@
     .share-btn .icon-share { width: 25px; height: 25px; }
     .share-btn:active { transform: scale(0.92); }
     .share-btn.sharing { opacity: 0.5; pointer-events: none; }
+
+    .reply-btn {
+      background: none; border: none;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--ink-mid);
+      transition: color 0.2s, transform 0.15s;
+      line-height: 1;
+    }
+    .reply-btn:active { transform: scale(0.92); }
 
     @keyframes heartPop {
       0%   { transform: scale(1); }
@@ -1145,6 +1169,65 @@
       flex-shrink: 0; padding: 4px;
     }
     .fav-item-heart svg { display: block; width: 100%; height: 100%; }
+
+    /* REPLY DRAWER — same overlay/drawer shell as the favourites drawer
+       above, opened from the 💬 quick-action button. Shows the two-way
+       conversation on whichever note is currently front-facing; only
+       reachable on an unlocked (already-sent) note — see updateReplyBtn. */
+    .reply-overlay { display: none; position: fixed; inset: 0; background: rgba(44,58,46,0.35); z-index: 50; opacity: 0; transition: opacity 0.3s; }
+    .reply-overlay.open { display: block; opacity: 1; }
+
+    .reply-drawer {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      padding: 0 0 env(safe-area-inset-bottom);
+      max-height: 80svh;
+      display: flex; flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+      z-index: 51;
+    }
+    .reply-drawer.open { transform: translateY(0); }
+
+    .reply-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 20px 12px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .reply-title { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 300; }
+    .reply-close { background: none; border: none; font-size: 20px; color: var(--ink-soft); cursor: pointer; padding: 4px; }
+
+    .reply-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .reply-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 20px; color: var(--ink-soft); font-size: 14px; text-align: center; }
+
+    .reply-msg { max-width: 80%; padding: 9px 13px; border-radius: 14px; }
+    .reply-msg-meta { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 2px; }
+    .reply-msg-body { font-size: calc(15px * var(--text-scale)); color: var(--ink); line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+    /* From the recipient's own point of view here (this is gift.html):
+       their own messages sit on the right, in sage, mirroring the
+       buyer's messages sitting on the right in account.html — each
+       side sees "my messages" on the right, "theirs" on the left. */
+    .reply-msg-recipient { align-self: flex-end; background: var(--sage-pale); border: 1px solid var(--sage-light); border-bottom-right-radius: 4px; }
+    .reply-msg-buyer { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+
+    .reply-compose {
+      display: flex; gap: 10px; align-items: flex-end;
+      padding: 12px 20px; border-top: 1px solid var(--border);
+      flex-shrink: 0; background: var(--surface);
+    }
+    .reply-compose-input {
+      flex: 1; min-height: 40px; max-height: 120px; resize: none;
+      border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px;
+      font-family: inherit; font-size: calc(15px * var(--text-scale)); color: var(--ink);
+      background: var(--bg);
+    }
+    .reply-compose-input:focus { outline: none; border-color: var(--sage); }
+    .reply-send-btn {
+      background: var(--sage); color: #fff; border: none; border-radius: 12px;
+      padding: 0 18px; height: 40px; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;
+    }
+    .reply-send-btn:disabled { opacity: 0.5; cursor: default; }
 
     /* THUMBNAIL (GRID) VIEW — same #favList element, just re-laid-out and
        filled with a different item template when the grid toggle is on. */
@@ -2204,6 +2287,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <button class="heart-btn" id="heartBtn">
             <svg class="icon-svg icon-heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.716-4.35-9.428-8.279C.24 9.686 1.03 6 4.34 4.5 6.62 3.46 9.03 4.24 12 7.02c2.97-2.78 5.38-3.56 7.66-2.52 3.31 1.5 4.1 5.186 1.768 8.221C18.716 16.65 12 21 12 21z"/></svg>
           </button>
+          <button class="reply-btn" id="replyBtn" title="Reply to this note" aria-label="Reply to this note">
+            <svg class="icon-svg icon-reply" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+            <span class="reply-btn-badge" id="replyBtnBadge" style="display:none"></span>
+          </button>
           <button class="share-btn" id="shareBtn" title="Share this note" aria-label="Share this note">
             <svg class="icon-svg icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/>
@@ -2241,6 +2330,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <button class="install-close" id="installClose" aria-label="Dismiss">✕</button>
   </div>
 
+</div>
+
+<!-- REPLY DRAWER -->
+<div class="reply-overlay" id="replyOverlay"></div>
+<div class="reply-drawer" id="replyDrawer">
+  <div class="reply-header">
+    <span class="reply-title" id="replyDrawerTitle">Conversation</span>
+    <button class="reply-close" id="replyClose" aria-label="Close">✕</button>
+  </div>
+  <div class="reply-list" id="replyList"></div>
+  <div class="reply-compose">
+    <textarea class="reply-compose-input" id="replyComposeInput" placeholder="Write a reply…" rows="1"></textarea>
+    <button class="reply-send-btn" id="replySendBtn">Send</button>
+  </div>
 </div>
 
 <!-- FAVOURITES DRAWER -->
@@ -3687,6 +3790,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
+  // Reply bodies (see REPLIES section inside startApp below) are the only
+  // place this file builds HTML strings out of free-typed user content —
+  // everywhere else (note.text, etc.) goes through .textContent instead,
+  // which sidesteps escaping entirely. This is what keeps a message like
+  // "<img src=x onerror=...>" from doing anything but printing as text.
+  function escHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ── MAIN APP ─────────────────────────────────────────────────
 
   function startApp(gift, notes) {
@@ -3785,6 +3902,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var nextBtn        = document.getElementById('nextBtn');
     var heartBtn       = document.getElementById('heartBtn');
     var shareBtn       = document.getElementById('shareBtn');
+    var replyBtn       = document.getElementById('replyBtn');
+    var replyBtnBadge  = document.getElementById('replyBtnBadge');
+    var replyOverlay   = document.getElementById('replyOverlay');
+    var replyDrawer    = document.getElementById('replyDrawer');
+    var replyClose     = document.getElementById('replyClose');
+    var replyList      = document.getElementById('replyList');
+    var replyDrawerTitle = document.getElementById('replyDrawerTitle');
+    var replyComposeInput = document.getElementById('replyComposeInput');
+    var replySendBtn   = document.getElementById('replySendBtn');
     var lightboxShareBtn = document.getElementById('lightboxShareBtn');
     var favOpenBtn     = document.getElementById('favOpenBtn');
     var prefsOpenBtn   = document.getElementById('prefsOpenBtn');
@@ -4136,6 +4262,121 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       heartBtn.classList.toggle('favourited', added);
       updateFavCount();
       if (mainView === 'grid') renderMainGrid();
+    });
+
+    // ── REPLIES (two-way conversation, per note) ─────────────────
+    // Only reachable on an unlocked (already-sent) note — a locked/future
+    // one has nothing for the recipient to respond to yet (see
+    // slotVisible above, same idx > todayNoteIndex boundary). Reads go
+    // straight to Supabase via the anon key (note_reply_public_read in
+    // schema.sql, same trust boundary as reading the notes themselves);
+    // sending goes through submit-note-reply.js instead, so the buyer's
+    // email notification can fire in the same request — see that file.
+
+    var REPLY_CACHE = {};        // note id -> array of rows, refreshed on open/send
+    var replyDrawerNoteId = null; // which note the open drawer is currently showing
+
+    function updateReplyBtn(i) {
+      var locked = i > todayNoteIndex;
+      replyBtn.classList.toggle('reply-btn-hidden', locked);
+      if (locked) { replyBtnBadge.style.display = 'none'; return; }
+      var note = notes[i];
+      var cached = note && REPLY_CACHE[note.id];
+      var count = cached ? cached.length : 0;
+      replyBtnBadge.style.display = count ? 'block' : 'none';
+      replyBtnBadge.textContent = count;
+    }
+
+    function renderReplyList(replies) {
+      if (!replies.length) {
+        replyList.innerHTML = '<div class="reply-empty">No messages yet — say something below 💬</div>';
+        return;
+      }
+      replyList.innerHTML = replies.map(function(r) {
+        var when = new Date(r.created_at).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' }) +
+          ' · ' + new Date(r.created_at).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+        var who = r.sender === 'recipient' ? 'You' : (gift.sender_name || 'Your Favorite');
+        return '<div class="reply-msg reply-msg-' + (r.sender === 'recipient' ? 'recipient' : 'buyer') + '">' +
+          '<div class="reply-msg-meta">' + escHtml(who) + ' · ' + escHtml(when) + '</div>' +
+          '<div class="reply-msg-body">' + escHtml(r.body) + '</div>' +
+        '</div>';
+      }).join('');
+      replyList.scrollTop = replyList.scrollHeight;
+    }
+
+    async function openReplyDrawer() {
+      if (currentIndex > todayNoteIndex) return; // locked note — button is hidden, but guard anyway
+      var note = notes[currentIndex];
+      if (!note) return;
+
+      replyDrawerNoteId = note.id;
+      replyDrawerTitle.textContent = 'Note ' + (currentIndex + 1);
+      replyComposeInput.value = '';
+      replyOverlay.classList.add('open');
+      replyDrawer.classList.add('open');
+      replyList.innerHTML = '<div class="reply-empty">Loading…</div>';
+
+      const { data, error } = await sb
+        .from('note_replies')
+        .select('*')
+        .eq('note_id', note.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        replyList.innerHTML = '<div class="reply-empty">Couldn\'t load this conversation — try again.</div>';
+        return;
+      }
+
+      REPLY_CACHE[note.id] = data || [];
+      renderReplyList(REPLY_CACHE[note.id]);
+      updateReplyBtn(currentIndex);
+    }
+
+    function closeReplyDrawer() {
+      replyOverlay.classList.remove('open');
+      replyDrawer.classList.remove('open');
+      replyDrawerNoteId = null;
+    }
+
+    async function sendReplyMessage() {
+      var text = (replyComposeInput.value || '').trim();
+      if (!text || !replyDrawerNoteId) return;
+
+      replySendBtn.disabled = true;
+      replyComposeInput.disabled = true;
+
+      try {
+        var res = await fetch('/api/submit-note-reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: gift.slug, note_id: replyDrawerNoteId, body: text }),
+        });
+        var data = await res.json();
+
+        if (!res.ok) {
+          replyList.insertAdjacentHTML('beforeend', '<div class="reply-empty">Couldn\'t send: ' + escHtml(data.error || 'unknown error') + '</div>');
+          return;
+        }
+
+        (REPLY_CACHE[replyDrawerNoteId] = REPLY_CACHE[replyDrawerNoteId] || []).push(data.reply);
+        renderReplyList(REPLY_CACHE[replyDrawerNoteId]);
+        updateReplyBtn(currentIndex);
+        replyComposeInput.value = '';
+      } catch (e) {
+        replyList.insertAdjacentHTML('beforeend', '<div class="reply-empty">Couldn\'t reach the server — try again.</div>');
+      } finally {
+        replySendBtn.disabled = false;
+        replyComposeInput.disabled = false;
+        replyComposeInput.focus();
+      }
+    }
+
+    replyBtn.addEventListener('click', openReplyDrawer);
+    replyClose.addEventListener('click', closeReplyDrawer);
+    replyOverlay.addEventListener('click', closeReplyDrawer);
+    replySendBtn.addEventListener('click', sendReplyMessage);
+    replyComposeInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReplyMessage(); }
     });
 
     // ── MAIN DISPLAY VIEW (card / grid) ────────────────────────
@@ -4607,6 +4848,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     function syncControls() {
       updateHeartBtn(currentIndex);
+      updateReplyBtn(currentIndex);
       var isToday = currentIndex === todayNoteIndex;
       todayRibbonEl.style.display = isToday ? 'block' : 'none';
       dayBadgeEl.textContent      = 'Note ' + (currentIndex+1);
