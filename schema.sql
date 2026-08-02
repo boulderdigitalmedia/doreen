@@ -1186,3 +1186,64 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 ALTER FUNCTION anchor_term_from_gift_start() SET search_path = public, pg_temp;
+
+-- ══════════════════════════════════════════════════════════════
+-- RECIPIENT REPLIES — two-way conversation, threaded per note
+-- Run this block against an existing database to add support for the
+-- recipient responding to a specific note, and the buyer replying back,
+-- right in the app (account.html / gift.html). Each note gets its own
+-- thread — this is not one big gift-wide chat.
+--
+-- Reads are open to both sides via RLS, same trust boundary as notes
+-- themselves (note_public_read/note_owner_all): the buyer reads/writes
+-- directly as an authenticated user; the recipient (anon, no login)
+-- can read directly too. WRITES from the recipient side deliberately do
+-- NOT get an anon RLS policy, unlike recipients_public_upsert — they go
+-- through submit-note-reply.js instead (service-role key), so the
+-- buyer's email notification fires in the same request as the insert.
+-- Buyer-side sends also go through a function (send-note-reply.js)
+-- rather than a direct client insert, for the same reason: the
+-- recipient's notification (push/email/sms, matching however they
+-- already receive notes) needs to fire somewhere, and there's no
+-- database trigger wired up to call out to Resend/Twilio/web-push.
+-- ══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS note_replies (
+  id         UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  note_id    UUID        NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  gift_id    UUID        NOT NULL REFERENCES gifts(id) ON DELETE CASCADE, -- denormalized off notes.gift_id at insert time, purely so RLS/queries don't need a join through notes
+  sender     TEXT        NOT NULL CHECK (sender IN ('buyer', 'recipient')),
+  body       TEXT        NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_replies_note ON note_replies(note_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_note_replies_gift ON note_replies(gift_id);
+
+ALTER TABLE note_replies ENABLE ROW LEVEL SECURITY;
+
+-- Buyers can read (and, in principle, directly delete/edit) every reply
+-- on their own gifts — mirrors note_owner_all. In practice account.html
+-- only ever reads through this policy; sending a new buyer message goes
+-- through send-note-reply.js instead (see header comment above).
+DROP POLICY IF EXISTS "note_reply_owner_all" ON note_replies;
+CREATE POLICY "note_reply_owner_all" ON note_replies
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM gifts WHERE gifts.id = note_replies.gift_id AND gifts.user_id = auth.uid())
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM gifts WHERE gifts.id = note_replies.gift_id AND gifts.user_id = auth.uid())
+  );
+
+-- Recipients (anon) can read the thread on any note belonging to a gift
+-- that's still active/cancelled — same status gate as note_public_read.
+-- No anon INSERT policy on purpose (see header comment).
+DROP POLICY IF EXISTS "note_reply_public_read" ON note_replies;
+CREATE POLICY "note_reply_public_read" ON note_replies
+  FOR SELECT TO anon
+  USING (
+    EXISTS (SELECT 1 FROM gifts
+            WHERE gifts.id = note_replies.gift_id
+            AND   gifts.status IN ('active', 'cancelled'))
+  );
