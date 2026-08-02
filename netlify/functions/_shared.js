@@ -795,6 +795,98 @@ async function sendGiftNotifications(gift, force = false) {
   return { sent: true, noteNum, results };
 }
 
+// ── Note-reply notifications ────────────────────────────────────
+// Two directions for the same thread (see the RECIPIENT REPLIES block in
+// schema.sql, submit-note-reply.js and send-note-reply.js). The recipient
+// has no account to check channel preferences on, so a recipient reply
+// always notifies the buyer by email (they're already signed in and
+// checking account.html). A buyer reply notifies the recipient on
+// whichever channels they already get notes on (push/email/sms), same
+// gating as sendGiftNotifications above. Both are called fire-and-forget
+// from their respective functions — the reply is already saved in
+// note_replies by the time either of these runs, so a notification hiccup
+// here must never bubble up as a failed send. Every branch is caught
+// internally for that reason — callers do not (and should not) wrap
+// these in their own try/catch.
+
+async function sendRecipientReplyEmail(gift, note, msgBody) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(gift.user_id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for reply notification, gift ${gift.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+    const preview = msgBody.length > 200 ? msgBody.substring(0, 197) + '…' : msgBody;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `💬 New reply on "${gift.display_name}"`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Your recipient replied to a note on <strong>${gift.display_name}</strong>:</p>
+        <div style="background:#f4f7f2;border-radius:10px;padding:16px;margin:16px 0;font-size:15px;font-style:italic;">"${preview}"</div>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Reply from your dashboard →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send recipient-reply email for gift ${gift.id}:`, err.message);
+  }
+}
+
+async function sendBuyerReplyNotification(gift, recipient, note, msgBody) {
+  if (!recipient || !recipient.channels || recipient.channels.length === 0) return;
+
+  const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}`;
+  const preview = msgBody.length > 100 ? msgBody.substring(0, 97) + '…' : msgBody;
+
+  if (recipient.channels.includes('push') && recipient.push_subscription) {
+    try {
+      const payload = JSON.stringify({
+        title: `💬 ${gift.sender_name || 'Your Favorite'} replied`,
+        body:  preview,
+        url:   giftUrl,
+      });
+      await webpush.sendNotification(recipient.push_subscription, payload);
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        await sb.from('recipients')
+          .update({ push_subscription: null, channels: recipient.channels.filter(c => c !== 'push') })
+          .eq('id', recipient.id);
+      } else {
+        console.error(`Failed to push buyer-reply notification for gift ${gift.id}:`, err.message);
+      }
+    }
+  }
+
+  if (recipient.channels.includes('email') && recipient.email) {
+    try {
+      await resend.emails.send({
+        from:    buildFrom(`A Note For You From ${gift.sender_name || 'Your Favorite'}`),
+        to:      recipient.email,
+        subject: `💬 ${gift.sender_name || 'Your Favorite'} replied to your message`,
+        html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+          <p style="font-size:16px;"><strong>${gift.sender_name || 'Your Favorite'}</strong> replied to your message:</p>
+          <div style="background:#f4f7f2;border-radius:10px;padding:16px;margin:16px 0;font-size:15px;font-style:italic;">"${preview}"</div>
+          <p><a href="${giftUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Read and reply →</a></p>
+        </div>`,
+      });
+    } catch (err) {
+      console.error(`Failed to email buyer-reply notification for gift ${gift.id}:`, err.message);
+    }
+  }
+
+  if (recipient.channels.includes('sms') && gift.sms_addon && recipient.phone) {
+    try {
+      await sendSms(recipient.phone, `💚 ${gift.sender_name || 'Your Favorite'} replied: "${preview}" — ${giftUrl}`);
+    } catch (err) {
+      console.error(`Failed to SMS buyer-reply notification for gift ${gift.id}:`, err.message);
+    }
+  }
+}
+
 // ── HTTP helpers ─────────────────────────────────────────────────
 
 const corsHeaders = {
@@ -821,6 +913,8 @@ module.exports = {
   sendRenewalReminderEmail,
   sendGiftSetupReminderEmail,
   sendReengagementEmail,
+  sendRecipientReplyEmail,
+  sendBuyerReplyNotification,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
