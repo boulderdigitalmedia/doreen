@@ -40,8 +40,9 @@ const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_R
 // Flat rate any add-on gift rebills at on renewal, regardless of which
 // discounted tier it was originally bought at (spec: "billed at the
 // full $20/year rate — regardless of the discounted tier rate
-// originally paid").
-const ADDON_RENEWAL_PRICE = 20;
+// originally paid"). gift_pack add-ons rebill at gift_pack's own flat
+// $14 rate instead — see create-addon-checkout.js.
+const ADDON_RENEWAL_PRICE = { annual: 20, gift_pack: 14 };
 
 // Neither plan has a Stripe subscription behind it any more, so the SMS
 // add-on is always a flat one-time charge per gift on renewal — matching
@@ -306,11 +307,12 @@ async function handleOneTimePlanPurchase(session, plan) {
 }
 
 // Handles the $45 upgrade-from-gift_pack-to-annual checkout. Only ever
-// reachable for a buyer create-checkout.js already verified was on an
-// active, unexpired 'gift_pack' plan at the moment the session was
-// created — this does NOT re-check that here, since the payment has
-// already succeeded by the time this webhook fires; the eligibility
-// check only matters before money changes hands.
+// reachable for a buyer create-checkout.js already verified was (or
+// still is) on the 'gift_pack' plan at the moment the session was
+// created — this offer never expires, even after their 30-day term has
+// lapsed. Doesn't re-check that here, since the payment has already
+// succeeded by the time this webhook fires; the eligibility check only
+// matters before money changes hands.
 //
 // Grants a full fresh 365-day annual term starting now (not just the
 // remaining days left on the old gift pack) — the $45 price already
@@ -450,11 +452,13 @@ async function handleNewTermStarted(profileId, stripeCustomerId, plan) {
     .in('gift_type', ['included', 'referral']);
 
   // Any add-on still active from the old term carries over automatically,
-  // rebilled at the flat $20 renewal rate regardless of its original
-  // tier. A gift that already lapsed to 'cancelled' before this renewal
-  // (e.g. the base term had a gap before this fresh checkout) is NOT
-  // resurrected here — only ones still active right up to the renewal
-  // qualify, per spec's "any active add-on gift carries over."
+  // rebilled at a flat renewal rate per plan (see ADDON_RENEWAL_PRICE)
+  // regardless of its original tier. A gift that already lapsed to
+  // 'cancelled' before this renewal (e.g. the base term had a gap before
+  // this fresh checkout) is NOT resurrected here — only ones still
+  // active right up to the renewal qualify, per spec's "any active
+  // add-on gift carries over."
+  const addonRenewalPrice = ADDON_RENEWAL_PRICE[plan] || ADDON_RENEWAL_PRICE.annual;
   const { data: addons } = await sb
     .from('gifts')
     .select('id')
@@ -464,21 +468,21 @@ async function handleNewTermStarted(profileId, stripeCustomerId, plan) {
 
   for (const addon of addons || []) {
     try {
-      const paid = await chargeOneTimeFee(stripeCustomerId, ADDON_RENEWAL_PRICE, 'Add-on gift renewal');
+      const paid = await chargeOneTimeFee(stripeCustomerId, addonRenewalPrice, 'Add-on gift renewal');
       if (paid) {
         await sb.from('gifts').update({
           term_end_date:    newTermEndISO,
-          addon_tier_price: ADDON_RENEWAL_PRICE,
+          addon_tier_price: addonRenewalPrice,
         }).eq('id', addon.id);
-        await logEvent(profileId, stripeCustomerId, 'addon_renewal', 'addon', ADDON_RENEWAL_PRICE);
+        await logEvent(profileId, stripeCustomerId, 'addon_renewal', 'addon', addonRenewalPrice);
       } else {
         await sb.from('gifts').update({ status: 'cancelled' }).eq('id', addon.id);
-        await logEvent(profileId, stripeCustomerId, 'payment_failed', 'addon', ADDON_RENEWAL_PRICE);
+        await logEvent(profileId, stripeCustomerId, 'payment_failed', 'addon', addonRenewalPrice);
       }
     } catch (e) {
       console.error('Add-on renewal charge failed for gift', addon.id, e.message);
       await sb.from('gifts').update({ status: 'cancelled' }).eq('id', addon.id);
-      await logEvent(profileId, stripeCustomerId, 'payment_failed', 'addon', ADDON_RENEWAL_PRICE);
+      await logEvent(profileId, stripeCustomerId, 'payment_failed', 'addon', addonRenewalPrice);
     }
   }
 

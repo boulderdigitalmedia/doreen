@@ -20,14 +20,14 @@
 //               term. Doesn't auto-renew either — a returning buyer just
 //               checks out again for a new term.
 //
-//   upgrade   — $45, ONLY available to a buyer whose current plan is
-//               'gift_pack' and whose 30-day term hasn't lapsed yet (see
-//               eligibility check below). Converts them straight to a
-//               fresh 365-day annual term for $45 instead of the full
-//               $59 — effectively crediting the $14 they already paid
-//               for the gift pack. stripe-webhook.js's
-//               handleUpgradeToAnnual is what actually applies this once
-//               payment succeeds.
+//   upgrade   — $45, available to ANY buyer whose plan is (or was)
+//               'gift_pack' — this option never expires, even once their
+//               30-day term has lapsed (see eligibility check below).
+//               Converts them straight to a fresh 365-day annual term for
+//               $45 instead of the full $59 — effectively crediting the
+//               $14 they already paid for the gift pack.
+//               stripe-webhook.js's handleUpgradeToAnnual is what
+//               actually applies this once payment succeeds.
 //
 // Both real plans (not the upgrade) include exactly 1 gift. Additional
 // gifts are purchased separately, one at a time, through
@@ -90,14 +90,16 @@ exports.handler = async (event) => {
     .maybeSingle();
 
   if (plan === 'upgrade') {
-    // Only a currently-active gift_pack buyer, still within their 30-day
-    // term, gets the discounted $45 upgrade price — see the file header
-    // comment for why. Anyone else (no gift pack at all, or one that's
-    // already lapsed) has to pay full price for a fresh annual term
-    // instead, via plan: 'annual'.
-    const stillWithinTerm = profile?.access_term_end && new Date(profile.access_term_end).getTime() > Date.now();
-    if (!profile || profile.plan !== 'gift_pack' || profile.stripe_status !== 'active' || !stillWithinTerm) {
-      return err('The $45 upgrade price is only available while your 30-Day Gift Pack is still active. Once it lapses, a new annual term is $59.', 409);
+    // Any buyer whose plan is (or was) 'gift_pack' gets the discounted
+    // $45 upgrade price — this option never expires, even once their
+    // 30-day term has lapsed (sweepExpiredOneTimeTerms in send-daily.js
+    // only flips stripe_status to 'canceled' on lapse, it never touches
+    // profiles.plan, so this check still matches a lapsed gift_pack
+    // buyer). Anyone who was never on gift_pack at all (no plan yet, or
+    // already on annual) doesn't qualify — a fresh annual term for them
+    // is the full $59, via plan: 'annual'.
+    if (!profile || profile.plan !== 'gift_pack') {
+      return err('The $45 upgrade price is only available to buyers who purchased a 30-Day Gift Pack.', 409);
     }
   } else if (profile?.stripe_status === 'active') {
     // Already an active buyer on a real plan — nothing to check out for

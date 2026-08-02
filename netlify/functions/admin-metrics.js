@@ -29,12 +29,12 @@
 //
 // Gift add-ons and the SMS add-on are both one-time Stripe payments (see
 // create-addon-checkout.js and update-sms-addon.js), not recurring line
-// items, so they're added back in separately as flat assumptions: every
-// currently-active add-on gift renews at $20/yr (stripe-webhook.js
-// enforces exactly that) — so it contributes $20/12 a month. SMS renews
-// at a flat rate per plan (stripe-webhook.js's chargeSmsAddonCarryoverOneTime):
-// $20/yr for annual (→ $20/12 a month) and $2 per gift_pack term (→ $2 a
-// month, no /12, same reasoning as GIFT_PACK_PRICE above).
+// items, so they're added back in separately as flat assumptions, priced
+// per plan to match what stripe-webhook.js actually rebills on renewal:
+// add-ons at $20/yr for annual (→ $20/12 a month) or $14 per gift_pack
+// term (→ $14 a month, no /12); SMS at $20/yr for annual (→ $20/12 a
+// month) or $2 per gift_pack term (→ $2 a month, no /12) — same
+// reasoning as GIFT_PACK_PRICE above for why gift_pack skips the /12.
 
 const { sb, ok, err, preflight } = require('./_shared');
 
@@ -43,7 +43,7 @@ const { sb, ok, err, preflight } = require('./_shared');
 // that neither plan has a real subscription/invoice to look up in Stripe.
 const ANNUAL_PRICE      = 59;
 const GIFT_PACK_PRICE   = 14;
-const ADDON_RENEWAL_PRICE = 20; // flat renewal rate for any add-on gift
+const ADDON_RENEWAL_PRICE = { annual: 20, gift_pack: 14 }; // flat renewal rate per plan (see stripe-webhook.js)
 const SMS_RENEWAL_PRICE = { annual: 20, gift_pack: 2 }; // flat renewal rate per plan (see update-sms-addon.js)
 
 const EVENTS_WINDOW_DAYS = 180;
@@ -145,34 +145,26 @@ exports.handler = async (event) => {
     return sum;
   }, 0);
 
-  // Add-on gifts are one-time purchases, not subscription line items, so
-  // they're not part of any subscription's upcoming invoice — estimated
-  // separately here instead (see the comment above this file's constants).
-  const { count: activeAddonCount } = await sb
-    .from('gifts')
-    .select('id', { count: 'exact', head: true })
-    .eq('gift_type', 'addon')
-    .eq('status', 'active');
-
-  // Same idea for the SMS add-on — also a one-time charge now (on either
-  // plan), so it's invisible to any invoice-preview lookup and has to be
-  // estimated the same way add-on gifts are. Counted per plan since each
-  // renews at a different flat rate (see SMS_RENEWAL_PRICE above).
-  async function smsCountForPlan(plan) {
+  // Add-on gifts and the SMS add-on are both one-time purchases, not
+  // subscription line items, so they're not part of any subscription's
+  // upcoming invoice — estimated separately here instead (see the
+  // comment above this file's constants). Both are counted per plan
+  // since each renews at a different flat rate.
+  async function countForPlan(table, extraFilter, plan) {
     const ids = billableProfiles.filter((p) => p.plan === plan).map((p) => p.id);
     if (ids.length === 0) return 0;
-    const { count } = await sb
-      .from('gifts')
-      .select('id', { count: 'exact', head: true })
-      .eq('sms_addon', true)
-      .eq('status', 'active')
-      .in('user_id', ids);
+    let query = sb.from(table).select('id', { count: 'exact', head: true }).eq('status', 'active').in('user_id', ids);
+    query = extraFilter(query);
+    const { count } = await query;
     return count || 0;
   }
-  const annualSmsCount   = await smsCountForPlan('annual');
-  const giftPackSmsCount = await smsCountForPlan('gift_pack');
+  const annualAddonCount   = await countForPlan('gifts', (q) => q.eq('gift_type', 'addon'), 'annual');
+  const giftPackAddonCount = await countForPlan('gifts', (q) => q.eq('gift_type', 'addon'), 'gift_pack');
+  const annualSmsCount     = await countForPlan('gifts', (q) => q.eq('sms_addon', true), 'annual');
+  const giftPackSmsCount   = await countForPlan('gifts', (q) => q.eq('sms_addon', true), 'gift_pack');
+  const activeAddonCount   = annualAddonCount + giftPackAddonCount;
 
-  const addonRevenueEstimate = ((activeAddonCount || 0) * ADDON_RENEWAL_PRICE) / 12;
+  const addonRevenueEstimate = (annualAddonCount * ADDON_RENEWAL_PRICE.annual) / 12 + (giftPackAddonCount * ADDON_RENEWAL_PRICE.gift_pack);
   const smsRevenueEstimate   = (annualSmsCount * SMS_RENEWAL_PRICE.annual) / 12 + (giftPackSmsCount * SMS_RENEWAL_PRICE.gift_pack);
   const mrr = Math.round((baseMrr + addonRevenueEstimate + smsRevenueEstimate) * 100) / 100;
 

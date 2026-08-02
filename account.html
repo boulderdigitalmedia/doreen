@@ -553,11 +553,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <div class="paywall-title">Start sending love</div>
       <div class="paywall-sub">A one-time payment, no subscription. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
 
+      <div id="paywallUpgradeBanner" style="display:none;background:var(--sage-pale);border-radius:10px;padding:14px 16px;margin:0 0 20px;text-align:left;">
+        <div style="font-weight:500;margin-bottom:4px;">🎁 Welcome back</div>
+        <div style="font-size:16px;color:var(--ink-mid);margin-bottom:10px;">You previously had a 30-Day Gift Pack — you can upgrade straight to the annual plan for $45 instead of the full $59, any time (this offer never expires).</div>
+        <button class="btn btn-gold btn-sm" onclick="startUpgradeCheckout()" id="paywallUpgradeBtn">Upgrade to annual — $45 →</button>
+      </div>
+
       <div class="pricing-grid">
         <div class="pricing-card" id="planGiftPack" onclick="selectPlan('gift_pack')">
           <div class="pricing-name">30-Day Gift Pack</div>
           <div class="pricing-price">$14<span>one-time</span></div>
-          <div class="pricing-desc">30 days of delivery. No auto-renewal — upgrade to annual for $45 any time it's active.</div>
+          <div class="pricing-desc">30 days of delivery. No auto-renewal — upgrade to annual for $45 any time, even after it ends.</div>
         </div>
         <div class="pricing-card selected" id="planAnnual" onclick="selectPlan('annual')">
           <div class="pricing-badge">Best value</div>
@@ -568,7 +574,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
 
       <p style="font-size:16px;color:var(--ink-mid);background:var(--sage-pale);border-radius:10px;padding:10px 14px;margin:4px 0 20px;line-height:1.5;">
-        🎁 Both plans are a single one-time payment — not a subscription, so there's nothing to cancel and nothing auto-renews. The 30-Day Gift Pack is a low-commitment way to try it out: upgrade to the full annual plan for $45 (instead of $59) any time before your 30 days run out. SMS delivery is a separate paid add-on: $2 flat on the gift pack, or a term-based rate on annual.
+        🎁 Both plans are a single one-time payment — not a subscription, so there's nothing to cancel and nothing auto-renews. The 30-Day Gift Pack is a low-commitment way to try it out: upgrade to the full annual plan for $45 (instead of $59) any time — this offer never expires, even after your 30 days run out. SMS delivery is a separate paid add-on: $2 flat on the gift pack, or a term-based rate on annual. Extra gifts are $14 flat on the gift pack, or a term-based rate on annual.
       </p>
 
       <div class="feature-list">
@@ -1134,6 +1140,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     document.getElementById('viewPaywall').style.display = 'block';
     document.getElementById('viewGifts').style.display   = 'none';
     document.getElementById('viewDetail').style.display  = 'none';
+
+    // A buyer landing back at the paywall whose plan is (still, or was)
+    // 'gift_pack' — most commonly a lapsed gift pack, since an active one
+    // routes to showGiftList() instead — gets the standing $45 upgrade
+    // offer surfaced here too (see startUpgradeCheckout's header comment
+    // for why this never expires).
+    document.getElementById('paywallUpgradeBanner').style.display =
+      (PROFILE && PROFILE.plan === 'gift_pack') ? 'block' : 'none';
   }
 
   function selectPlan(plan) {
@@ -1172,12 +1186,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
 
   // Upgrade from the 30-Day Gift Pack to annual for $45 (instead of the
-  // full $59) — only shown/enabled while the buyer's gift pack is still
-  // active (see renderUpgradeBanner). create-checkout.js re-validates
-  // eligibility server-side regardless of what the UI shows.
+  // full $59) — available to any gift_pack buyer, active or lapsed, and
+  // shown from two different places depending on which view they're on
+  // (renderUpgradeBanner for the gift-list view, showPaywall for a
+  // lapsed buyer back at the paywall) — both buttons share this handler.
+  // create-checkout.js re-validates eligibility server-side regardless
+  // of what the UI shows.
   async function startUpgradeCheckout() {
-    var btn = document.getElementById('upgradeBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Redirecting to checkout…'; }
+    var buttons = [document.getElementById('upgradeBtn'), document.getElementById('paywallUpgradeBtn')].filter(Boolean);
+    buttons.forEach(function(btn) { btn.disabled = true; btn.textContent = 'Redirecting to checkout…'; });
     try {
       var res  = await fetch('/api/create-checkout', {
         method: 'POST',
@@ -1192,11 +1209,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         window.location.href = data.url;
       } else {
         showToast('Error: ' + (data.error || 'Could not start checkout'));
-        if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to annual — $45 →'; }
+        buttons.forEach(function(btn) { btn.disabled = false; btn.textContent = 'Upgrade to annual — $45 →'; });
       }
     } catch (e) {
       showToast('Could not reach server');
-      if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to annual — $45 →'; }
+      buttons.forEach(function(btn) { btn.disabled = false; btn.textContent = 'Upgrade to annual — $45 →'; });
     }
   }
 
@@ -1242,22 +1259,27 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     if (e.key === 'Escape') toggleHeaderMenu(true);
   });
 
-  // Shows the "upgrade to annual for $45" banner only while the buyer is
-  // actively on the gift_pack plan and their 30-day term hasn't lapsed —
-  // matches create-checkout.js's server-side eligibility check for
-  // plan: 'upgrade' exactly, so the button never shows when the upgrade
-  // request would actually be rejected.
+  // Shows the "upgrade to annual for $45" banner for any buyer whose
+  // plan is 'gift_pack' — matches create-checkout.js's server-side
+  // eligibility check for plan: 'upgrade' exactly. This offer never
+  // expires, even once the buyer's 30-day term has lapsed (their
+  // stripe_status flips to 'canceled' on lapse, but plan stays
+  // 'gift_pack' — see sweepExpiredOneTimeTerms in send-daily.js), so the
+  // banner stays up either way, with different copy depending on whether
+  // their term is still running.
   function renderUpgradeBanner() {
     var banner = document.getElementById('upgradeBanner');
     var detail = document.getElementById('upgradeBannerDetail');
-    var eligible = PROFILE && PROFILE.plan === 'gift_pack' && PROFILE.stripe_status === 'active' &&
+    if (!PROFILE || PROFILE.plan !== 'gift_pack') { banner.style.display = 'none'; return; }
+
+    var stillActive = PROFILE.stripe_status === 'active' &&
       PROFILE.access_term_end && new Date(PROFILE.access_term_end).getTime() > Date.now();
 
-    if (!eligible) { banner.style.display = 'none'; return; }
-
     banner.style.display = 'flex';
-    detail.textContent = 'Upgrade any time before ' + new Date(PROFILE.access_term_end).toLocaleDateString() +
-      ' for $45 instead of the full $59 annual price.';
+    detail.textContent = stillActive
+      ? 'Upgrade any time before ' + new Date(PROFILE.access_term_end).toLocaleDateString() +
+        ' — or after — for $45 instead of the full $59 annual price.'
+      : 'Your gift pack has ended, but you can still upgrade to annual for $45 instead of the full $59.';
   }
 
   // ── GIFT LIST ─────────────────────────────────────────────────
@@ -1418,10 +1440,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     return tier ? tier.label + ' one-time' : 'renew to enable';
   }
 
-  // Returns { price, label } for the next add-on gift's tier, or null if
-  // purchases are currently closed (too close to term end — renew first).
+  // Returns { price, label } for the next add-on gift, or null if
+  // purchases are currently closed (too close to term end — renew
+  // first). gift_pack: flat $14, no tiering — the annual tiers' 45-day
+  // minimum can never be satisfied by a 30-day gift pack term (see
+  // create-addon-checkout.js), so it just needs the term to still be
+  // active at all.
   function addonTierInfo() {
     var days = daysRemainingInTerm();
+    if (PROFILE && PROFILE.plan === 'gift_pack') {
+      return (days != null && days > 0) ? { price: 14, label: '$14' } : null;
+    }
     if (days == null || days < ADDON_CLOSED_UNDER_DAYS) return null;
     if (days <= ADDON_LOW_TIER_MAX_DAYS) return { price: 10, label: '$10' };
     if (days <= ADDON_MID_TIER_MAX_DAYS) return { price: 15, label: '$15' };
