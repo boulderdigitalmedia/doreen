@@ -79,8 +79,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   id                     UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   stripe_customer_id     TEXT,
   stripe_subscription_id TEXT,
-  stripe_status          TEXT,        -- active | trialing | past_due | canceled
-  plan                   TEXT,        -- monthly | annual
+  stripe_status          TEXT,        -- active | past_due | canceled (legacy rows may say trialing)
+  plan                   TEXT,        -- gift_pack | annual (legacy rows may say installment/monthly)
   current_period_end     TIMESTAMPTZ,
   extra_gift_slots       INTEGER     NOT NULL DEFAULT 0, -- paid add-on gift slots beyond the
                                                           -- 2 included in the base subscription —
@@ -351,7 +351,7 @@ CREATE TABLE IF NOT EXISTS subscription_events (
   stripe_customer_id TEXT,
   event_type        TEXT        NOT NULL
                                 CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed')),
-  plan              TEXT,        -- monthly | annual, at time of event
+  plan              TEXT,        -- gift_pack | annual, at time of event (legacy rows may say installment/monthly)
   amount            NUMERIC,     -- dollars, where known (e.g. renewal invoice amount)
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -1116,3 +1116,73 @@ ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_send_date DATE;
 -- majority) aren't affected at all.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_locked_send_date_unique
   ON notes(gift_id, locked_send_date) WHERE locked_send_date IS NOT NULL;
+
+-- ══════════════════════════════════════════════════════════════
+-- PRICING UPDATE — 30-Day Gift Pack replaces the $4.50/mo installment
+-- plan; annual moves from $45 to $59; new $45 upgrade path from gift
+-- pack to annual. Safe to re-run.
+--
+--   gift_pack — $14, one-time payment, 30-day term. Replaces the old
+--     'installment' plan value (there were no active installment
+--     subscribers at the time of this migration, so no data migration
+--     was needed for existing rows).
+--   annual    — unchanged mechanically, just $59 instead of $45 (a new
+--     Stripe Price object, since Stripe prices are immutable — the
+--     STRIPE_ANNUAL_PRICE_ID env var just points at the new one now).
+--   upgrade   — a new one-time $45 charge, only offered to a buyer
+--     currently on an active, unexpired 'gift_pack' term (see
+--     create-checkout.js's plan: 'upgrade'), converting them straight to
+--     a fresh 365-day annual term.
+--
+-- Neither plan has a free trial any more either — both are charged
+-- immediately at checkout (see create-checkout.js) — so
+-- profiles.trial_ends_at / trial_charge_attempts and the
+-- process-annual-trials.js scheduled function they powered are no
+-- longer used by any live code path. Left in place rather than dropped,
+-- matching this file's existing "don't lose historical data" pattern
+-- for retired columns (see profiles.extra_gift_slots above).
+-- ══════════════════════════════════════════════════════════════
+
+-- New 'upgrade' event type, logged once by stripe-webhook.js's
+-- handleUpgradeToAnnual when a gift_pack buyer pays the discounted $45
+-- to move to annual.
+ALTER TABLE subscription_events DROP CONSTRAINT IF EXISTS subscription_events_event_type_check;
+ALTER TABLE subscription_events ADD CONSTRAINT subscription_events_event_type_check
+  CHECK (event_type IN ('enrollment','renewal','cancellation','payment_failed',
+                         'addon_purchase','addon_renewal','early_cancellation',
+                         'sms_purchase','sms_renewal','referral_reward','upgrade'));
+
+-- Supersedes anchor_term_from_gift_start (originally defined in the
+-- PRICING OVERHAUL block, extended in the REFERRAL PROGRAM block above)
+-- so a fresh term's length depends on which plan the buyer is actually
+-- on: 30 days for gift_pack, 365 days for everyone else (annual, and any
+-- legacy profile whose plan value predates this migration). Same
+-- CREATE OR REPLACE-in-place pattern as those earlier versions — the
+-- trigger itself doesn't need to change since it already calls this
+-- function by name.
+CREATE OR REPLACE FUNCTION anchor_term_from_gift_start()
+RETURNS TRIGGER AS $$
+DECLARE
+  existing_start TIMESTAMPTZ;
+  buyer_plan     TEXT;
+  term_days      INTEGER;
+BEGIN
+  IF NEW.gift_type IN ('included', 'referral') THEN
+    SELECT term_start_date, plan INTO existing_start, buyer_plan FROM profiles WHERE id = NEW.user_id;
+
+    IF existing_start IS NULL THEN
+      term_days := CASE WHEN buyer_plan = 'gift_pack' THEN 30 ELSE 365 END;
+      UPDATE profiles
+      SET term_start_date = NEW.start_date::timestamptz,
+          access_term_end = NEW.start_date::timestamptz + make_interval(days => term_days),
+          renewal_reminder_sent_at = NULL
+      WHERE id = NEW.user_id;
+    END IF;
+
+    SELECT access_term_end INTO NEW.term_end_date FROM profiles WHERE id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+ALTER FUNCTION anchor_term_from_gift_start() SET search_path = public, pg_temp;

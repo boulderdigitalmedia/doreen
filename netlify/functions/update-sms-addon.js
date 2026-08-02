@@ -2,34 +2,29 @@
 // Body: { giftId, enabled }
 // Header: Authorization: Bearer <supabase_access_token>
 //
-// Toggles the SMS add-on for one gift. Billing mechanism depends on the
-// buyer's plan, since the annual plan is now a one-time payment with no
-// Stripe subscription behind it (see create-checkout.js) — there's
-// nothing to attach a recurring item to for those buyers anymore:
+// Toggles the SMS add-on for one gift. Neither plan has a Stripe
+// subscription behind it (see create-checkout.js — both are one-time
+// payments), so this is always a flat one-time charge, never a recurring
+// line item:
 //
-//   installment — unchanged. The buyer's subscription gets ONE recurring
-//     add-on line item, priced at $2/mo, whose quantity equals how many
-//     of the buyer's gifts currently have SMS enabled. Toggling a gift
-//     on/off just adjusts that quantity (or creates/removes the item at
-//     0 → 1 / 1 → 0), billed via proration_behavior: 'always_invoice' so
-//     the buyer is charged/credited immediately rather than it sitting
-//     as a pending line item until whenever their next cycle happens.
-//
-//   annual — a flat one-time charge instead, tiered by how much of the
+//   annual    — a flat one-time charge, tiered by how much of the
 //     current term is left (same CLOSED_UNDER_DAYS/LOW/MID tiers
 //     create-addon-checkout.js uses for add-on gifts, since there's no
-//     Stripe proration to lean on for a one-time charge). Turning SMS
-//     off is free (no refund, matches the site's non-refundable
-//     policy) — only turning it ON charges anything. Renewals are
-//     handled separately, by stripe-webhook.js's
-//     chargeSmsAddonCarryoverOneTime.
+//     Stripe proration to lean on for a one-time charge).
+//
+//   gift_pack — a flat $2 one-time charge, no tiering — its 30-day term
+//     is too short for the annual tiers' 45-day minimum to ever apply,
+//     so it gets its own single flat price instead.
+//
+// Turning SMS off is free either way (no refund, matches the site's
+// non-refundable policy) — only turning it ON charges anything.
+// Renewals are handled separately, by stripe-webhook.js's
+// chargeSmsAddonCarryoverOneTime.
 
 const Stripe = require('stripe');
 const { sb, ok, err, preflight } = require('./_shared');
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-const SMS_ADDON_MONTHLY_PRICE_ID = process.env.STRIPE_SMS_ADDON_PRICE_ID;
-const SMS_ADDON_ANNUAL_PRICE_ID  = process.env.STRIPE_SMS_ADDON_ANNUAL_PRICE_ID;
 
 // Same day-remaining tiers create-addon-checkout.js uses for add-on
 // gifts — duplicated here rather than shared, matching this codebase's
@@ -40,6 +35,10 @@ const LOW_TIER_MAX_DAYS  = 90;   // 45–90 days  → $10
 const MID_TIER_MAX_DAYS  = 180;  // 91–180 days → $15
                                   // 181+ days   → $20
 const TIER_DOLLAR_AMOUNT = { high: 20, mid: 15, low: 10 };
+
+// Flat one-time SMS price for the 30-day gift pack — no tiering, see
+// file header comment.
+const GIFT_PACK_SMS_PRICE = 2;
 
 function tierForDaysRemaining(days) {
   if (days < CLOSED_UNDER_DAYS) return null;
@@ -106,67 +105,59 @@ exports.handler = async (event) => {
     .eq('id', user.id)
     .single();
 
-  if (!['active', 'trialing'].includes(profile?.stripe_status)) {
-    return err('No active subscription found for this account', 409);
+  if (profile?.stripe_status !== 'active') {
+    return err('No active plan found for this account', 409);
   }
 
   if (profile.plan === 'annual') {
     return await handleAnnualSmsToggle(profile, gift, enabled);
   }
-  return await handleInstallmentSmsToggle(profile, gift, enabled, user.id);
+  if (profile.plan === 'gift_pack') {
+    return await handleGiftPackSmsToggle(profile, gift, enabled);
+  }
+  return err('No active plan found for this account', 409);
 };
 
-// ── Installment plan — unchanged recurring subscription-item logic ──
-async function handleInstallmentSmsToggle(profile, gift, enabled, userId) {
-  if (!profile.stripe_subscription_id) {
-    return err('No active subscription found for this account', 409);
+// ── Gift pack plan — flat $2 one-time charge, no tiering ──
+async function handleGiftPackSmsToggle(profile, gift, enabled) {
+  if (!enabled) {
+    const { error: updateErr } = await sb.from('gifts').update({ sms_addon: false }).eq('id', gift.id);
+    if (updateErr) return err('Could not save gift setting: ' + updateErr.message, 500);
+    return ok({ ok: true, sms_addon: false });
   }
 
-  // Update the gift's flag
-  const { error: updateErr } = await sb.from('gifts').update({ sms_addon: enabled }).eq('id', gift.id);
-  if (updateErr) return err('Could not save gift setting: ' + updateErr.message, 500);
+  if (!profile.stripe_customer_id) {
+    return err('No billing account found for this account', 409);
+  }
 
-  // Recompute how many of this buyer's gifts now have SMS enabled
-  const { data: allGifts } = await sb
-    .from('gifts')
-    .select('id, sms_addon')
-    .eq('user_id', userId);
+  let paid;
+  try {
+    paid = await chargeOneTimeFee(profile.stripe_customer_id, GIFT_PACK_SMS_PRICE, 'SMS add-on');
+  } catch (e) {
+    return err('Could not charge for the SMS add-on: ' + e.message, 402);
+  }
+  if (!paid) {
+    return err('The SMS add-on charge could not be completed — update your payment method and try again.', 402);
+  }
 
-  const smsCount = (allGifts || []).filter((g) => g.sms_addon).length;
+  const { error: updateErr } = await sb.from('gifts').update({ sms_addon: true }).eq('id', gift.id);
+  if (updateErr) {
+    console.error('CRITICAL: SMS add-on charge succeeded but gift update failed', gift.id, updateErr.message);
+    return err('Payment succeeded but saving the setting failed — contact support', 500);
+  }
 
   try {
-    const items = await stripe.subscriptionItems.list({
-      subscription: profile.stripe_subscription_id,
-      limit: 100,
+    await sb.from('subscription_events').insert({
+      profile_id: gift.user_id,
+      event_type: 'sms_purchase',
+      plan:       'gift_pack',
+      amount:     GIFT_PACK_SMS_PRICE,
     });
-    const existing = items.data.find((i) => i.price.id === SMS_ADDON_MONTHLY_PRICE_ID);
-
-    if (smsCount > 0) {
-      if (existing) {
-        if (existing.quantity !== smsCount) {
-          await stripe.subscriptionItems.update(existing.id, {
-            quantity: smsCount,
-            proration_behavior: 'always_invoice',
-          });
-        }
-      } else {
-        await stripe.subscriptionItems.create({
-          subscription: profile.stripe_subscription_id,
-          price: SMS_ADDON_MONTHLY_PRICE_ID,
-          quantity: smsCount,
-          proration_behavior: 'always_invoice',
-        });
-      }
-    } else if (existing) {
-      await stripe.subscriptionItems.del(existing.id, { proration_behavior: 'always_invoice' });
-    }
-  } catch (stripeErr) {
-    // Roll the DB flag back so it doesn't drift from what's actually billed
-    await sb.from('gifts').update({ sms_addon: !enabled }).eq('id', gift.id);
-    return err('Billing update failed, change was not saved: ' + stripeErr.message, 500);
+  } catch (e) {
+    console.error('Failed to log sms_purchase event:', e.message);
   }
 
-  return ok({ ok: true, sms_addon: enabled, smsAddonQuantity: smsCount });
+  return ok({ ok: true, sms_addon: true, charged: GIFT_PACK_SMS_PRICE });
 }
 
 // ── Annual plan — flat one-time charge, tiered by term remaining ──

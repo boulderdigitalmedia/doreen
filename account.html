@@ -551,24 +551,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <div class="paywall-wrap">
       <div class="paywall-icon">💌</div>
       <div class="paywall-title">Start sending love</div>
-      <div class="paywall-sub">A 12-month subscription, free for your first 7 days. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
+      <div class="paywall-sub">A one-time payment, no subscription. Daily, weekly, or monthly notes — with photos, push notifications, and email delivery.</div>
 
       <div class="pricing-grid">
-        <div class="pricing-card" id="planInstallment" onclick="selectPlan('installment')">
-          <div class="pricing-name">Monthly</div>
-          <div class="pricing-price">$4.50<span>/mo</span></div>
-          <div class="pricing-desc">$54/yr total — a 12-month term billed in installments, not cancel-anytime.</div>
+        <div class="pricing-card" id="planGiftPack" onclick="selectPlan('gift_pack')">
+          <div class="pricing-name">30-Day Gift Pack</div>
+          <div class="pricing-price">$14<span>one-time</span></div>
+          <div class="pricing-desc">30 days of delivery. No auto-renewal — upgrade to annual for $45 any time it's active.</div>
         </div>
         <div class="pricing-card selected" id="planAnnual" onclick="selectPlan('annual')">
           <div class="pricing-badge">Best value</div>
           <div class="pricing-name">Annual</div>
-          <div class="pricing-price">$45<span>/yr</span></div>
-          <div class="pricing-desc">Paid upfront for the full 12-month term.</div>
+          <div class="pricing-price">$59<span>/yr</span></div>
+          <div class="pricing-desc">Paid upfront for a full 12-month term. No auto-renewal.</div>
         </div>
       </div>
 
       <p style="font-size:16px;color:var(--ink-mid);background:var(--sage-pale);border-radius:10px;padding:10px 14px;margin:4px 0 20px;line-height:1.5;">
-        🎁 First-time subscribers get a 7-day free trial — your card is only charged once it ends, and you can cancel anytime before then at no cost. (Returning members restarting after a lapse are charged right away.) After the trial, both plans are a 12-month commitment. The monthly option spreads that commitment over 12 payments of $4.50 — it isn't a cancel-anytime plan. Early cancellation once charged is available for a fee (half of your remaining installments, capped at $20). SMS delivery is a separate paid add-on and unlocks once your trial converts.
+        🎁 Both plans are a single one-time payment — not a subscription, so there's nothing to cancel and nothing auto-renews. The 30-Day Gift Pack is a low-commitment way to try it out: upgrade to the full annual plan for $45 (instead of $59) any time before your 30 days run out. SMS delivery is a separate paid add-on: $2 flat on the gift pack, or a term-based rate on annual.
       </p>
 
       <div class="feature-list">
@@ -589,9 +589,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
 
       <button class="btn btn-primary" style="font-size:20px;padding:16px 36px" onclick="startCheckout()" id="checkoutBtn">
-        Start your free trial →
+        Get started →
       </button>
-      <p style="font-size:16px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Card required to start, nothing charged for 7 days.</p>
+      <p style="font-size:16px;color:var(--ink-soft);margin-top:14px;">Secure payment via Stripe. Payments are non-refundable.</p>
     </div>
     <footer class="site-footer">
       © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
@@ -607,6 +607,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <div class="sub-banner-detail" id="subBannerDetail"></div>
       </div>
       <button class="btn btn-gold btn-sm" onclick="openPortal()">Manage billing</button>
+    </div>
+    <div id="upgradeBanner" style="display:none" class="sub-banner">
+      <div>
+        <div class="sub-banner-text">🎁 On the 30-Day Gift Pack</div>
+        <div class="sub-banner-detail" id="upgradeBannerDetail"></div>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="startUpgradeCheckout()" id="upgradeBtn">Upgrade to annual — $45 →</button>
     </div>
     <div class="section-header">
       <div>
@@ -697,7 +704,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <span>Enable SMS add-on for this gift</span>
         </label>
         <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;margin-left:26px;">
-          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding. This adds <strong id="smsAddonPriceLabel">$2/mo</strong> to your subscription, matching your plan.
+          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding. This is a one-time charge of <strong id="smsAddonPriceLabel">$2</strong>, priced by your plan.
         </p>
       </div>
       <div class="field" style="margin-top:4px;">
@@ -1044,11 +1051,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display     = 'block';
 
-    const isActive = profile && (profile.stripe_status === 'active' || profile.stripe_status === 'trialing');
+    const isActive = profile && profile.stripe_status === 'active';
 
     // Always-visible way to reach Stripe's billing portal (to update payment
     // method, change plan, or cancel) — not just when payment is past due.
-    var hasSubscription = profile && ['active', 'trialing', 'past_due'].indexOf(profile.stripe_status) !== -1;
+    var hasSubscription = profile && ['active', 'past_due'].indexOf(profile.stripe_status) !== -1;
     document.getElementById('manageBillingBtn').style.display = hasSubscription ? 'inline-block' : 'none';
 
     if (isActive) {
@@ -1131,14 +1138,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   function selectPlan(plan) {
     SELECTED_PLAN = plan;
-    document.getElementById('planInstallment').classList.toggle('selected', plan === 'installment');
-    document.getElementById('planAnnual').classList.toggle('selected',      plan === 'annual');
+    document.getElementById('planGiftPack').classList.toggle('selected', plan === 'gift_pack');
+    document.getElementById('planAnnual').classList.toggle('selected',   plan === 'annual');
   }
 
-  async function startCheckout() {
+  async function startCheckout(planOverride) {
     var btn = document.getElementById('checkoutBtn');
-    btn.disabled = true;
-    btn.textContent = 'Redirecting to checkout…';
+    var plan = planOverride || SELECTED_PLAN;
+    var originalLabel = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Redirecting to checkout…'; }
 
     try {
       var res  = await fetch('/api/create-checkout', {
@@ -1147,7 +1155,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           'Content-Type':  'application/json',
           'Authorization': await authHeader(),
         },
-        body: JSON.stringify({ plan: SELECTED_PLAN }),
+        body: JSON.stringify({ plan: plan }),
       });
       var data = await res.json();
 
@@ -1155,13 +1163,40 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         window.location.href = data.url;
       } else {
         showToast('Error: ' + (data.error || 'Could not start checkout'));
-        btn.disabled = false;
-        btn.textContent = 'Start your free trial →';
+        if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
       }
     } catch (e) {
       showToast('Could not reach server');
-      btn.disabled = false;
-      btn.textContent = 'Start your free trial →';
+      if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+    }
+  }
+
+  // Upgrade from the 30-Day Gift Pack to annual for $45 (instead of the
+  // full $59) — only shown/enabled while the buyer's gift pack is still
+  // active (see renderUpgradeBanner). create-checkout.js re-validates
+  // eligibility server-side regardless of what the UI shows.
+  async function startUpgradeCheckout() {
+    var btn = document.getElementById('upgradeBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Redirecting to checkout…'; }
+    try {
+      var res  = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': await authHeader(),
+        },
+        body: JSON.stringify({ plan: 'upgrade' }),
+      });
+      var data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showToast('Error: ' + (data.error || 'Could not start checkout'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to annual — $45 →'; }
+      }
+    } catch (e) {
+      showToast('Could not reach server');
+      if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to annual — $45 →'; }
     }
   }
 
@@ -1207,6 +1242,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     if (e.key === 'Escape') toggleHeaderMenu(true);
   });
 
+  // Shows the "upgrade to annual for $45" banner only while the buyer is
+  // actively on the gift_pack plan and their 30-day term hasn't lapsed —
+  // matches create-checkout.js's server-side eligibility check for
+  // plan: 'upgrade' exactly, so the button never shows when the upgrade
+  // request would actually be rejected.
+  function renderUpgradeBanner() {
+    var banner = document.getElementById('upgradeBanner');
+    var detail = document.getElementById('upgradeBannerDetail');
+    var eligible = PROFILE && PROFILE.plan === 'gift_pack' && PROFILE.stripe_status === 'active' &&
+      PROFILE.access_term_end && new Date(PROFILE.access_term_end).getTime() > Date.now();
+
+    if (!eligible) { banner.style.display = 'none'; return; }
+
+    banner.style.display = 'flex';
+    detail.textContent = 'Upgrade any time before ' + new Date(PROFILE.access_term_end).toLocaleDateString() +
+      ' for $45 instead of the full $59 annual price.';
+  }
+
   // ── GIFT LIST ─────────────────────────────────────────────────
 
   async function showGiftList() {
@@ -1225,34 +1278,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         banner.style.display  = 'flex';
         bannerText.textContent = '⚠ Payment past due — your gifts may stop sending soon';
         bannerDetail.textContent = 'Please update your payment method to keep your gifts active.';
-      } else if (PROFILE.stripe_status === 'trialing') {
-        banner.style.display = 'flex';
-        // Installment's native Stripe trial reports its end via
-        // current_period_end; annual's self-managed trial (see
-        // schema.sql's 7-DAY FREE TRIAL block) has no Stripe subscription
-        // behind it at all, so it's tracked in trial_ends_at instead —
-        // current_period_end is always null for it.
-        var trialEndRaw = PROFILE.current_period_end || PROFILE.trial_ends_at;
-        var trialEnd = trialEndRaw ? new Date(trialEndRaw).toLocaleDateString() : '';
-        bannerText.textContent   = '🎉 You\'re on a free trial';
-        bannerDetail.textContent = trialEnd ? 'Trial ends ' + trialEnd + ' — your card will be charged then' : '';
       } else {
         banner.style.display = 'none';
       }
 
       var termInfo = document.getElementById('termInfo');
-      var isBillable = ['active', 'trialing', 'past_due'].indexOf(PROFILE.stripe_status) !== -1;
-      // A fully-paid annual buyer (already converted) has nothing to
-      // cancel — it's a one-time payment that already doesn't auto-renew,
-      // and cancel-subscription.js just no-ops for that case. But an
-      // annual buyer still in their free trial hasn't been charged yet at
-      // all, and needs a way to back out before it converts — same as
-      // installment's trial. So: show the link for installment always
-      // (trial or converted, both have a real cancel-subscription.js
-      // flow), and for annual only while still trialing.
-      var cancelLink = (PROFILE.plan === 'installment' || PROFILE.stripe_status === 'trialing')
-        ? ' · <a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>'
-        : '';
+      var isBillable = ['active', 'past_due'].indexOf(PROFILE.stripe_status) !== -1;
+      // Both plans are paid in full, one-time — cancel-subscription.js is
+      // purely informational for either now (no fee, nothing actually
+      // changes), so the link is always shown for any billable plan; it
+      // just tells the buyer there's nothing to cancel.
+      var cancelLink = ' · <a href="#" onclick="openCancelModal();return false;" style="color:var(--ink-soft);text-decoration:underline;">Cancel subscription</a>';
       if (isBillable && PROFILE.access_term_end) {
         // access_term_end (not the raw Stripe billing date) is the fair
         // term — anchored to the start date you chose for your gift when
@@ -1263,6 +1299,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       } else {
         termInfo.innerHTML = '';
       }
+
+      renderUpgradeBanner();
     }
 
     const { data, error } = await sb
@@ -1364,15 +1402,18 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     return Math.ceil(ms / (24 * 60 * 60 * 1000));
   }
 
-  // Installment plan: unchanged, still a real recurring $2/mo line item.
   // Annual plan: no subscription exists to bill a recurring item against
-  // (see create-checkout.js), so SMS is a flat one-time charge instead,
-  // tiered by term remaining — the exact same tiers as the add-on gifts
-  // above (update-sms-addon.js mirrors addonTierInfo()'s boundaries
+  // (see create-checkout.js), so SMS is a flat one-time charge, tiered by
+  // term remaining — the exact same tiers as the add-on gifts above
+  // (update-sms-addon.js mirrors addonTierInfo()'s boundaries
   // server-side, so this reuses it rather than duplicating the tier
-  // logic a third time).
+  // logic a third time). gift_pack plan: a flat $2 one-time charge, no
+  // tiering (its 30-day term is too short for the annual tiers' 45-day
+  // minimum to ever apply).
   function smsAddonPriceLabel() {
-    if (!PROFILE || PROFILE.plan !== 'annual') return '$2/mo';
+    if (!PROFILE) return '';
+    if (PROFILE.plan === 'gift_pack') return '$2 one-time';
+    if (PROFILE.plan !== 'annual') return 'unavailable';
     var tier = addonTierInfo();
     return tier ? tier.label + ' one-time' : 'renew to enable';
   }
@@ -1489,6 +1530,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     populateTimezoneSelect('dTimezone', gift.timezone || 'Pacific/Auckland');
     document.getElementById('dPlannedCount').value = gift.planned_notes_count || '';
     document.getElementById('dSmsAddon').checked = !!gift.sms_addon;
+    document.getElementById('dSmsAddon').disabled = false;
     var smsPriceEl = document.getElementById('smsAddonPriceLabel');
     if (smsPriceEl) smsPriceEl.textContent = smsAddonPriceLabel();
     updateSlugPreview();
@@ -2046,12 +2088,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var smsEnabled = document.getElementById('dSmsAddon').checked;
     var smsChanged = smsEnabled !== !!CURRENT_GIFT.sms_addon;
 
-    // Annual plan: turning SMS on is a real one-time charge (no recurring
-    // subscription item to fall back on — see update-sms-addon.js), so
-    // confirm the price up front rather than silently charging on save.
-    // Installment plan keeps its existing (prorated, recurring) behavior
-    // with no extra confirmation, unchanged from before.
-    if (smsChanged && smsEnabled && PROFILE && PROFILE.plan === 'annual') {
+    // Turning SMS on is always a real one-time charge on either plan (no
+    // recurring subscription item to fall back on — see
+    // update-sms-addon.js), so confirm the price up front rather than
+    // silently charging on save.
+    if (smsChanged && smsEnabled && PROFILE && (PROFILE.plan === 'annual' || PROFILE.plan === 'gift_pack')) {
       var priceLabel = smsAddonPriceLabel();
       if (priceLabel === 'renew to enable') {
         showToast('Your term is too close to ending to add SMS — renew first.');

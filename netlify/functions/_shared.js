@@ -473,16 +473,18 @@ async function sendRenewalReminderEmail(profile) {
     const termEndLabel = new Date(profile.access_term_end).toLocaleDateString();
     const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
 
-    const planNote = profile.plan === 'annual'
-      ? "Your plan is a one-time yearly payment, so it won't renew on its own — you'll need to come back and check out again for a new 12-month term."
-      : "Your plan doesn't auto-renew past its 12 scheduled payments — you'll need to come back and subscribe again for a new 12-month term.";
+    const isGiftPack = profile.plan === 'gift_pack';
+    const planNote = isGiftPack
+      ? "Your 30-Day Gift Pack is a one-time payment, so it won't renew on its own — come back and buy another gift pack (or upgrade to the annual plan) to keep it going."
+      : "Your annual plan is a one-time yearly payment, so it won't renew on its own — you'll need to come back and check out again for a new 12-month term.";
+    const termLabel = isGiftPack ? 'Your current 30-day term' : 'Your current 12-month term';
 
     await resend.emails.send({
       from:    buildFrom('A Note For You'),
       to:      buyerEmail,
       subject: `Your term ends ${termEndLabel} — renew to keep it going`,
       html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
-        <p style="font-size:16px;">Your current 12-month term ends on <strong>${termEndLabel}</strong> — about a month from now.</p>
+        <p style="font-size:16px;">${termLabel} ends on <strong>${termEndLabel}</strong>.</p>
         <p style="font-size:16px;">${planNote} Once it ends, your gift(s) stop sending new notes — though everything already sent stays visible to your recipient(s).</p>
         <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Renew from your account →</a></p>
       </div>`,
@@ -578,70 +580,11 @@ async function sendGiftSetupReminderEmail(profile, autoStartDate) {
   }
 }
 
-// ── Annual trial payment failed (retry pending) ─────────────────────
-// Annual's trial is self-managed (see the 7-DAY FREE TRIAL block in
-// schema.sql and process-annual-trials.js) since its Stripe Price is
-// one-time, not recurring — there's no native subscription trial to
-// fall back on the way installment gets for free. When the saved card
-// fails at trial end (or a retry), this tells the
-// buyer their card was declined and how many more automatic attempts
-// remain before the trial simply expires — called from
-// process-annual-trials.js right after each failed attempt.
-async function sendTrialPaymentFailedEmail(profile, attemptsRemaining) {
-  try {
-    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
-    const buyerEmail = userData && userData.user && userData.user.email;
-    if (userErr || !buyerEmail) {
-      console.error(`Could not find buyer email for trial-payment-failed notice, profile ${profile.id}:`, userErr && userErr.message);
-      return;
-    }
-
-    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
-
-    await resend.emails.send({
-      from:    buildFrom('A Note For You'),
-      to:      buyerEmail,
-      subject: `Your free trial ended — we couldn't charge your card`,
-      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
-        <p style="font-size:16px;">Your free trial just ended, and the card on file couldn't be charged for your annual plan.</p>
-        <p style="font-size:16px;">We'll try again automatically over the next few days (${attemptsRemaining} more attempt${attemptsRemaining === 1 ? '' : 's'}) — updating your payment method now is the fastest way to make sure it goes through.</p>
-        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Update payment method →</a></p>
-      </div>`,
-    });
-  } catch (err) {
-    console.error(`Failed to send trial-payment-failed notice for profile ${profile.id}:`, err.message);
-  }
-}
-
-// ── Annual trial expired (all retries exhausted) ────────────────────
-// Sent once, when process-annual-trials.js gives up after
-// TRIAL_CHARGE_MAX_ATTEMPTS failed charge attempts and cuts off access
-// (gifts deactivated, same as a lapsed installment subscription).
-async function sendTrialExpiredEmail(profile) {
-  try {
-    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
-    const buyerEmail = userData && userData.user && userData.user.email;
-    if (userErr || !buyerEmail) {
-      console.error(`Could not find buyer email for trial-expired notice, profile ${profile.id}:`, userErr && userErr.message);
-      return;
-    }
-
-    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
-
-    await resend.emails.send({
-      from:    buildFrom('A Note For You'),
-      to:      buyerEmail,
-      subject: `Your free trial has ended`,
-      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
-        <p style="font-size:16px;">Your free trial ended and we still weren't able to charge your card after several attempts, so your gift has stopped sending new notes.</p>
-        <p style="font-size:16px;">Anything already sent stays visible to your recipient — update your payment method and subscribe again any time to pick up where you left off.</p>
-        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Go to your account →</a></p>
-      </div>`,
-    });
-  } catch (err) {
-    console.error(`Failed to send trial-expired notice for profile ${profile.id}:`, err.message);
-  }
-}
+// NOTE: sendTrialPaymentFailedEmail / sendTrialExpiredEmail (and the
+// process-annual-trials.js scheduled function that called them) were
+// removed when both plans dropped their free trial — see the PRICING
+// UPDATE block in schema.sql. Both plans are now charged immediately at
+// checkout, so there's no self-managed trial clock left to email about.
 
 // Looks one day ahead (in the gift's own day-counting) and warns the buyer
 // early if tomorrow's slot needs a *new* note that doesn't exist yet. If
@@ -878,8 +821,6 @@ module.exports = {
   sendRenewalReminderEmail,
   sendGiftSetupReminderEmail,
   sendReengagementEmail,
-  sendTrialPaymentFailedEmail,
-  sendTrialExpiredEmail,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,

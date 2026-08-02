@@ -18,80 +18,35 @@
 // comment in schema.sql. Trend charts will look thin until more history
 // accumulates; that's expected, not a bug.
 //
-// MRR is computed differently by plan, since the annual plan is now a
-// one-time payment with no subscription behind it (see
-// create-checkout.js) — there's no "upcoming invoice" to look up for it
-// at all:
-//   installment — actual upcoming Stripe invoice (retrieveUpcoming), not
-//     a flat list price — this correctly reflects the recurring SMS
-//     add-on (still a real line item on the subscription). Only falls
-//     back to list price (INSTALLMENT_PRICE below) for the rare profile
-//     where the Stripe lookup genuinely fails or the subscription id on
-//     file turns out to be stale — see mrrFallbackCount in the response.
-//   annual — a flat ANNUAL_PRICE/12 monthly-equivalent for every
-//     billable annual profile. This isn't a fallback or an
-//     approximation of something more precise elsewhere — it's simply
-//     how the math works for a flat one-time payment with no discounts
-//     to look up, so annual profiles are deliberately excluded from
-//     mrrFallbackCount rather than inflating it.
+// MRR is a flat monthly-equivalent estimate for every billable profile,
+// computed entirely from list prices — no Stripe API calls needed, since
+// neither plan has a subscription or "upcoming invoice" to look up any
+// more (both are one-time payments — see create-checkout.js):
+//   annual    — ANNUAL_PRICE / 12 per billable profile.
+//   gift_pack — GIFT_PACK_PRICE per billable profile (its 30-day term is
+//     close enough to a month that the sticker price doubles as its own
+//     monthly-equivalent, with no /12 needed).
 //
-// Gift add-ons and the annual plan's SMS add-on are both one-time Stripe
-// payments (see create-addon-checkout.js and update-sms-addon.js), not
-// recurring subscription items, so neither shows up in any invoice-
-// preview figure above. addonRevenueEstimate and annualSmsRevenueEstimate
-// add them back in as flat assumptions: every currently-active add-on
-// gift renews at $20/yr (stripe-webhook.js enforces exactly that), and
-// every annual-plan gift with SMS on renews at the same $20/yr rate
-// (chargeSmsAddonCarryoverOneTime) — so each contributes $20/12 a month,
-// regardless of what tier it was originally bought at. Installment-plan
-// SMS is NOT included in either estimate — it's still a real recurring
-// subscription item, so it's already counted in that profile's upcoming-
-// invoice figure above.
+// Gift add-ons and the SMS add-on are both one-time Stripe payments (see
+// create-addon-checkout.js and update-sms-addon.js), not recurring line
+// items, so they're added back in separately as flat assumptions: every
+// currently-active add-on gift renews at $20/yr (stripe-webhook.js
+// enforces exactly that) — so it contributes $20/12 a month. SMS renews
+// at a flat rate per plan (stripe-webhook.js's chargeSmsAddonCarryoverOneTime):
+// $20/yr for annual (→ $20/12 a month) and $2 per gift_pack term (→ $2 a
+// month, no /12, same reasoning as GIFT_PACK_PRICE above).
 
-const Stripe = require('stripe');
 const { sb, ok, err, preflight } = require('./_shared');
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-
-// Fallback-only list prices — kept in sync with index.html / the Stripe
-// price IDs used by create-checkout.js. Real MRR comes from Stripe itself;
-// these are just what a profile falls back to if that lookup fails.
-const INSTALLMENT_PRICE = 4.5;
-const ANNUAL_PRICE      = 45;
+// Kept in sync with index.html / the Stripe price IDs used by
+// create-checkout.js — this is the only source MRR is computed from now
+// that neither plan has a real subscription/invoice to look up in Stripe.
+const ANNUAL_PRICE      = 59;
+const GIFT_PACK_PRICE   = 14;
 const ADDON_RENEWAL_PRICE = 20; // flat renewal rate for any add-on gift
-const SMS_ONE_TIME_ANNUAL_PRICE = 20; // flat renewal rate for annual-plan SMS (see stripe-webhook.js)
+const SMS_RENEWAL_PRICE = { annual: 20, gift_pack: 2 }; // flat renewal rate per plan (see update-sms-addon.js)
 
 const EVENTS_WINDOW_DAYS = 180;
-
-// Netlify functions have a request timeout, so don't fire off unlimited
-// concurrent Stripe calls for a very large subscriber base — process in
-// small batches instead. Fine either way for the scale this app runs at.
-const STRIPE_BATCH_SIZE = 10;
-
-async function mapWithConcurrency(items, batchSize, fn) {
-  const results = [];
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    results.push(...(await Promise.all(batch.map(fn))));
-  }
-  return results;
-}
-
-// Actual next-invoice amount for an installment subscription, converted
-// to a monthly-equivalent figure. Returns null (rather than throwing) on
-// any failure so the caller can fall back to list price for just that
-// one profile. Never called for annual profiles — they have no
-// subscription to look up (see the comment above).
-async function monthlyRevenueForSubscription(stripeSubscriptionId) {
-  if (!stripeSubscriptionId) return null;
-  try {
-    const upcoming = await stripe.invoices.retrieveUpcoming({ subscription: stripeSubscriptionId });
-    return (upcoming.amount_due ?? upcoming.total ?? 0) / 100;
-  } catch (e) {
-    console.error('Upcoming invoice lookup failed for', stripeSubscriptionId, e.message);
-    return null;
-  }
-}
 
 // BRUTE-FORCE LOCKOUT: this is a single shared password with no
 // per-user row to attach a counter to, so the attempt count/lockout
@@ -155,13 +110,17 @@ exports.handler = async (event) => {
 
   const { data: profiles, error: profilesErr } = await sb
     .from('profiles')
-    .select('id, stripe_status, plan, stripe_subscription_id');
+    .select('id, stripe_status, plan');
 
   if (profilesErr) return err('Failed to load profiles: ' + profilesErr.message, 500);
 
   const statusCounts = {};
-  let monthlyBillable = 0;
+  let giftPackBillable = 0;
   let annualBillable = 0;
+  // 'trialing' is no longer a status either plan can be in (neither has a
+  // trial any more — see the PRICING UPDATE block in schema.sql), but is
+  // left in this set defensively in case any historical row still carries
+  // it rather than risk silently excluding it from billable counts.
   const billableStatuses = new Set(['active', 'trialing', 'past_due']);
   const billableProfiles = [];
 
@@ -170,30 +129,21 @@ exports.handler = async (event) => {
     statusCounts[status] = (statusCounts[status] || 0) + 1;
     if (billableStatuses.has(status)) {
       if (p.plan === 'annual') annualBillable++;
-      else if (p.plan === 'installment') monthlyBillable++;
+      else if (p.plan === 'gift_pack') giftPackBillable++;
       billableProfiles.push(p);
     }
   }
 
-  const billableTotal = monthlyBillable + annualBillable;
+  const billableTotal = giftPackBillable + annualBillable;
 
-  // Real MRR for installment profiles: each one's actual upcoming Stripe
-  // invoice, normalized to a monthly figure. Falls back to flat list
-  // price only for the profiles where that lookup didn't work (a stale/
-  // missing subscription id, or a transient Stripe API error) —
-  // mrrFallbackCount tells the dashboard how many of those there were.
-  // Annual profiles skip the lookup entirely and use a flat monthly-
-  // equivalent instead, since they have no subscription at all — see the
-  // comment above this file's constants for why that's not a "fallback."
-  let mrrFallbackCount = 0;
-  const monthlyAmounts = await mapWithConcurrency(billableProfiles, STRIPE_BATCH_SIZE, async (p) => {
-    if (p.plan === 'annual') return ANNUAL_PRICE / 12;
-    const real = await monthlyRevenueForSubscription(p.stripe_subscription_id);
-    if (real != null) return real;
-    mrrFallbackCount++;
-    return INSTALLMENT_PRICE;
-  });
-  const baseMrr = monthlyAmounts.reduce((sum, n) => sum + n, 0);
+  // Flat list-price monthly-equivalent per billable profile — see the
+  // comment above this file's constants for why no Stripe lookup is
+  // needed for this any more.
+  const baseMrr = billableProfiles.reduce((sum, p) => {
+    if (p.plan === 'annual') return sum + ANNUAL_PRICE / 12;
+    if (p.plan === 'gift_pack') return sum + GIFT_PACK_PRICE;
+    return sum;
+  }, 0);
 
   // Add-on gifts are one-time purchases, not subscription line items, so
   // they're not part of any subscription's upcoming invoice — estimated
@@ -204,26 +154,27 @@ exports.handler = async (event) => {
     .eq('gift_type', 'addon')
     .eq('status', 'active');
 
-  // Same idea for the annual plan's SMS add-on — also a one-time charge
-  // now, so it's invisible to any invoice-preview lookup and has to be
-  // estimated the same way add-on gifts are. Installment-plan SMS is
-  // NOT included here — it's still a real recurring subscription item,
-  // already counted in baseMrr above.
-  const annualProfileIds = billableProfiles.filter((p) => p.plan === 'annual').map((p) => p.id);
-  let annualSmsCount = 0;
-  if (annualProfileIds.length > 0) {
+  // Same idea for the SMS add-on — also a one-time charge now (on either
+  // plan), so it's invisible to any invoice-preview lookup and has to be
+  // estimated the same way add-on gifts are. Counted per plan since each
+  // renews at a different flat rate (see SMS_RENEWAL_PRICE above).
+  async function smsCountForPlan(plan) {
+    const ids = billableProfiles.filter((p) => p.plan === plan).map((p) => p.id);
+    if (ids.length === 0) return 0;
     const { count } = await sb
       .from('gifts')
       .select('id', { count: 'exact', head: true })
       .eq('sms_addon', true)
       .eq('status', 'active')
-      .in('user_id', annualProfileIds);
-    annualSmsCount = count || 0;
+      .in('user_id', ids);
+    return count || 0;
   }
+  const annualSmsCount   = await smsCountForPlan('annual');
+  const giftPackSmsCount = await smsCountForPlan('gift_pack');
 
-  const addonRevenueEstimate    = ((activeAddonCount || 0) * ADDON_RENEWAL_PRICE) / 12;
-  const annualSmsRevenueEstimate = (annualSmsCount * SMS_ONE_TIME_ANNUAL_PRICE) / 12;
-  const mrr = Math.round((baseMrr + addonRevenueEstimate + annualSmsRevenueEstimate) * 100) / 100;
+  const addonRevenueEstimate = ((activeAddonCount || 0) * ADDON_RENEWAL_PRICE) / 12;
+  const smsRevenueEstimate   = (annualSmsCount * SMS_RENEWAL_PRICE.annual) / 12 + (giftPackSmsCount * SMS_RENEWAL_PRICE.gift_pack);
+  const mrr = Math.round((baseMrr + addonRevenueEstimate + smsRevenueEstimate) * 100) / 100;
 
   const cutoff = new Date(Date.now() - EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { data: events, error: eventsErr } = await sb
@@ -249,13 +200,13 @@ exports.handler = async (event) => {
   return ok({
     summary: {
       statusCounts,
-      monthlyBillable,
+      giftPackBillable,
       annualBillable,
       billableTotal,
       mrr,
-      mrrFallbackCount,
       activeAddonCount: activeAddonCount || 0,
       annualSmsCount,
+      giftPackSmsCount,
       cancellations30d,
       churnRate30d,
     },

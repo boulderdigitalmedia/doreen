@@ -175,11 +175,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   <div class="panel">
     <div class="panel-title">Plan breakdown</div>
-    <div class="panel-sub">Among currently billable subscribers (active, trialing, or past due).</div>
+    <div class="panel-sub">Among currently billable subscribers (active or past due).</div>
     <div class="plan-split">
       <div class="plan-split-item">
-        <div>Monthly — <span id="planMonthlyCount">0</span></div>
-        <div class="plan-split-bar"><div class="plan-split-fill" id="planMonthlyBar" style="width:0%"></div></div>
+        <div>30-Day Gift Pack — <span id="planGiftPackCount">0</span></div>
+        <div class="plan-split-bar"><div class="plan-split-fill" id="planGiftPackBar" style="width:0%"></div></div>
       </div>
       <div class="plan-split-item">
         <div>Annual — <span id="planAnnualCount">0</span></div>
@@ -238,25 +238,22 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     document.getElementById('mActive').textContent    = s.billableTotal;
     document.getElementById('mMRR').textContent        = fmtMoney(s.mrr);
-    if (s.mrrFallbackCount) {
-      document.getElementById('mMRRSub').textContent =
-        s.mrrFallbackCount + ' of ' + s.billableTotal + ' used list price (Stripe lookup failed)';
-    } else if (s.activeAddonCount || s.annualSmsCount) {
+    if (s.activeAddonCount || s.annualSmsCount || s.giftPackSmsCount) {
       var parts = [];
-      if (s.activeAddonCount) parts.push(s.activeAddonCount + ' add-on gift(s)');
-      if (s.annualSmsCount)   parts.push(s.annualSmsCount + ' annual-plan SMS add-on(s)');
-      document.getElementById('mMRRSub').textContent =
-        'Includes ' + parts.join(' and ') + ', each at an assumed $20/yr renewal';
+      if (s.activeAddonCount)  parts.push(s.activeAddonCount + ' add-on gift(s)');
+      if (s.annualSmsCount)    parts.push(s.annualSmsCount + ' annual-plan SMS add-on(s) at $20/yr');
+      if (s.giftPackSmsCount)  parts.push(s.giftPackSmsCount + ' gift-pack SMS add-on(s) at $2/term');
+      document.getElementById('mMRRSub').textContent = 'Includes ' + parts.join(', ');
     }
     document.getElementById('mChurn').textContent      = fmtPct(s.churnRate30d);
     document.getElementById('mPastDue').textContent    = counts.past_due || 0;
     document.getElementById('mCanceled').textContent   = counts.canceled || 0;
 
-    var planTotal = (s.monthlyBillable + s.annualBillable) || 1;
-    document.getElementById('planMonthlyCount').textContent = s.monthlyBillable;
-    document.getElementById('planAnnualCount').textContent  = s.annualBillable;
-    document.getElementById('planMonthlyBar').style.width = Math.round(100 * s.monthlyBillable / planTotal) + '%';
-    document.getElementById('planAnnualBar').style.width  = Math.round(100 * s.annualBillable / planTotal) + '%';
+    var planTotal = (s.giftPackBillable + s.annualBillable) || 1;
+    document.getElementById('planGiftPackCount').textContent = s.giftPackBillable;
+    document.getElementById('planAnnualCount').textContent   = s.annualBillable;
+    document.getElementById('planGiftPackBar').style.width = Math.round(100 * s.giftPackBillable / planTotal) + '%';
+    document.getElementById('planAnnualBar').style.width    = Math.round(100 * s.annualBillable / planTotal) + '%';
 
     renderChart(data.events || []);
     renderActivity(data.events || []);

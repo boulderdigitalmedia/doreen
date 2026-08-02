@@ -15,8 +15,19 @@ const {
 } = require('./_shared');
 
 const TERM_START_GRACE_DAYS     = 30;
-const TERM_LENGTH_DAYS          = 365;
-const RENEWAL_REMINDER_DAYS     = 30;
+// Term length depends on plan — 30 days for the gift_pack plan, 365 for
+// everything else (annual, and any legacy plan value). Used only by the
+// fallback sweeps below; a first-time buyer's real term length is set by
+// the anchor_term_from_gift_start trigger in schema.sql, which already
+// reads profiles.plan itself.
+const TERM_LENGTH_DAYS = { annual: 365, gift_pack: 30 };
+function termLengthDaysFor(plan) { return TERM_LENGTH_DAYS[plan] || TERM_LENGTH_DAYS.annual; }
+// How long before access_term_end to send the "renew soon" reminder —
+// also plan-aware: a 30-day gift pack needs a much shorter lead time
+// than a 365-day annual term, or the reminder would fire almost
+// immediately after purchase.
+const RENEWAL_REMINDER_DAYS = { annual: 30, gift_pack: 5 };
+function renewalReminderDaysFor(plan) { return RENEWAL_REMINDER_DAYS[plan] || RENEWAL_REMINDER_DAYS.annual; }
 const GIFT_SETUP_REMINDER_DAY   = 25; // ~5 days before the 30-day auto-start cap
 const REENGAGEMENT_INACTIVE_DAYS = 30; // how long without opening the app counts as "dormant"
 
@@ -50,9 +61,9 @@ async function sweepTermStartGrace() {
 
   const { data: overdue, error } = await sb
     .from('profiles')
-    .select('id, created_at')
+    .select('id, created_at, plan')
     .is('term_start_date', null)
-    .in('stripe_status', ['active', 'trialing', 'past_due'])
+    .in('stripe_status', ['active', 'past_due'])
     .lte('created_at', cutoffISO);
 
   if (error) {
@@ -62,6 +73,7 @@ async function sweepTermStartGrace() {
 
   for (const profile of overdue || []) {
     const now = new Date();
+    const termLengthDays = termLengthDaysFor(profile.plan);
 
     const { data: includedGift } = await sb
       .from('gifts')
@@ -76,11 +88,11 @@ async function sweepTermStartGrace() {
     } else {
       computedStart = new Date(new Date(profile.created_at).getTime() + TERM_START_GRACE_DAYS * 24 * 60 * 60 * 1000);
     }
-    const computedEnd = new Date(computedStart.getTime() + TERM_LENGTH_DAYS * 24 * 60 * 60 * 1000);
+    const computedEnd = new Date(computedStart.getTime() + termLengthDays * 24 * 60 * 60 * 1000);
     const isAlreadyExpired = computedEnd.getTime() <= now.getTime();
 
     const termStart = isAlreadyExpired ? now : computedStart;
-    const termEnd    = isAlreadyExpired ? new Date(now.getTime() + TERM_LENGTH_DAYS * 24 * 60 * 60 * 1000) : computedEnd;
+    const termEnd    = isAlreadyExpired ? new Date(now.getTime() + termLengthDays * 24 * 60 * 60 * 1000) : computedEnd;
 
     try {
       await applyTermStart(profile.id, termStart, termEnd);
@@ -95,29 +107,26 @@ async function sweepTermStartGrace() {
   }
 }
 
-// The annual plan is a one-time payment now (see create-checkout.js) —
-// there's no Stripe subscription behind it, so nothing ever fires
-// customer.subscription.deleted for it when a term ends with no renewal.
-// The installment plan doesn't need this: cancel_at forces a real
-// subscription-lifecycle event that stripe-webhook.js already catches.
-// This sweep is the annual plan's equivalent — anything still marked
-// 'active' whose access_term_end has already passed gets treated exactly
-// like a lapsed installment subscription would: gifts deactivated (still
-// viewable, no more sends — see the gifts RLS policy in schema.sql),
-// status flipped so it stops showing as active, and a 'cancellation'
-// event logged for the admin dashboard.
-async function sweepExpiredAnnualTerms() {
+// Neither plan has a Stripe subscription behind it (see
+// create-checkout.js — both are one-time payments), so nothing ever
+// fires customer.subscription.deleted when a term ends with no renewal.
+// This sweep is what closes out both plans' terms instead: anything
+// still marked 'active' whose access_term_end has already passed gets
+// gifts deactivated (still viewable, no more sends — see the gifts RLS
+// policy in schema.sql), status flipped so it stops showing as active,
+// and a 'cancellation' event logged for the admin dashboard.
+async function sweepExpiredOneTimeTerms() {
   const nowISO = new Date().toISOString();
 
   const { data: expired, error } = await sb
     .from('profiles')
-    .select('id, stripe_customer_id')
-    .eq('plan', 'annual')
+    .select('id, stripe_customer_id, plan')
+    .in('plan', ['annual', 'gift_pack'])
     .eq('stripe_status', 'active')
     .lt('access_term_end', nowISO);
 
   if (error) {
-    console.error('Expired-annual-term sweep query failed:', error.message);
+    console.error('Expired one-time-plan-term sweep query failed:', error.message);
     return;
   }
 
@@ -136,34 +145,40 @@ async function sweepExpiredAnnualTerms() {
         profile_id:         profile.id,
         stripe_customer_id: profile.stripe_customer_id || null,
         event_type:         'cancellation',
-        plan:               'annual',
+        plan:               profile.plan,
       });
 
-      console.log('Expired annual term closed out for profile', profile.id);
+      console.log('Expired term closed out for profile', profile.id, '(' + profile.plan + ')');
     } catch (e) {
-      console.error('Failed to close out expired annual term for profile', profile.id, e.message);
+      console.error('Failed to close out expired term for profile', profile.id, e.message);
     }
   }
 }
 
-// Neither plan auto-renews past its 12-month term (annual is a one-time
-// payment; installment's cancel_at forcibly ends it) — so a buyer who
-// doesn't check their account page only learns their gift stopped once
-// it already had. This sends one reminder email per term, roughly a
-// month before access_term_end, to every billable profile that hasn't
+// Neither plan auto-renews past its term (both are one-time payments —
+// see create-checkout.js) — so a buyer who doesn't check their account
+// page only learns their gift stopped once it already had. This sends
+// one reminder email per term to every billable profile that hasn't
 // already gotten one for the CURRENT term (renewal_reminder_sent_at is
-// reset to null whenever a new term starts — see schema.sql). Profiles
-// whose term has already lapsed are excluded here — sweepExpiredAnnualTerms
-// (and stripe-webhook.js's subscription.deleted handler for installment)
-// handle that case instead, past the point a reminder would still help.
+// reset to null whenever a new term starts — see schema.sql), using a
+// plan-aware lead time (30 days for annual, 5 for the much-shorter
+// gift_pack term — see renewalReminderDaysFor). Profiles whose term has
+// already lapsed are excluded here — sweepExpiredOneTimeTerms handles
+// that case instead, past the point a reminder would still help.
+//
+// The query fetches everyone within the WIDEST possible window (the max
+// of either plan's lead time) and then filters per-profile against its
+// own plan's actual threshold, since Postgres can't express a
+// column-dependent comparison directly in a single .lte() call here.
 async function sweepRenewalReminders() {
   const now = new Date();
-  const windowEndISO = new Date(now.getTime() + RENEWAL_REMINDER_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const widestWindowDays = Math.max(...Object.values(RENEWAL_REMINDER_DAYS));
+  const windowEndISO = new Date(now.getTime() + widestWindowDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: dueSoon, error } = await sb
+  const { data: dueSoonCandidates, error } = await sb
     .from('profiles')
     .select('id, plan, access_term_end')
-    .in('stripe_status', ['active', 'trialing', 'past_due'])
+    .in('stripe_status', ['active', 'past_due'])
     .is('renewal_reminder_sent_at', null)
     .not('access_term_end', 'is', null)
     .gt('access_term_end', now.toISOString())
@@ -173,6 +188,11 @@ async function sweepRenewalReminders() {
     console.error('Renewal-reminder sweep query failed:', error.message);
     return;
   }
+
+  const dueSoon = (dueSoonCandidates || []).filter((profile) => {
+    const daysRemaining = (new Date(profile.access_term_end).getTime() - now.getTime()) / (24 * 60 * 60 * 1000);
+    return daysRemaining <= renewalReminderDaysFor(profile.plan);
+  });
 
   for (const profile of dueSoon || []) {
     try {
@@ -208,7 +228,7 @@ async function sweepGiftSetupReminders() {
     .select('id, created_at')
     .is('term_start_date', null)
     .is('gift_setup_reminder_sent_at', null)
-    .in('stripe_status', ['active', 'trialing', 'past_due'])
+    .in('stripe_status', ['active', 'past_due'])
     .lte('created_at', cutoffISO);
 
   if (error) {
@@ -245,7 +265,7 @@ async function sweepReengagement() {
   const { data: dormant, error } = await sb
     .from('profiles')
     .select('id, created_at, last_active_at')
-    .in('stripe_status', ['active', 'trialing', 'past_due'])
+    .in('stripe_status', ['active', 'past_due'])
     .is('reengagement_email_sent_at', null)
     .or(`last_active_at.is.null,last_active_at.lte.${cutoffISO}`);
 
@@ -317,7 +337,7 @@ exports.handler = schedule('*/15 * * * *', async () => {
 
   await sweepGiftSetupReminders();
   await sweepTermStartGrace();
-  await sweepExpiredAnnualTerms();
+  await sweepExpiredOneTimeTerms();
   await sweepRenewalReminders();
   await sweepReengagement();
 
