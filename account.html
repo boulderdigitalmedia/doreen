@@ -1110,6 +1110,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     if (isActive) {
       await showGiftList();
+      await openDeepLinkedGift();
     } else {
       showPaywall();
     }
@@ -1390,6 +1391,32 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         ' · ' + unusedCredits + ' free gift' + (unusedCredits === 1 ? '' : 's') + ' available';
     } else {
       referralCard.style.display = 'none';
+    }
+  }
+
+  // Lands the buyer straight on a specific gift (and, if given, that
+  // note's reply thread expanded and scrolled into view) when arriving via
+  // a reply-notification email's `?gift=<id>&note=<id>` link — see
+  // sendRecipientReplyEmail in _shared.js. A bare visit to /account with
+  // neither param is the normal path and this is a no-op for it.
+  async function openDeepLinkedGift() {
+    var params  = new URLSearchParams(window.location.search);
+    var giftId  = params.get('gift');
+    var noteId  = params.get('note');
+    if (!giftId) return;
+
+    var target = GIFTS.find(function(g) { return g.id === giftId; });
+    if (!target) return; // stale link (gift deleted, or belongs to another account) — stay on the list rather than error
+
+    await openGift(target);
+
+    if (noteId) {
+      OPEN_REPLY_THREADS[noteId] = true;
+      renderNotes();
+      requestAnimationFrame(function() {
+        var row = document.querySelector('[data-note-id="' + noteId + '"]');
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
     }
   }
 
