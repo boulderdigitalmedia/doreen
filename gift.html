@@ -4929,6 +4929,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     resetSlots();
     syncControls();
 
+    // Arriving via a reply-notification email's `?note=<order_index>` link
+    // (see sendBuyerReplyNotification in _shared.js) — jump straight to
+    // that note instead of leaving the recipient on today's, and open its
+    // reply thread since that's the whole reason they clicked through.
+    // Clamped to [0, todayNoteIndex] the same way goTo() already guards
+    // navigation, so a stale/tampered link can't point at a locked
+    // (not-yet-sent) note. A bare visit with no `note` param is the normal
+    // path and this is a no-op for it.
+    (function openDeepLinkedNote() {
+      var noteParam = new URLSearchParams(window.location.search).get('note');
+      if (noteParam === null) return;
+      var targetIdx = parseInt(noteParam, 10);
+      if (isNaN(targetIdx)) return;
+      targetIdx = Math.max(0, Math.min(targetIdx, todayNoteIndex));
+      if (targetIdx !== currentIndex) goTo(targetIdx);
+      openReplyDrawer();
+    })();
+
     // ── NAVIGATION ─────────────────────────────────────────────
 
     prevBtn.addEventListener('click', function() { goTo(currentIndex - 1); });
