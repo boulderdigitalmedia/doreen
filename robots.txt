@@ -9,3 +9,4 @@ Allow: /
 # the more reliable way to actually keep a page out of search results.
 
 Sitemap: https://anoteforyou.app/sitemap.xml
+Sitemap: https://anoteforyou.app/blog/sitemap-index.xml
