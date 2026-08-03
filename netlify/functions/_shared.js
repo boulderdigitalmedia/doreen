@@ -818,7 +818,10 @@ async function sendRecipientReplyEmail(gift, note, msgBody) {
       return;
     }
 
-    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+    // Deep-links straight to this gift (and this note's thread expanded)
+    // in account.html, instead of dropping the buyer on the plain gift
+    // list — see boot()'s `?gift=&note=` handling there.
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account?gift=${gift.id}&note=${note.id}`;
     const preview = msgBody.length > 200 ? msgBody.substring(0, 197) + '…' : msgBody;
 
     await resend.emails.send({
@@ -839,7 +842,11 @@ async function sendRecipientReplyEmail(gift, note, msgBody) {
 async function sendBuyerReplyNotification(gift, recipient, note, msgBody) {
   if (!recipient || !recipient.channels || recipient.channels.length === 0) return;
 
-  const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}`;
+  // `?note=<order_index>` lands the recipient on this exact note (and opens
+  // its reply thread) instead of whatever gift.html would show by default
+  // — see startApp()'s `?note=` handling there. Used for all three channels
+  // below since they all point through the same giftUrl.
+  const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}?note=${note.order_index}`;
   const preview = msgBody.length > 100 ? msgBody.substring(0, 97) + '…' : msgBody;
 
   if (recipient.channels.includes('push') && recipient.push_subscription) {
