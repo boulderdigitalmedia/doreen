@@ -456,10 +456,12 @@
     }
 
     /* At phone widths, "A Note For You" + "Blog" + "Sign in" + "Get
-       started" don't all fit comfortably — Blog and Sign in (the two
-       lower-priority links) collapse into a kebab menu instead, so the
-       wordmark and the primary "Get started" CTA (the one that actually
-       matters most here) both keep their full room without the row
+       started" don't all fit comfortably. Blog is the lowest-priority of
+       the four — it collapses into a kebab menu. Sign in stays directly
+       in the row (people look for it), just shrunk to icon-only, same
+       as it's always done at this width. That's enough on its own to
+       give the wordmark and the primary "Get started" CTA (the one that
+       actually matters most here) their room back without the row
        feeling crowded. */
     @media (max-width: 430px) {
       nav { padding: 0 14px; }
@@ -467,7 +469,10 @@
       .nav-brand .logo-mark { width: 24px; height: 17px; }
       .nav-brand .logo-badge { width: 12px; height: 12px; font-size: 9px; top: -6px; right: -6px; }
       .nav-right { gap: 4px; }
-      .nav-link { display: none; }
+      .nav-link-blog { display: none; }
+      .nav-link-signin { padding: 6px; }
+      .nav-link-signin .nav-link-icon { display: inline-flex; }
+      .nav-link-signin .nav-link-text { display: none; }
       .nav-menu-btn { display: flex; align-items: center; }
       .btn-nav { padding: 8px 12px; font-size: 15px; margin-left: 4px; }
     }
@@ -493,18 +498,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     A <em>Note</em> For You
   </a>
   <div class="nav-right">
-    <a class="nav-link" href="/blog">Blog</a>
-    <a class="nav-link" href="/login" aria-label="Sign in">
+    <a class="nav-link nav-link-blog" href="/blog">Blog</a>
+    <a class="nav-link nav-link-signin" href="/login" aria-label="Sign in">
       <svg class="nav-link-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4.2 3.6-7 8-7s8 2.8 8 7"></path></svg>
       <span class="nav-link-text">Sign in</span>
     </a>
-    <!-- Narrow-phone stand-in for the two .nav-link's above — see the
-         max-width:430px block, which is the only place either of these
-         two representations actually shows itself (never both at once). -->
+    <!-- Narrow-phone stand-in for .nav-link-blog above — see the
+         max-width:430px block. Sign in keeps its own always-visible icon
+         (the .nav-link-signin above just collapses to icon-only there,
+         same as it always did); only Blog is lower-priority enough to
+         tuck away behind the extra tap. -->
     <button class="nav-menu-btn" id="navMenuBtn" onclick="toggleNavMenu()" aria-haspopup="true" aria-expanded="false" aria-label="Menu">&#8942;</button>
     <div class="nav-menu" id="navMenu">
       <a class="nav-menu-link" href="/blog">Blog</a>
-      <a class="nav-menu-link" href="/login">Sign in</a>
     </div>
     <a class="btn-nav" href="/signup">Get started</a>
   </div>
