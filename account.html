@@ -1480,9 +1480,18 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           // that have already gone out), so without this the sender
           // opens the email, lands on the gift, and sees no sign of the
           // new reply at all.
+          // Direct .open = true covers this immediate paint; recording
+          // into OPEN_NOTE_GROUPS (same mechanism toggleReplyThread uses)
+          // is what keeps a Sent/month group open across whatever
+          // re-render happens next — sending a reply from this thread,
+          // for instance, which calls renderNotes() again.
           var ancestor = row.parentElement;
           while (ancestor) {
-            if (ancestor.tagName === 'DETAILS' && !ancestor.open) ancestor.open = true;
+            if (ancestor.tagName === 'DETAILS') {
+              if (!ancestor.open) ancestor.open = true;
+              var groupKey = ancestor.getAttribute('data-group-key');
+              if (groupKey) OPEN_NOTE_GROUPS[groupKey] = true;
+            }
             ancestor = ancestor.parentElement;
           }
           row.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1730,6 +1739,23 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   var NOTE_REPLIES = {};
   var OPEN_REPLY_THREADS = {}; // noteId -> true while that thread panel is expanded, survives a re-render
 
+  // Sent/month <details class="notes-group"> dropdowns (see renderNotes
+  // below) are rebuilt from scratch every render, each one defaulting to
+  // closed (bar the nearest upcoming month). Without this, opening a
+  // reply thread on a note that lives inside one of those groups was a
+  // no-op from the user's POV: OPEN_REPLY_THREADS did get set, but the
+  // very renderNotes() call that's supposed to show it also regenerates
+  // the group fresh and collapsed, so the row — thread included — comes
+  // back hidden inside a closed dropdown. Keyed the same way renderNotes
+  // keys each group ('sent', or a note's "<year>-<month>" bucket) and
+  // populated two ways: explicitly, whenever toggleReplyThread opens a
+  // thread (below), and passively, via the capture-phase 'toggle'
+  // listener near the bottom of this script that records whenever the
+  // person opens/closes one of these dropdowns by hand — either way,
+  // once a group's been opened it stays open across re-renders until
+  // explicitly closed again.
+  var OPEN_NOTE_GROUPS = {};
+
   function setNoteReplies(replies) {
     NOTE_REPLIES = {};
     replies.forEach(function(r) {
@@ -1745,7 +1771,16 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
 
   function toggleReplyThread(noteId) {
-    OPEN_REPLY_THREADS[noteId] = !OPEN_REPLY_THREADS[noteId];
+    var opening = !OPEN_REPLY_THREADS[noteId];
+    OPEN_REPLY_THREADS[noteId] = opening;
+    if (opening) {
+      // Force the enclosing Sent/month dropdown open too — see
+      // OPEN_NOTE_GROUPS above for why this is necessary, not optional.
+      var row   = document.querySelector('.note-row[data-note-id="' + noteId + '"]');
+      var group = row && row.closest('.notes-group');
+      var key   = group && group.getAttribute('data-group-key');
+      if (key) OPEN_NOTE_GROUPS[key] = true;
+    }
     renderNotes();
   }
 
@@ -2078,7 +2113,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var html = '';
 
     if (sentNotes.length) {
-      html += '<details class="notes-group">' +
+      // OPEN_NOTE_GROUPS['sent'] undefined (never explicitly toggled
+      // yet, by hand or via opening a reply thread inside it) means the
+      // original default: closed.
+      var sentOpen = !!OPEN_NOTE_GROUPS['sent'];
+      html += '<details class="notes-group" data-group-key="sent"' + (sentOpen ? ' open' : '') + '>' +
         '<summary class="notes-group-summary">Sent <span class="notes-group-count">(' + sentNotes.length + ')</span></summary>' +
         '<div class="notes-group-body">' +
           sentNotes.map(function(n) { return noteRowDiv(n, true); }).join('') +
@@ -2115,7 +2154,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     monthGroups.forEach(function(group, i) {
       // Nearest upcoming month open by default so the most actionable
       // notes are visible without a click; further-out months collapsed.
-      html += '<details class="notes-group"' + (i === 0 ? ' open' : '') + '>' +
+      // Once OPEN_NOTE_GROUPS has an explicit entry for this month
+      // (hand-toggled, or forced open behind a reply thread), that
+      // overrides the "only the first one" default from then on.
+      var defaultOpen = i === 0;
+      var isOpen = OPEN_NOTE_GROUPS.hasOwnProperty(group.key) ? OPEN_NOTE_GROUPS[group.key] : defaultOpen;
+      html += '<details class="notes-group" data-group-key="' + esc(group.key) + '"' + (isOpen ? ' open' : '') + '>' +
         '<summary class="notes-group-summary">' + esc(group.label) + ' <span class="notes-group-count">(' + group.notes.length + ')</span></summary>' +
         '<div class="notes-group-body">' +
           group.notes.map(function(n) { return noteRowDiv(n, false); }).join('') +
@@ -3702,6 +3746,23 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   document.querySelectorAll('.panel-collapsible').forEach(function(panel) {
     panel.addEventListener('toggle', function() { haptic('light'); });
   });
+
+  // Sent/month .notes-group dropdowns (see renderNotes/OPEN_NOTE_GROUPS
+  // above) get torn down and rebuilt on every renderNotes() call, so a
+  // listener attached to any one of them wouldn't survive to the next
+  // render. The 'toggle' event on <details> doesn't bubble, but a
+  // capture-phase listener still sees it on the way down regardless —
+  // attaching it once, here, on `document` catches every open/close on
+  // these groups for the lifetime of the page, present and future ones
+  // alike, so hand-toggling one sticks across re-renders the same way
+  // opening a reply thread inside one already does.
+  document.addEventListener('toggle', function(e) {
+    var el = e.target;
+    if (!el.classList || !el.classList.contains('notes-group')) return;
+    var key = el.getAttribute('data-group-key');
+    if (key) OPEN_NOTE_GROUPS[key] = el.open;
+    haptic('light');
+  }, true);
 
   boot();
 </script>
