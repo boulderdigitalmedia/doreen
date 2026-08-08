@@ -214,6 +214,21 @@
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 12px var(--shadow); }
     .panel-title { font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); margin-bottom: 18px; }
 
+    /* Native <details>/<summary> on the three gift-detail panels (Notes,
+       Gift settings, Recipient) — same mechanism as .notes-group below,
+       so each section can be collapsed independently. Notes stays open
+       by default (it's the one you're in and out of daily); settings and
+       recipient default closed, since those are set-once-and-forget —
+       keeps them from eating scroll space on mobile every visit. */
+    .panel-summary {
+      cursor: pointer; list-style: none; user-select: none;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-summary::-webkit-details-marker { display: none; }
+    .panel-summary::before { content: '▸'; color: var(--ink-soft); font-size: 12px; transition: transform 0.15s; }
+    .panel-collapsible[open] > .panel-summary::before { transform: rotate(90deg); }
+    .panel-collapsible:not([open]) > .panel-summary { margin-bottom: 0; }
+
     /* ── FORM FIELDS ── */
     .field { margin-bottom: 16px; min-width: 0; }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -685,101 +700,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <div class="page" id="viewDetail" style="display:none">
     <button class="back-btn" onclick="showGiftList()">← All gifts</button>
 
-    <div class="panel">
-      <div class="panel-title">Gift settings</div>
-      <div class="field-row">
-        <div class="field">
-          <label>Display name/Recipient name</label>
-          <input type="text" id="dName" placeholder="Jake & Doreen" />
-        </div>
-        <div class="field">
-          <label>Sender name</label>
-          <input type="text" id="dSender" placeholder="Your Favorite" />
-        </div>
-      </div>
-      <div class="field">
-        <label>Vanity slug (recipient URL)</label>
-        <input type="text" id="dSlug" placeholder="jake-and-doreen" oninput="updateSlugPreview()" />
-        <div class="slug-preview" id="slugPreview"></div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Start date</label>
-          <input type="date" id="dStartDate" />
-        </div>
-        <div class="field">
-          <label>Frequency</label>
-          <select id="dFrequency">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="biweekly">Every 2 weeks</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Default delivery time</label>
-          <input type="time" id="dDeliveryTime" />
-        </div>
-        <div class="field">
-          <label>Default timezone</label>
-          <select id="dTimezone"></select>
-        </div>
-      </div>
-      <p style="font-size:16px;color:var(--ink-soft);margin-top:-10px;margin-bottom:16px;">
-        Used until your recipient sets their own preferred time during onboarding — accurate to within about 15 minutes either way.
-      </p>
-      <div class="field">
-        <label>How many notes do you plan to write in total?</label>
-        <input type="number" id="dPlannedCount" min="1" placeholder="e.g. 60" />
-        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;">
-          Shows your recipient an accurate "Note 12 of 60" instead of just however many you've written so far. Leave blank if you're not sure yet.
-        </p>
-      </div>
-      <div class="field" style="margin-top:4px;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" id="dSmsAddon" style="width:16px;height:16px;accent-color:var(--sage);" />
-          <span>Enable SMS add-on for this gift</span>
-        </label>
-        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;margin-left:26px;">
-          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding. This is a one-time charge of <strong id="smsAddonPriceLabel">$2</strong>, priced by your plan.
-        </p>
-      </div>
-      <div class="field" style="margin-top:4px;">
-        <label>Gift page password</label>
-        <input type="text" id="dAccessPassword" placeholder="Leave blank to let your recipient set their own" autocomplete="off" />
-        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;">
-          Every gift page requires a password so a shared or guessed link alone can't expose your notes. Set one here, or leave this blank and your recipient will be asked to choose their own the first time they open the link.
-        </p>
-      </div>
-      <button class="btn btn-primary" onclick="saveGiftSettings()">Save settings</button>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title">Recipient</div>
-      <div class="channel-status-row" id="recipientChannels">
-        <div class="channel-status inactive">No preferences set yet</div>
-      </div>
-      <div class="field" style="margin-top:4px;">
-        <label>Recipient email</label>
-        <input type="text" id="dRecipientEmail" placeholder="them@example.com" />
-        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;">
-          Setting this yourself will enable email delivery for this gift. Your recipient can still add push or SMS themselves via their gift link.
-        </p>
-      </div>
-      <div class="recipient-actions">
-        <button class="btn btn-secondary btn-sm" onclick="saveRecipientEmail()">Save email</button>
-        <button class="btn btn-secondary btn-sm" onclick="sendPreviewToMe()">Send test to me</button>
-        <button class="btn btn-secondary btn-sm" onclick="resendLatestNote()">Resend latest note</button>
-      </div>
-      <p style="font-size:16px;color:var(--ink-soft);margin-top:8px;">
-        "Send test to me" emails today's note to your own inbox so you can check it before your recipient sees it — it never goes to them. "Resend latest note" sends the real thing to your recipient right now, through their actual channels — handy if they missed it.
-      </p>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title">Notes <span id="noteCountBadge" style="font-weight:400;color:var(--ink-soft)"></span></div>
+    <details class="panel panel-collapsible" id="panelNotes" open>
+      <summary class="panel-title panel-summary">Notes <span id="noteCountBadge" style="font-weight:400;color:var(--ink-soft)"></span></summary>
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="showAddNote()">+ Add note</button>
         <button class="btn btn-secondary btn-sm" onclick="showBulkAdd()">+ Bulk notes</button>
@@ -869,7 +791,101 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           </div>
         </div>
       </div>
-    </div>
+    </details>
+
+    <details class="panel panel-collapsible" id="panelSettings">
+      <summary class="panel-title panel-summary">Gift settings</summary>
+      <div class="field-row">
+        <div class="field">
+          <label>Display name/Recipient name</label>
+          <input type="text" id="dName" placeholder="Jake & Doreen" />
+        </div>
+        <div class="field">
+          <label>Sender name</label>
+          <input type="text" id="dSender" placeholder="Your Favorite" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Vanity slug (recipient URL)</label>
+        <input type="text" id="dSlug" placeholder="jake-and-doreen" oninput="updateSlugPreview()" />
+        <div class="slug-preview" id="slugPreview"></div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Start date</label>
+          <input type="date" id="dStartDate" />
+        </div>
+        <div class="field">
+          <label>Frequency</label>
+          <select id="dFrequency">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Every 2 weeks</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Default delivery time</label>
+          <input type="time" id="dDeliveryTime" />
+        </div>
+        <div class="field">
+          <label>Default timezone</label>
+          <select id="dTimezone"></select>
+        </div>
+      </div>
+      <p style="font-size:16px;color:var(--ink-soft);margin-top:-10px;margin-bottom:16px;">
+        Used until your recipient sets their own preferred time during onboarding — accurate to within about 15 minutes either way.
+      </p>
+      <div class="field">
+        <label>How many notes do you plan to write in total?</label>
+        <input type="number" id="dPlannedCount" min="1" placeholder="e.g. 60" />
+        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;">
+          Shows your recipient an accurate "Note 12 of 60" instead of just however many you've written so far. Leave blank if you're not sure yet.
+        </p>
+      </div>
+      <div class="field" style="margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" id="dSmsAddon" style="width:16px;height:16px;accent-color:var(--sage);" />
+          <span>Enable SMS add-on for this gift</span>
+        </label>
+        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;margin-left:26px;">
+          When enabled, your recipient can choose to receive notes via text message. Their phone number is collected during onboarding. This is a one-time charge of <strong id="smsAddonPriceLabel">$2</strong>, priced by your plan.
+        </p>
+      </div>
+      <div class="field" style="margin-top:4px;">
+        <label>Gift page password</label>
+        <input type="text" id="dAccessPassword" placeholder="Leave blank to let your recipient set their own" autocomplete="off" />
+        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;">
+          Every gift page requires a password so a shared or guessed link alone can't expose your notes. Set one here, or leave this blank and your recipient will be asked to choose their own the first time they open the link.
+        </p>
+      </div>
+      <button class="btn btn-primary" onclick="saveGiftSettings()">Save settings</button>
+    </details>
+
+    <details class="panel panel-collapsible" id="panelRecipient">
+      <summary class="panel-title panel-summary">Recipient</summary>
+      <div class="channel-status-row" id="recipientChannels">
+        <div class="channel-status inactive">No preferences set yet</div>
+      </div>
+      <div class="field" style="margin-top:4px;">
+        <label>Recipient email</label>
+        <input type="text" id="dRecipientEmail" placeholder="them@example.com" />
+        <p style="font-size:16px;color:var(--ink-soft);margin-top:5px;">
+          Setting this yourself will enable email delivery for this gift. Your recipient can still add push or SMS themselves via their gift link.
+        </p>
+      </div>
+      <div class="recipient-actions">
+        <button class="btn btn-secondary btn-sm" onclick="saveRecipientEmail()">Save email</button>
+        <button class="btn btn-secondary btn-sm" onclick="sendPreviewToMe()">Send test to me</button>
+        <button class="btn btn-secondary btn-sm" onclick="resendLatestNote()">Resend latest note</button>
+      </div>
+      <p style="font-size:16px;color:var(--ink-soft);margin-top:8px;">
+        "Send test to me" emails today's note to your own inbox so you can check it before your recipient sees it — it never goes to them. "Resend latest note" sends the real thing to your recipient right now, through their actual channels — handy if they missed it.
+      </p>
+    </details>
+
 
     <footer class="site-footer">
       © <span class="footerYear"></span> Boulder Digital Media LLC dba A Note For You. All rights reserved.
@@ -1418,16 +1434,23 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         if (row) {
           // Already-sent (and older upcoming-month) notes live inside a
           // collapsed <details class="notes-group"> dropdown by default
-          // (see renderNotes above). Expanding OPEN_REPLY_THREADS alone
-          // isn't enough if the row itself is nested inside one of these
-          // still-closed groups — the whole row (thread included) stays
-          // invisible and scrollIntoView has nothing visible to land on.
-          // This is almost always where a reply notification link points
-          // (replies come in on notes that have already gone out), so
-          // without this the sender opens the email, lands on the gift,
-          // and sees no sign of the new reply at all.
-          var group = row.closest('details.notes-group');
-          if (group && !group.open) group.open = true;
+          // (see renderNotes above), and that dropdown itself now sits
+          // inside the collapsible "Notes" panel (see .panel-collapsible
+          // above), which can also be closed. Expanding OPEN_REPLY_THREADS
+          // alone isn't enough if the row is nested inside any of these
+          // still-closed <details> — the whole row (thread included)
+          // stays invisible and scrollIntoView has nothing visible to
+          // land on. Walk every ancestor <details>, not just the nearest
+          // one, and force each open. This is almost always where a
+          // reply notification link points (replies come in on notes
+          // that have already gone out), so without this the sender
+          // opens the email, lands on the gift, and sees no sign of the
+          // new reply at all.
+          var ancestor = row.parentElement;
+          while (ancestor) {
+            if (ancestor.tagName === 'DETAILS' && !ancestor.open) ancestor.open = true;
+            ancestor = ancestor.parentElement;
+          }
           row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       });
