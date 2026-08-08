@@ -4316,6 +4316,29 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var REPLY_CACHE = {};        // note id -> array of rows, refreshed on open/send
     var replyDrawerNoteId = null; // which note the open drawer is currently showing
 
+    // Without this, REPLY_CACHE only ever got populated by actually
+    // opening a note's thread (openReplyDrawer below) — so the 💬 badge
+    // had no count to show until after you'd already clicked in and seen
+    // it for yourself, which obviously defeats the point of a badge.
+    // Bulk-fetch every reply on this gift once, up front, just to get
+    // accurate counts on every note's badge as soon as the page loads.
+    // `id, note_id` only (not `select('*')`) since counting is all this
+    // needs — openReplyDrawer still does its own full-row fetch (and
+    // overwrites whatever's here) the moment someone actually opens a
+    // thread, so nothing here is ever rendered as if it were a complete
+    // conversation.
+    (async function preloadReplyCounts() {
+      const { data, error } = await sb
+        .from('note_replies')
+        .select('id, note_id')
+        .eq('gift_id', gift.id);
+      if (error || !data) return;
+      data.forEach(function(r) {
+        (REPLY_CACHE[r.note_id] = REPLY_CACHE[r.note_id] || []).push(r);
+      });
+      updateReplyBtn(currentIndex);
+    })();
+
     function updateReplyBtn(i) {
       var locked = i > todayNoteIndex;
       replyBtn.classList.toggle('reply-btn-hidden', locked);
