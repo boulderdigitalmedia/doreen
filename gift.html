@@ -145,7 +145,18 @@
     .ls-trail { position: absolute; left: 0; top: 0; overflow: visible; }
     .ls-trail path { stroke-dasharray: 44; animation: ls-trail 5.2s ease-in-out infinite; }
     .ls-env { position: relative; width: 148px; height: 108px; animation: ls-fly 5.2s cubic-bezier(.22,.61,.36,1) infinite; }
-    .ls-note { transform-box: fill-box; transform-origin: 50% 100%; animation: ls-note 5.2s cubic-bezier(.34,1.1,.4,1) infinite; }
+    /* transform-origin is the note rect's own bottom-center in the SVG's
+       viewBox coordinates (rect is x=35 y=-2 w=62 h=46, so center-x=66,
+       bottom-y=44) — written out in absolute SVG units rather than as
+       `transform-box: fill-box; transform-origin: 50% 100%` (which looks
+       equivalent and IS on most browsers, but mobile Safari has a
+       long-standing bug computing fill-box bounding boxes for animated
+       SVG <g> transforms, which was clipping the top of the note mid-
+       animation on phones — fine on desktop Chrome/Firefox, which don't
+       share that bug). Default SVG transform-box (view-box) reliably
+       interprets an absolute coordinate origin everywhere, sidestepping
+       the bug entirely instead of working around it. */
+    .ls-note { transform-origin: 66px 44px; animation: ls-note 5.2s cubic-bezier(.34,1.1,.4,1) infinite; }
     .ls-badge {
       position: absolute; top: -13px; right: -13px;
       width: 42px; height: 42px; border-radius: 50%;
