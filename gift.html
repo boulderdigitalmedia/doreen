@@ -348,7 +348,13 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
+      /* Same iOS auto-zoom-on-focus issue as .reply-compose-input above
+         (see its comment) — this covers every onboarding/settings field
+         that uses .ob-input: password, email, phone, delivery time,
+         report-abuse email/details. All of those were 14px, well under
+         the 16px floor that keeps Safari from zooming the page in when
+         you tap into the field. */
+      font-size: 16px;
       color: var(--ink);
       background: var(--bg);
       outline: none;
@@ -1219,8 +1225,17 @@
     .reply-compose-input {
       flex: 1; min-height: 40px; max-height: 120px; resize: none;
       border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px;
-      font-family: inherit; font-size: calc(15px * var(--text-scale)); color: var(--ink);
+      font-family: inherit; color: var(--ink);
       background: var(--bg);
+      /* iOS Safari auto-zooms the whole page on focus for any input/
+         textarea whose computed font-size is under 16px, then leaves you
+         zoomed in after — this box was 15px at the default (and most
+         common) text-size setting, which is exactly what that was doing
+         every time someone opened the reply drawer and tapped in to
+         type. max() keeps it scaling up with the text-size preference
+         like everything else here, just never dips below the 16px floor
+         that keeps the browser from zooming at all. */
+      font-size: max(16px, calc(15px * var(--text-scale)));
     }
     .reply-compose-input:focus { outline: none; border-color: var(--sage); }
     .reply-send-btn {
