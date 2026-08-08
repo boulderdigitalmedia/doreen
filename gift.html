@@ -18,6 +18,31 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="shortcut icon" href="/favicon.ico">
+  <!-- Web App Manifest — deliberately NOT a static href to /manifest.json
+       (which exists but nothing should link to directly any more; it's
+       just a leftover precache entry for sw.js). Chrome's install-banner
+       criteria require a *linked* manifest to even offer "Add to Home
+       Screen" — without this there's no native install prompt on
+       Android, just a plain browser bookmark if someone digs for it in
+       the menu. Every gift needs its OWN manifest, though, not one
+       shared static file: start_url has to point back at THIS gift's
+       own slug, or installing it would land you back on the marketing
+       homepage every time you tap the icon instead of your notes. Slug
+       is read straight from the URL here (deliberately duplicating the
+       `slug` constant further down in the main script, rather than
+       restructuring load order around it) so this runs and the link tag
+       exists as early as possible — see /api/gift-manifest
+       (netlify/functions/gift-manifest.js) for what it actually returns. -->
+  <script>
+    (function() {
+      var slug = location.pathname.replace(/^\//, '').split('/')[0];
+      if (!slug) return;
+      var link = document.createElement('link');
+      link.rel  = 'manifest';
+      link.href = '/api/gift-manifest?slug=' + encodeURIComponent(slug);
+      document.head.appendChild(link);
+    })();
+  </script>
   <!-- Every gift page (any /:slug URL) renders from this one template, so
        this single tag keeps all of them out of search results — personal
        notes and photos shouldn't be crawlable or show up in search,
