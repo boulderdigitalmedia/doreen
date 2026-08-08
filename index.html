@@ -128,10 +128,36 @@
       display: flex; align-items: center; justify-content: center;
       line-height: 1;
     }
-    .nav-right { display: flex; align-items: center; gap: 20px; }
+    .nav-right { display: flex; align-items: center; gap: 20px; position: relative; }
     .nav-link { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; color: var(--ink-mid); text-decoration: none; }
     .nav-link:hover { color: var(--ink); }
     .nav-link-icon { display: none; flex-shrink: 0; }
+    /* Collapsed "Blog"/"Sign in" menu for narrow phones — see the
+       max-width:430px block below, which is where this actually shows
+       itself. Same kebab-dropdown pattern as account.html's header menu.
+       Always in the DOM at every width; only one of this or the inline
+       .nav-link pair is ever visible at once, controlled purely by that
+       media query. */
+    .nav-menu-btn {
+      display: none;
+      background: none; border: none; cursor: pointer;
+      font-size: 22px; line-height: 1; color: var(--ink-mid); padding: 6px 8px;
+    }
+    .nav-menu-btn:hover { color: var(--ink); }
+    .nav-menu {
+      display: none;
+      position: absolute; top: calc(100% + 8px); right: 0;
+      flex-direction: column; align-items: stretch; gap: 0;
+      min-width: 150px; background: #fff; border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: 0 8px 24px rgba(20,26,20,0.12);
+      padding: 6px; z-index: 60;
+    }
+    .nav-menu.open { display: flex; }
+    .nav-menu-link {
+      font-size: 16px; color: var(--ink-mid); text-decoration: none;
+      padding: 10px 12px; border-radius: 7px;
+    }
+    .nav-menu-link:hover { background: var(--sage-pale); color: var(--ink); }
     .btn-nav { background: var(--sage); color: #fff; padding: 9px 20px; border-radius: 10px; font-size: 18px; font-weight: 500; text-decoration: none; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s; white-space: nowrap; }
     .btn-nav:hover { opacity: 0.85; }
 
@@ -429,20 +455,21 @@
       .hero-full-card.role-left  { transform: translate(-46%,4%) rotate(-8deg) scale(0.85); }
     }
 
-    /* At phone widths, "A Note For You" + "Sign in" + "Get started" no
-       longer all fit comfortably — collapse "Sign in" down to just an
-       icon so the wordmark and the primary "Get started" CTA (the one
-       that actually matters most here) both keep their full room. */
+    /* At phone widths, "A Note For You" + "Blog" + "Sign in" + "Get
+       started" don't all fit comfortably — Blog and Sign in (the two
+       lower-priority links) collapse into a kebab menu instead, so the
+       wordmark and the primary "Get started" CTA (the one that actually
+       matters most here) both keep their full room without the row
+       feeling crowded. */
     @media (max-width: 430px) {
       nav { padding: 0 14px; }
       .nav-brand { font-size: 21px; gap: 6px; }
       .nav-brand .logo-mark { width: 24px; height: 17px; }
       .nav-brand .logo-badge { width: 12px; height: 12px; font-size: 9px; top: -6px; right: -6px; }
-      .nav-right { gap: 8px; }
-      .nav-link { padding: 6px; }
-      .nav-link-icon { display: inline-flex; }
-      .nav-link-text { display: none; }
-      .btn-nav { padding: 8px 12px; font-size: 15px; }
+      .nav-right { gap: 4px; }
+      .nav-link { display: none; }
+      .nav-menu-btn { display: flex; align-items: center; }
+      .btn-nav { padding: 8px 12px; font-size: 15px; margin-left: 4px; }
     }
   </style>
 </head>
@@ -471,6 +498,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <svg class="nav-link-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4.2 3.6-7 8-7s8 2.8 8 7"></path></svg>
       <span class="nav-link-text">Sign in</span>
     </a>
+    <!-- Narrow-phone stand-in for the two .nav-link's above — see the
+         max-width:430px block, which is the only place either of these
+         two representations actually shows itself (never both at once). -->
+    <button class="nav-menu-btn" id="navMenuBtn" onclick="toggleNavMenu()" aria-haspopup="true" aria-expanded="false" aria-label="Menu">&#8942;</button>
+    <div class="nav-menu" id="navMenu">
+      <a class="nav-menu-link" href="/blog">Blog</a>
+      <a class="nav-menu-link" href="/login">Sign in</a>
+    </div>
     <a class="btn-nav" href="/signup">Get started</a>
   </div>
 </nav>
@@ -925,6 +960,26 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   function closeFindGiftModal() {
     fgOverlay.classList.remove('show');
   }
+
+  // ── MOBILE NAV MENU (Blog/Sign in, see .nav-menu-btn CSS) ───────────
+  // Same kebab-dropdown pattern as account.html's header menu.
+  function toggleNavMenu(forceClose) {
+    var menu = document.getElementById('navMenu');
+    var btn  = document.getElementById('navMenuBtn');
+    var open = forceClose === true ? false : !menu.classList.contains('open');
+    menu.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('navMenu');
+    var btn  = document.getElementById('navMenuBtn');
+    if (!menu || !menu.classList.contains('open')) return;
+    if (menu.contains(e.target) || btn.contains(e.target)) return;
+    toggleNavMenu(true);
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') toggleNavMenu(true);
+  });
 
   function extractSlug(raw) {
     var v = (raw || '').trim();
