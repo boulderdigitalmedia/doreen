@@ -1247,3 +1247,22 @@ CREATE POLICY "note_reply_public_read" ON note_replies
             WHERE gifts.id = note_replies.gift_id
             AND   gifts.status IN ('active', 'cancelled'))
   );
+
+-- ── DAILY ACTIVITY DIGEST ────────────────────────────────────────
+-- One row per calendar date (in the digest's own Pacific/Auckland clock)
+-- that's already had its digest email sent — see daily-digest.js. Netlify
+-- Scheduled Functions run on plain UTC cron with no timezone awareness of
+-- their own, so daily-digest.js runs every 15 minutes (same cadence as
+-- send-daily.js/process-annual-trials.js) and checks the *actual* local
+-- time in Auckland on every tick, same pattern isDeliveryWindow already
+-- uses for recipient delivery windows. This table is what stops that
+-- from sending the same day's digest twice if more than one tick lands
+-- inside the send hour.
+CREATE TABLE IF NOT EXISTS daily_digest_runs (
+  digest_date DATE        PRIMARY KEY,
+  sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE daily_digest_runs ENABLE ROW LEVEL SECURITY;
+-- No policies — service-role key only (daily-digest.js is the only thing
+-- that ever touches this table), same as admin_login_attempts above.
