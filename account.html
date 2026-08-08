@@ -1415,7 +1415,21 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       renderNotes();
       requestAnimationFrame(function() {
         var row = document.querySelector('[data-note-id="' + noteId + '"]');
-        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (row) {
+          // Already-sent (and older upcoming-month) notes live inside a
+          // collapsed <details class="notes-group"> dropdown by default
+          // (see renderNotes above). Expanding OPEN_REPLY_THREADS alone
+          // isn't enough if the row itself is nested inside one of these
+          // still-closed groups — the whole row (thread included) stays
+          // invisible and scrollIntoView has nothing visible to land on.
+          // This is almost always where a reply notification link points
+          // (replies come in on notes that have already gone out), so
+          // without this the sender opens the email, lands on the gift,
+          // and sees no sign of the new reply at all.
+          var group = row.closest('details.notes-group');
+          if (group && !group.open) group.open = true;
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       });
     }
   }
