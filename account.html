@@ -272,7 +272,22 @@
     /* ── NOTES LIST ── */
     .notes-list { display: flex; flex-direction: column; gap: 8px; }
     .notes-list-hint { font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; }
-    .note-row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; transition: box-shadow 0.15s, border-color 0.15s; }
+    .note-row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; transition: box-shadow 0.15s, border-color 0.15s, background-color 1.4s ease; }
+    /* Applied to a note right after a successful drag-reorder (see
+       JUST_MOVED_NOTE_ID / onNoteDragEnd below) so it's obvious at a
+       glance which row just landed in a new spot, especially after a
+       multi-note reshuffle where several rows shift at once. Sage rather
+       than pinned's gold — this is transient feedback, not a persistent
+       state like a pin. Faded back out by a JS timeout removing the
+       class (see onNoteDragEnd) — background-color is in .note-row's own
+       transition list above specifically so that removal animates
+       smoothly instead of snapping back. */
+    .note-row.just-moved { background: var(--sage-pale); border-color: var(--sage-light); }
+    .just-moved-badge {
+      display: inline-block; font-size: 11px; font-weight: 500; color: var(--sage);
+      background: var(--surface); border: 1px solid var(--sage-light); border-radius: 6px;
+      padding: 1px 6px; margin-top: 3px; white-space: nowrap;
+    }
     /* The actual flex row of handle/date/thumb/text/actions — split out
        from .note-row itself so a reply thread (see .reply-thread below)
        can sit underneath it, as a second block inside the same card,
@@ -2038,13 +2053,23 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       ? '<button class="btn btn-ghost btn-sm" onclick="toggleReplyThread(\'' + note.id + '\')">💬' + (replyCount ? ' ' + replyCount : '') + '</button>'
       : '';
 
+    // See JUST_MOVED_NOTE_ID / onNoteDragEnd — set for a couple seconds
+    // right after a drag-reorder actually changes this note's position,
+    // then cleared (and faded out via the .just-moved CSS transition).
+    // Lives in the text-preview line rather than the narrow date-wrap
+    // column above (deliberately kept tight for small screens — see its
+    // own comment) since that column has no room for a text badge.
+    var justMovedBadge = note.id === JUST_MOVED_NOTE_ID
+      ? '<span class="just-moved-badge">Just moved</span> '
+      : '';
+
     return handle +
       '<div class="note-date-wrap">' +
         '<div class="note-date">' + esc(dateLabel) + '</div>' +
         '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
       '</div>' +
       thumb +
-      '<div class="note-text-preview">' + pinTag + voiceTag + esc(note.text) + '</div>' +
+      '<div class="note-text-preview">' + justMovedBadge + pinTag + voiceTag + esc(note.text) + '</div>' +
       '<div class="note-actions">' +
         replyBtn +
         '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
@@ -2058,7 +2083,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     // today's own note needs its thread rendered even though `locked`
     // (order-lock) is false for it.
     var replied = note.order_index <= TODAY_NOTE_INDEX;
-    return '<div class="note-row' + (locked ? ' locked' : '') + (pinned ? ' pinned' : '') + '" data-note-id="' + note.id + '">' +
+    var justMoved = note.id === JUST_MOVED_NOTE_ID;
+    return '<div class="note-row' + (locked ? ' locked' : '') + (pinned ? ' pinned' : '') + (justMoved ? ' just-moved' : '') + '" data-note-id="' + note.id + '">' +
       '<div class="note-row-main">' + buildNoteRowHtml(note, locked) + '</div>' +
       (replied ? replyThreadHtml(note) : '') +
     '</div>';
@@ -2178,6 +2204,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // '.note-row:not(.locked)' can never let a dragged row cross into them.
   var NOTE_DRAG = null;
 
+  // Which note (if any) should render with the "just moved" highlight +
+  // badge — see the .just-moved CSS above and noteRowDiv/buildNoteRowHtml
+  // below, which read this on every renderNotes() call the same way
+  // OPEN_REPLY_THREADS/OPEN_NOTE_GROUPS survive re-renders. Set in
+  // onNoteDragEnd once a drag actually changes a note's position; cleared
+  // (and its highlight faded out) by justMovedTimer below.
+  var JUST_MOVED_NOTE_ID = null;
+  var justMovedTimer = null;
+
   function startNoteDrag(e, noteId) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     var row = document.querySelector('.note-row[data-note-id="' + noteId + '"]');
@@ -2187,11 +2222,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     // dragging it wouldn't do anything meaningful anyway.
     if (!row || row.classList.contains('locked') || row.classList.contains('pinned')) return;
 
+    // Captured purely to tell, in onNoteDragEnd, whether the drop actually
+    // changed this note's position among the other floating (unsent,
+    // unpinned) rows — same set floatingIdsInNewOrder there reads from —
+    // so picking a row up and dropping it back where it started doesn't
+    // get flagged as "just moved".
+    var floatingBefore = Array.prototype.slice.call(document.getElementById('notesList').querySelectorAll('.note-row:not(.locked):not(.pinned)'))
+      .map(function(r) { return r.getAttribute('data-note-id'); });
+    var dragStartIndex = floatingBefore.indexOf(noteId);
+
     // grabOffsetY = where within the row the pointer landed, so the row
     // stays glued to that exact point under the finger for the whole drag
     // instead of re-centering itself under the pointer.
     var rect = row.getBoundingClientRect();
-    NOTE_DRAG = { row: row, grabOffsetY: e.clientY - rect.top };
+    NOTE_DRAG = { row: row, grabOffsetY: e.clientY - rect.top, noteId: noteId, dragStartIndex: dragStartIndex };
 
     row.classList.remove('note-drag-settle');
     row.classList.add('note-dragging');
@@ -2254,7 +2298,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   async function onNoteDragEnd(e) {
     if (!NOTE_DRAG) return;
-    var row = NOTE_DRAG.row;
+    var row            = NOTE_DRAG.row;
+    var draggedNoteId  = NOTE_DRAG.noteId;
+    var dragStartIndex = NOTE_DRAG.dragStartIndex;
 
     // Ease back down to flat instead of snapping — the settle class turns
     // on a transform transition that's otherwise off during the drag itself.
@@ -2284,11 +2330,38 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var floatingIdsInNewOrder = Array.prototype.slice.call(list.querySelectorAll('.note-row:not(.locked):not(.pinned)'))
       .map(function(r) { return r.getAttribute('data-note-id'); });
 
+    // Only flag it as "just moved" if the drop actually landed it
+    // somewhere new — picking a row up and putting it back where it
+    // started shouldn't highlight it.
+    var actuallyMoved = dragStartIndex !== floatingIdsInNewOrder.indexOf(draggedNoteId);
+    if (actuallyMoved) {
+      clearTimeout(justMovedTimer);
+      JUST_MOVED_NOTE_ID = draggedNoteId;
+    }
+
     var failed = await resequenceUnsentNotes(floatingIdsInNewOrder);
     if (failed) {
       showToast('Reorder partially failed — refresh and check the numbering');
     } else {
       showToast('Notes reordered ✓');
+    }
+
+    // resequenceUnsentNotes() (any path through it) calls renderNotes()
+    // internally, which is what actually paints the .just-moved
+    // highlight/badge (see noteRowDiv/buildNoteRowHtml) now that
+    // JUST_MOVED_NOTE_ID is set — fade it back out a couple seconds
+    // later. Re-queries the row fresh rather than reusing the `row`
+    // reference above, since renderNotes() replaces every row's DOM node
+    // wholesale.
+    if (actuallyMoved) {
+      justMovedTimer = setTimeout(function() {
+        JUST_MOVED_NOTE_ID = null;
+        var freshRow = document.querySelector('.note-row[data-note-id="' + draggedNoteId + '"]');
+        if (!freshRow) return;
+        freshRow.classList.remove('just-moved');
+        var badge = freshRow.querySelector('.just-moved-badge');
+        if (badge) badge.remove();
+      }, 2600);
     }
   }
 
