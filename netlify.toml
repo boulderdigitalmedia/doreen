@@ -138,6 +138,16 @@
   to     = "/.netlify/functions/submit-note-reply"
   status = 200
 
+[[redirects]]
+  from   = "/api/gift-manifest"
+  to     = "/.netlify/functions/gift-manifest"
+  status = 200
+
+[[redirects]]
+  from   = "/api/checkout-session"
+  to     = "/.netlify/functions/checkout-session"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
