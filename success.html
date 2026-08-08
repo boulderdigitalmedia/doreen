@@ -82,5 +82,59 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <br><a href="/terms">Terms</a>·<a href="/privacy">Privacy</a>·<a href="/conduct">Code of Conduct</a>
   </footer>
   <script>document.querySelectorAll('.footerYear').forEach(function(el) { el.textContent = new Date().getFullYear(); });</script>
+
+  <script>
+    // ── PURCHASE CONVERSION TRACKING ──────────────────────────────
+    // create-checkout.js's success_url is /success?session_id={CHECKOUT_
+    // SESSION_ID} — Stripe fills that placeholder in on redirect, so
+    // it's already sitting in the URL by the time this page loads. Look
+    // it up via checkout-session.js (reads back from Stripe directly,
+    // no auth needed — the session id itself is the capability) and push
+    // a real GA4-shaped ecommerce "purchase" event into GTM's dataLayer:
+    // value, currency, and which plan. Before this there was nothing
+    // here beyond a bare pageview — no order value for a GA4/Ads/Meta
+    // tag in GTM to actually optimize a campaign against.
+    //
+    // sessionStorage guard is what keeps a page refresh (or someone
+    // bookmarking this exact URL) from firing the same purchase twice —
+    // dataLayer has no built-in de-dupe of its own, and this URL is
+    // otherwise perfectly reloadable/shareable.
+    (function() {
+      var params    = new URLSearchParams(window.location.search);
+      var sessionId = params.get('session_id');
+      if (!sessionId) return;
+
+      var trackedKey = 'anfy_purchase_tracked_' + sessionId;
+      try {
+        if (sessionStorage.getItem(trackedKey)) return;
+      } catch (e) { /* private-browsing sessionStorage access can throw — fall through and track anyway */ }
+
+      fetch('/api/checkout-session?session_id=' + encodeURIComponent(sessionId))
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          if (!data) return;
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({
+            event: 'purchase',
+            ecommerce: {
+              transaction_id: data.transactionId,
+              value:          data.value,
+              currency:       data.currency,
+              items: [{
+                item_name:     data.planLabel,
+                item_category: data.upgrade ? 'upgrade' : 'new_subscription',
+                price:         data.value,
+                quantity:      1,
+              }],
+            },
+          });
+          try { sessionStorage.setItem(trackedKey, '1'); } catch (e) {}
+        })
+        // A tracking hiccup (ad-blocker, network blip, Stripe API error)
+        // should never surface to the person on this page — the purchase
+        // already went through; this is purely analytics on top of it.
+        .catch(function() {});
+    })();
+  </script>
 </body>
 </html>
