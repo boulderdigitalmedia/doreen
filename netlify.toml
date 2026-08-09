@@ -148,6 +148,11 @@
   to     = "/.netlify/functions/checkout-session"
   status = 200
 
+[[redirects]]
+  from   = "/unsubscribe"
+  to     = "/.netlify/functions/unsubscribe"
+  status = 200
+
 # ── Auth / dashboard clean URLs ───────────────────────────────────────────────
 [[redirects]]
   from   = "/login"
