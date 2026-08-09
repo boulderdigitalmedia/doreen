@@ -224,6 +224,8 @@ async function handleAddonPurchaseCompleted(session) {
     gift_type:           'addon',
     term_end_date:       m.term_end_date || null,
     addon_tier_price:    tierPrice,
+    recipient_relationship:       m.recipient_relationship || null,
+    recipient_relationship_other: m.recipient_relationship_other || null,
   });
 
   if (error) {
