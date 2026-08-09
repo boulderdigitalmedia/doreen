@@ -1282,6 +1282,28 @@ ALTER TABLE gifts ADD COLUMN IF NOT EXISTS recipient_relationship TEXT
     ('partner','parent','grandparent','child','sibling','friend','coworker','other'));
 ALTER TABLE gifts ADD COLUMN IF NOT EXISTS recipient_relationship_other TEXT;
 
+-- ── EMAIL UNSUBSCRIBES (self-hosted, mirrored to Resend) ─────────────
+-- Our own permanent record of every unsubscribe, written by
+-- netlify/functions/unsubscribe.js the moment someone clicks an
+-- unsubscribe link (see unsubscribeUrl in _shared.js). This table is the
+-- source of truth — Resend's own contact.unsubscribed flag and account-
+-- wide suppression list are kept in sync as a mirror, best-effort, but a
+-- failed Resend API call at click time never blocks this row from being
+-- written first, so an unsubscribe is honored immediately regardless of
+-- Resend's availability at that moment.
+CREATE TABLE IF NOT EXISTS email_unsubscribes (
+  id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  email           TEXT        NOT NULL UNIQUE,
+  source          TEXT,                              -- free-text label for which list/campaign this came from
+  unsubscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resend_synced   BOOLEAN     NOT NULL DEFAULT FALSE  -- true once BOTH the contact-update and suppression-add calls to Resend succeeded
+);
+CREATE INDEX IF NOT EXISTS idx_email_unsubscribes_email ON email_unsubscribes(email);
+
+ALTER TABLE email_unsubscribes ENABLE ROW LEVEL SECURITY;
+-- No policies — service-role key only (unsubscribe.js is the only thing
+-- that ever touches this table), same pattern as daily_digest_runs above.
+
 -- ── GIFT PACK → ANNUAL UPGRADE NUDGE (fires ~halfway through the 30-day
 -- term) ────────────────────────────────────────────────────────────────
 -- Separate from renewal_reminder_sent_at (which fires once, ~5 days
