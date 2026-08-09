@@ -38,6 +38,19 @@
 
 const { sb, ok, err, preflight } = require('./_shared');
 
+// Kept in sync with the dropdown in account.html's "New gift" modal and
+// the CHECK constraint on gifts.recipient_relationship (schema.sql).
+const RELATIONSHIP_LABELS = {
+  partner:     'Partner',
+  parent:      'Parent',
+  grandparent: 'Grandparent',
+  child:       'Child',
+  sibling:     'Sibling',
+  friend:      'Friend',
+  coworker:    'Coworker',
+  other:       'Other',
+};
+
 // Kept in sync with index.html / the Stripe price IDs used by
 // create-checkout.js — this is the only source MRR is computed from now
 // that neither plan has a real subscription/invoice to look up in Stripe.
@@ -168,6 +181,30 @@ exports.handler = async (event) => {
   const smsRevenueEstimate   = (annualSmsCount * SMS_RENEWAL_PRICE.annual) / 12 + (giftPackSmsCount * SMS_RENEWAL_PRICE.gift_pack);
   const mrr = Math.round((baseMrr + addonRevenueEstimate + smsRevenueEstimate) * 100) / 100;
 
+  // Who gifts are for — aggregate across every gift ever created
+  // (regardless of current billing status; this is a demographic signal
+  // about buyer intent, not a billing metric). recipient_relationship is
+  // NULL for any gift created before this field existed, or where the
+  // buyer left it on "Prefer not to say" — bucketed separately rather
+  // than silently dropped so the total still reconciles.
+  const { data: relationshipRows } = await sb.from('gifts').select('recipient_relationship, recipient_relationship_other');
+  const relationshipCounts = {};
+  const otherSamples = [];
+  (relationshipRows || []).forEach((g) => {
+    const key = g.recipient_relationship || 'unspecified';
+    relationshipCounts[key] = (relationshipCounts[key] || 0) + 1;
+    if (key === 'other' && g.recipient_relationship_other) {
+      otherSamples.push(g.recipient_relationship_other);
+    }
+  });
+  const relationshipBreakdown = Object.keys(relationshipCounts)
+    .map((key) => ({
+      key,
+      label: RELATIONSHIP_LABELS[key] || 'Not specified',
+      count: relationshipCounts[key],
+    }))
+    .sort((a, b) => b.count - a.count);
+
   const cutoff = new Date(Date.now() - EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { data: events, error: eventsErr } = await sb
     .from('subscription_events')
@@ -201,6 +238,8 @@ exports.handler = async (event) => {
       giftPackSmsCount,
       cancellations30d,
       churnRate30d,
+      relationshipBreakdown,
+      relationshipOtherSamples: otherSamples.slice(-15).reverse(),
     },
     events: events || [],
   });
