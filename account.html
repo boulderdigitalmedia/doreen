@@ -962,6 +962,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <label>How many notes do you plan to write? (optional)</label>
       <input type="number" id="newPlannedCount" min="1" placeholder="e.g. 60" />
     </div>
+    <div class="field">
+      <label>Who is this gift for?</label>
+      <select id="newRelationship" onchange="onNewRelationshipChange()">
+        <option value="">Prefer not to say</option>
+        <option value="partner">Partner</option>
+        <option value="parent">Parent</option>
+        <option value="grandparent">Grandparent</option>
+        <option value="child">Child</option>
+        <option value="sibling">Sibling</option>
+        <option value="friend">Friend</option>
+        <option value="coworker">Coworker</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field" id="newRelationshipOtherField" style="display:none">
+      <label>Tell us a bit more (optional)</label>
+      <input type="text" id="newRelationshipOther" placeholder="e.g. my mentor" maxlength="60" />
+    </div>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1" id="createSubmitBtn" onclick="createGift()">Create gift</button>
       <button class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
@@ -3660,6 +3678,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     document.getElementById('newDeliveryTime').value = '08:00';
     populateTimezoneSelect('newTimezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
     document.getElementById('newPlannedCount').value = '';
+    document.getElementById('newRelationship').value = '';
+    document.getElementById('newRelationshipOther').value = '';
+    document.getElementById('newRelationshipOtherField').style.display = 'none';
     document.getElementById('createError').style.display = 'none';
     updateNewSlugPreview();
 
@@ -3676,6 +3697,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     document.getElementById('createModal').classList.add('open');
   }
   function closeCreateModal() { document.getElementById('createModal').classList.remove('open'); }
+  function onNewRelationshipChange() {
+    var isOther = document.getElementById('newRelationship').value === 'other';
+    document.getElementById('newRelationshipOtherField').style.display = isOther ? '' : 'none';
+  }
   function autoSlug() {
     var name = document.getElementById('newName').value;
     var slug = name.toLowerCase().replace(/[^a-z0-9\s-]/g,'').trim().replace(/\s+/g,'-').replace(/-+/g,'-');
@@ -3698,6 +3723,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var timezone       = document.getElementById('newTimezone').value;
     var plannedCountRaw = document.getElementById('newPlannedCount').value;
     var plannedCount   = plannedCountRaw ? parseInt(plannedCountRaw, 10) : null;
+    var relationship      = document.getElementById('newRelationship').value || null;
+    var relationshipOther = relationship === 'other'
+      ? (document.getElementById('newRelationshipOther').value.trim() || null)
+      : null;
     if (!name || !slug || !startDate) { errEl.textContent = 'All fields are required'; errEl.style.display = 'block'; return; }
     if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) { errEl.textContent = 'Slug: lowercase letters, numbers and hyphens only'; errEl.style.display = 'block'; return; }
 
@@ -3712,6 +3741,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           body: JSON.stringify({
             display_name: name, sender_name: sender, slug, start_date: startDate, frequency,
             delivery_time: deliveryTime, timezone: timezone, planned_notes_count: plannedCount,
+            recipient_relationship: relationship, recipient_relationship_other: relationshipOther,
           }),
         });
         var data = await res.json();
@@ -3742,6 +3772,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       user_id: USER.id, slug, display_name: name, sender_name: sender, start_date: startDate, frequency,
       delivery_time: deliveryTime, timezone: timezone, planned_notes_count: plannedCount, status: 'active',
       gift_type: giftType,
+      recipient_relationship: relationship, recipient_relationship_other: relationshipOther,
     });
     if (error) { errEl.textContent = error.code === '23505' ? 'That slug is already taken' : error.message; errEl.style.display = 'block'; return; }
     closeCreateModal();
