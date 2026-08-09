@@ -32,65 +32,76 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return preflight();
   if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
 
-  let body;
+  // Same reasoning as the try/catch wrapping verify-gift-password.js's
+  // handler — an uncaught exception here came back to the browser as a
+  // bare 502 with no JSON body, which the client's updateGiftPassword()
+  // couldn't parse into a real error message, so it fell back to a
+  // generic "Something went wrong." This guarantees a real `error` field
+  // comes back either way.
   try {
-    body = JSON.parse(event.body || '{}');
-  } catch {
-    return err('Invalid request body');
-  }
-
-  const { slug, currentPassword, newPassword } = body;
-  if (!slug) return err('Missing slug');
-
-  const { data: gift, error } = await sb
-    .from('gifts')
-    .select('id, access_password, password_attempts, password_locked_until')
-    .eq('slug', slug)
-    .eq('status', 'active')
-    .maybeSingle();
-
-  if (error || !gift) return err('Gift not found', 404);
-
-  const hasExistingPassword = !!(gift.access_password && gift.access_password.length > 0);
-
-  if (hasExistingPassword) {
-    if (gift.password_locked_until && new Date(gift.password_locked_until) > new Date()) {
-      return err(lockedMessage(gift.password_locked_until), 429);
+    let body;
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      return err('Invalid request body');
     }
 
-    if (currentPassword !== gift.access_password) {
-      const nextAttempts = (gift.password_attempts || 0) + 1;
-      const updates = { password_attempts: nextAttempts };
-      let responseMsg = "That current password isn't right";
+    const { slug, currentPassword, newPassword } = body;
+    if (!slug) return err('Missing slug');
 
-      if (nextAttempts >= MAX_PASSWORD_ATTEMPTS) {
-        const lockedUntil = new Date(Date.now() + LOCKOUT_MS).toISOString();
-        updates.password_attempts = 0; // the lockout window is the gate now, not the counter
-        updates.password_locked_until = lockedUntil;
-        responseMsg = lockedMessage(lockedUntil);
+    const { data: gift, error } = await sb
+      .from('gifts')
+      .select('id, access_password, password_attempts, password_locked_until')
+      .eq('slug', slug)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (error || !gift) return err('Gift not found', 404);
+
+    const hasExistingPassword = !!(gift.access_password && gift.access_password.length > 0);
+
+    if (hasExistingPassword) {
+      if (gift.password_locked_until && new Date(gift.password_locked_until) > new Date()) {
+        return err(lockedMessage(gift.password_locked_until), 429);
       }
 
-      await sb.from('gifts').update(updates).eq('id', gift.id);
-      return err(responseMsg, nextAttempts >= MAX_PASSWORD_ATTEMPTS ? 429 : 403);
+      if (currentPassword !== gift.access_password) {
+        const nextAttempts = (gift.password_attempts || 0) + 1;
+        const updates = { password_attempts: nextAttempts };
+        let responseMsg = "That current password isn't right";
+
+        if (nextAttempts >= MAX_PASSWORD_ATTEMPTS) {
+          const lockedUntil = new Date(Date.now() + LOCKOUT_MS).toISOString();
+          updates.password_attempts = 0; // the lockout window is the gate now, not the counter
+          updates.password_locked_until = lockedUntil;
+          responseMsg = lockedMessage(lockedUntil);
+        }
+
+        await sb.from('gifts').update(updates).eq('id', gift.id);
+        return err(responseMsg, nextAttempts >= MAX_PASSWORD_ATTEMPTS ? 429 : 403);
+      }
     }
+
+    const nextPassword = typeof newPassword === 'string' && newPassword.length > 0 ? newPassword : null;
+
+    const updates = { access_password: nextPassword };
+    if (hasExistingPassword) {
+      // Just verified correct above — clear any stale attempt counter as
+      // part of the same write.
+      updates.password_attempts = 0;
+      updates.password_locked_until = null;
+    }
+
+    const { error: updateErr } = await sb
+      .from('gifts')
+      .update(updates)
+      .eq('id', gift.id);
+
+    if (updateErr) return err('Could not update password', 500);
+
+    return ok({ success: true });
+  } catch (e) {
+    console.error('update-gift-password crashed:', e.message, e.stack);
+    return err('Server error — try again in a moment', 500);
   }
-
-  const nextPassword = typeof newPassword === 'string' && newPassword.length > 0 ? newPassword : null;
-
-  const updates = { access_password: nextPassword };
-  if (hasExistingPassword) {
-    // Just verified correct above — clear any stale attempt counter as
-    // part of the same write.
-    updates.password_attempts = 0;
-    updates.password_locked_until = null;
-  }
-
-  const { error: updateErr } = await sb
-    .from('gifts')
-    .update(updates)
-    .eq('id', gift.id);
-
-  if (updateErr) return err('Could not update password', 500);
-
-  return ok({ success: true });
 };
