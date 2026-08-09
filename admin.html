@@ -189,6 +189,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   </div>
 
   <div class="panel">
+    <div class="panel-title">Who gifts are for</div>
+    <div class="panel-sub">Aggregated across every gift ever created, from the "Who is this gift for?" field on setup.</div>
+    <div class="plan-split" id="relationshipSplit"></div>
+    <div class="empty-note" id="relationshipOtherNote" style="display:none;margin-top:10px;"></div>
+  </div>
+
+  <div class="panel">
     <div class="panel-title">Enrollments · Renewals · Cancellations</div>
     <div class="panel-sub">By week, last 12 weeks. History only goes back to whenever this dashboard shipped (plus a one-time backfill) — early weeks may look sparse.</div>
     <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
@@ -219,6 +226,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   function fmtPct(n) {
     if (n == null) return '—';
     return (n * 100).toFixed(1) + '%';
+  }
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
   }
 
   async function fetchMetrics(password) {
@@ -255,10 +267,38 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     document.getElementById('planGiftPackBar').style.width = Math.round(100 * s.giftPackBillable / planTotal) + '%';
     document.getElementById('planAnnualBar').style.width    = Math.round(100 * s.annualBillable / planTotal) + '%';
 
+    renderRelationships(s.relationshipBreakdown || [], s.relationshipOtherSamples || []);
     renderChart(data.events || []);
     renderActivity(data.events || []);
 
     document.getElementById('refreshedAt').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // "unspecified" (no value on file — pre-existing gifts, or the buyer
+  // left it on "Prefer not to say") is real signal too, so it's shown
+  // like any other bucket rather than hidden.
+  var RELATIONSHIP_UNSPECIFIED_LABEL = 'Not specified';
+  function renderRelationships(breakdown, otherSamples) {
+    var wrap = document.getElementById('relationshipSplit');
+    wrap.innerHTML = '';
+    var total = breakdown.reduce(function (sum, b) { return sum + b.count; }, 0) || 1;
+    breakdown.forEach(function (b) {
+      var label = b.key === 'unspecified' ? RELATIONSHIP_UNSPECIFIED_LABEL : b.label;
+      var pct = Math.round(100 * b.count / total);
+      var item = document.createElement('div');
+      item.className = 'plan-split-item';
+      item.innerHTML =
+        '<div>' + esc(label) + ' — ' + b.count + '</div>' +
+        '<div class="plan-split-bar"><div class="plan-split-fill" style="width:' + pct + '%"></div></div>';
+      wrap.appendChild(item);
+    });
+    var otherNote = document.getElementById('relationshipOtherNote');
+    if (otherSamples.length) {
+      otherNote.style.display = '';
+      otherNote.textContent = 'Recent "Other" write-ins: ' + otherSamples.join(', ');
+    } else {
+      otherNote.style.display = 'none';
+    }
   }
 
   // Buckets events into the last 12 Monday-start weeks and draws a
