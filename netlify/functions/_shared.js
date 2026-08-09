@@ -494,6 +494,45 @@ async function sendRenewalReminderEmail(profile) {
   }
 }
 
+// ── Upgrade nudge (fires ~halfway through a Gift Pack's 30-day term) ──
+// Gift Pack buyers only. Separate from sendRenewalReminderEmail (which
+// fires once, ~5 days before ANY term ends, for either plan, and only
+// mentions upgrading in passing) — this is a dedicated, earlier pitch for
+// the standing $45 upgrade-to-annual offer (see startUpgradeCheckout in
+// account.html / the 'upgrade' plan in create-checkout.js), sent while
+// there's still real term left to make the switch worthwhile. Called
+// from send-daily.js's sweepUpgradeNudges, which stamps profiles.
+// upgrade_nudge_sent_at so this only ever goes out once per term (reset
+// to null alongside renewal_reminder_sent_at whenever a new term starts
+// — see stripe-webhook.js).
+async function sendUpgradeNudgeEmail(profile) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(profile.id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for upgrade nudge, profile ${profile.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    const termEndLabel = new Date(profile.access_term_end).toLocaleDateString();
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account`;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `Keep it going — upgrade to annual for $45 (instead of $59)`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">You're partway through your 30-Day Gift Pack, which ends on <strong>${termEndLabel}</strong>.</p>
+        <p style="font-size:16px;">If you're enjoying it, you can switch to the annual plan right now for <strong>$45</strong> instead of the usual $59 — a standing discount just for Gift Pack buyers. That gets you a full 12 months instead of buying another 30-day pack every time this one runs out.</p>
+        <p style="font-size:16px;">No pressure either way — this offer doesn't expire, even after your current term ends.</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Upgrade to annual — $45 →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send upgrade nudge for profile ${profile.id}:`, err.message);
+  }
+}
+
 // ── Re-engagement nudge (fires after a stretch of no app activity) ──
 // Billing state alone doesn't tell you whether a paying buyer is actually
 // using the thing they're paying for — this is the "come back and check
@@ -919,6 +958,7 @@ module.exports = {
   getGiftNoteStatus,
   applyTermStart,
   sendRenewalReminderEmail,
+  sendUpgradeNudgeEmail,
   sendGiftSetupReminderEmail,
   sendReengagementEmail,
   sendRecipientReplyEmail,
