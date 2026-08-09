@@ -97,6 +97,7 @@ exports.handler = async (event) => {
   const {
     display_name, sender_name, slug, start_date, frequency,
     delivery_time, timezone, planned_notes_count,
+    recipient_relationship, recipient_relationship_other,
   } = body;
 
   if (!display_name || !slug || !start_date) {
@@ -109,6 +110,14 @@ exports.handler = async (event) => {
   if (frequency && !validFrequencies.includes(frequency)) {
     return err('Invalid frequency');
   }
+  // Purely a demographic signal for admin-metrics.js's aggregate
+  // breakdown (see schema.sql) — silently dropped rather than rejected
+  // if it doesn't match, since it's optional and never gates a purchase.
+  const validRelationships = ['partner', 'parent', 'grandparent', 'child', 'sibling', 'friend', 'coworker', 'other'];
+  const relationship = validRelationships.includes(recipient_relationship) ? recipient_relationship : null;
+  const relationshipOther = relationship === 'other' && recipient_relationship_other
+    ? String(recipient_relationship_other).slice(0, 60)
+    : null;
 
   const { data: profile, error: profileErr } = await sb
     .from('profiles')
@@ -197,6 +206,8 @@ exports.handler = async (event) => {
       planned_notes_count: planned_notes_count != null ? String(planned_notes_count) : '',
       term_end_date:       termEnd.toISOString(),
       tier_price:          String(dollarAmount),
+      recipient_relationship:       relationship || '',
+      recipient_relationship_other: relationshipOther || '',
     },
   });
 
