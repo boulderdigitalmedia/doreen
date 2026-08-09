@@ -1281,3 +1281,17 @@ ALTER TABLE gifts ADD COLUMN IF NOT EXISTS recipient_relationship TEXT
   CHECK (recipient_relationship IN
     ('partner','parent','grandparent','child','sibling','friend','coworker','other'));
 ALTER TABLE gifts ADD COLUMN IF NOT EXISTS recipient_relationship_other TEXT;
+
+-- ── GIFT PACK → ANNUAL UPGRADE NUDGE (fires ~halfway through the 30-day
+-- term) ────────────────────────────────────────────────────────────────
+-- Separate from renewal_reminder_sent_at (which fires once, ~5 days
+-- before a term ends, for EITHER plan) — this is a second, earlier,
+-- gift_pack-only email that actively pitches the standing $45 upgrade-to-
+-- annual offer (see startUpgradeCheckout in account.html / the 'upgrade'
+-- plan in create-checkout.js) while there's still time left to act on it,
+-- rather than only mentioning it in passing in the final reminder. See
+-- send-daily.js's sweepUpgradeNudges. Reset to NULL alongside
+-- renewal_reminder_sent_at whenever a new term starts (stripe-webhook.js)
+-- so a buyer who buys another gift pack later is eligible for the nudge
+-- again on their new term.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS upgrade_nudge_sent_at TIMESTAMPTZ;
