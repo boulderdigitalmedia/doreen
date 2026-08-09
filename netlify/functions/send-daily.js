@@ -10,8 +10,8 @@ const { schedule } = require('@netlify/functions');
 const {
   sb, shouldSendToday, isDeliveryWindow, sendGiftNotifications,
   checkNoteShortage, getGiftNoteStatus,
-  applyTermStart, sendRenewalReminderEmail, sendGiftSetupReminderEmail,
-  sendReengagementEmail,
+  applyTermStart, sendRenewalReminderEmail, sendUpgradeNudgeEmail,
+  sendGiftSetupReminderEmail, sendReengagementEmail,
 } = require('./_shared');
 
 const TERM_START_GRACE_DAYS     = 30;
@@ -28,6 +28,12 @@ function termLengthDaysFor(plan) { return TERM_LENGTH_DAYS[plan] || TERM_LENGTH_
 // immediately after purchase.
 const RENEWAL_REMINDER_DAYS = { annual: 30, gift_pack: 5 };
 function renewalReminderDaysFor(plan) { return RENEWAL_REMINDER_DAYS[plan] || RENEWAL_REMINDER_DAYS.annual; }
+// Gift-pack-only, fires once, earlier than the renewal reminder above —
+// 15 days remaining is the halfway point of the 30-day term. Deliberately
+// not plan-keyed like RENEWAL_REMINDER_DAYS: annual buyers have nothing
+// to "upgrade" to, so sweepUpgradeNudges below only ever queries
+// plan='gift_pack' profiles in the first place.
+const UPGRADE_NUDGE_DAYS_REMAINING = 15;
 const GIFT_SETUP_REMINDER_DAY   = 25; // ~5 days before the 30-day auto-start cap
 const REENGAGEMENT_INACTIVE_DAYS = 30; // how long without opening the app counts as "dormant"
 
@@ -207,6 +213,46 @@ async function sweepRenewalReminders() {
   }
 }
 
+// Gift-pack-only. Separate email/column from sweepRenewalReminders above
+// (see UPGRADE_NUDGE_DAYS_REMAINING) — fires once, around the halfway
+// point of the 30-day term, as a dedicated pitch for the standing $45
+// upgrade-to-annual offer, rather than only mentioning it in passing in
+// the final reminder closer to expiration. upgrade_nudge_sent_at is
+// reset to null alongside renewal_reminder_sent_at whenever a new term
+// starts (stripe-webhook.js), so a buyer who buys another gift pack
+// later is eligible for the nudge again on their new term.
+async function sweepUpgradeNudges() {
+  const now = new Date();
+  const windowEndISO = new Date(now.getTime() + UPGRADE_NUDGE_DAYS_REMAINING * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: dueSoon, error } = await sb
+    .from('profiles')
+    .select('id, plan, access_term_end')
+    .eq('plan', 'gift_pack')
+    .in('stripe_status', ['active', 'past_due'])
+    .is('upgrade_nudge_sent_at', null)
+    .not('access_term_end', 'is', null)
+    .gt('access_term_end', now.toISOString())
+    .lte('access_term_end', windowEndISO);
+
+  if (error) {
+    console.error('Upgrade-nudge sweep query failed:', error.message);
+    return;
+  }
+
+  for (const profile of dueSoon || []) {
+    try {
+      await sendUpgradeNudgeEmail(profile);
+      await sb.from('profiles')
+        .update({ upgrade_nudge_sent_at: new Date().toISOString() })
+        .eq('id', profile.id);
+      console.log('Upgrade nudge sent for profile', profile.id);
+    } catch (e) {
+      console.error('Failed to send/record upgrade nudge for profile', profile.id, e.message);
+    }
+  }
+}
+
 // A buyer who subscribes but never actually creates their included gift
 // still gets their term auto-started 30 days after signup regardless
 // (sweepTermStartGrace above) — anchored to created_at + 30 days rather
@@ -339,6 +385,7 @@ exports.handler = schedule('*/15 * * * *', async () => {
   await sweepTermStartGrace();
   await sweepExpiredOneTimeTerms();
   await sweepRenewalReminders();
+  await sweepUpgradeNudges();
   await sweepReengagement();
 
   const { data: gifts, error } = await sb
