@@ -2828,6 +2828,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         body:    JSON.stringify({ slug: slug, password: password })
       });
       var data = await res.json();
+      // A non-2xx response (server error, 502, etc.) still parses as valid
+      // JSON but has no requiresPassword field at all — treating that as
+      // "requiresPassword: false" (its falsy default) wrongly told a
+      // recipient with an already-working password that none existed,
+      // sending them into the mandatory "set a password" screen instead
+      // of a clear error. Route it through the same checkFailed/fail-open
+      // path as a network error instead.
+      if (!res.ok) {
+        console.error('Password check failed:', res.status, data && data.error);
+        return { requiresPassword: false, valid: true, checkFailed: true };
+      }
       data.checkFailed = false;
       return data;
     } catch (e) {
