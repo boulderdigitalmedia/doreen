@@ -355,7 +355,7 @@ async function handleUpgradeToAnnual(session) {
   const newTermEndISO = newTermEnd.toISOString();
 
   await sb.from('profiles')
-    .update({ access_term_end: newTermEndISO, renewal_reminder_sent_at: null })
+    .update({ access_term_end: newTermEndISO, renewal_reminder_sent_at: null, upgrade_nudge_sent_at: null })
     .eq('id', profileId);
 
   await sb.from('gifts')
@@ -441,7 +441,7 @@ async function handleNewTermStarted(profileId, stripeCustomerId, plan) {
   const newTermEndISO = newTermEnd.toISOString();
 
   await sb.from('profiles')
-    .update({ access_term_end: newTermEndISO, renewal_reminder_sent_at: null })
+    .update({ access_term_end: newTermEndISO, renewal_reminder_sent_at: null, upgrade_nudge_sent_at: null })
     .eq('id', profileId);
 
   // Keep the included gift's term in sync — and any free referral-reward
