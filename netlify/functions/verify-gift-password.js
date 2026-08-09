@@ -35,70 +35,83 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return preflight();
   if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
 
-  let body;
+  // Wrapping the whole body: an uncaught exception in a Netlify Function
+  // comes back to the browser as a bare 502 with no JSON body at all —
+  // the client-side checkGiftPassword() in gift.html can't tell that
+  // apart from a real "no password set" response (both come back without
+  // a usable requiresPassword field), which was surfacing as a wrongly-
+  // shown "set a password" screen instead of a clear error. This ensures
+  // any failure here always comes back as real JSON with an `error`
+  // field the client (and the person debugging it) can actually read.
   try {
-    body = JSON.parse(event.body || '{}');
-  } catch {
-    return err('Invalid request body');
-  }
-
-  const { slug, password } = body;
-  if (!slug) return err('Missing slug');
-
-  const { data: gift, error } = await sb
-    .from('gifts')
-    .select('id, access_password, password_attempts, password_locked_until')
-    .eq('slug', slug)
-    .eq('status', 'active')
-    .maybeSingle();
-
-  if (error || !gift) return err('Gift not found', 404);
-
-  const requiresPassword = !!(gift.access_password && gift.access_password.length > 0);
-
-  if (!requiresPassword) {
-    return ok({ requiresPassword: false, valid: true });
-  }
-
-  // Metadata-only check (page load, before the recipient has typed
-  // anything) — never counts as a guess, so it can't burn down the
-  // attempt budget on its own.
-  if (typeof password !== 'string' || password.length === 0) {
-    return ok({ requiresPassword: true, valid: false });
-  }
-
-  if (gift.password_locked_until && new Date(gift.password_locked_until) > new Date()) {
-    return ok({ requiresPassword: true, valid: false, locked: true, message: lockedMessage(gift.password_locked_until) });
-  }
-
-  const valid = password === gift.access_password;
-
-  if (valid) {
-    // Clear any stale counter from earlier wrong guesses now that the
-    // right password's been entered.
-    if (gift.password_attempts > 0 || gift.password_locked_until) {
-      await sb.from('gifts').update({ password_attempts: 0, password_locked_until: null }).eq('id', gift.id);
+    let body;
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      return err('Invalid request body');
     }
-    return ok({ requiresPassword: true, valid: true });
+
+    const { slug, password } = body;
+    if (!slug) return err('Missing slug');
+
+    const { data: gift, error } = await sb
+      .from('gifts')
+      .select('id, access_password, password_attempts, password_locked_until')
+      .eq('slug', slug)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (error || !gift) return err('Gift not found', 404);
+
+    const requiresPassword = !!(gift.access_password && gift.access_password.length > 0);
+
+    if (!requiresPassword) {
+      return ok({ requiresPassword: false, valid: true });
+    }
+
+    // Metadata-only check (page load, before the recipient has typed
+    // anything) — never counts as a guess, so it can't burn down the
+    // attempt budget on its own.
+    if (typeof password !== 'string' || password.length === 0) {
+      return ok({ requiresPassword: true, valid: false });
+    }
+
+    if (gift.password_locked_until && new Date(gift.password_locked_until) > new Date()) {
+      return ok({ requiresPassword: true, valid: false, locked: true, message: lockedMessage(gift.password_locked_until) });
+    }
+
+    const valid = password === gift.access_password;
+
+    if (valid) {
+      // Clear any stale counter from earlier wrong guesses now that the
+      // right password's been entered.
+      if (gift.password_attempts > 0 || gift.password_locked_until) {
+        await sb.from('gifts').update({ password_attempts: 0, password_locked_until: null }).eq('id', gift.id);
+      }
+      return ok({ requiresPassword: true, valid: true });
+    }
+
+    const nextAttempts = (gift.password_attempts || 0) + 1;
+    const updates = { password_attempts: nextAttempts };
+    let locked = false;
+    let lockedUntil = null;
+
+    if (nextAttempts >= MAX_PASSWORD_ATTEMPTS) {
+      lockedUntil = new Date(Date.now() + LOCKOUT_MS).toISOString();
+      updates.password_attempts = 0; // the lockout window is the gate now, not the counter
+      updates.password_locked_until = lockedUntil;
+      locked = true;
+    }
+
+    await sb.from('gifts').update(updates).eq('id', gift.id);
+
+    return ok({
+      requiresPassword: true,
+      valid: false,
+      ...(locked ? { locked: true, message: lockedMessage(lockedUntil) } : {}),
+    });
+  } catch (e) {
+    console.error('verify-gift-password crashed:', e.message, e.stack);
+    return err('Server error — try again in a moment', 500);
   }
-
-  const nextAttempts = (gift.password_attempts || 0) + 1;
-  const updates = { password_attempts: nextAttempts };
-  let locked = false;
-  let lockedUntil = null;
-
-  if (nextAttempts >= MAX_PASSWORD_ATTEMPTS) {
-    lockedUntil = new Date(Date.now() + LOCKOUT_MS).toISOString();
-    updates.password_attempts = 0; // the lockout window is the gate now, not the counter
-    updates.password_locked_until = lockedUntil;
-    locked = true;
-  }
-
-  await sb.from('gifts').update(updates).eq('id', gift.id);
-
-  return ok({
-    requiresPassword: true,
-    valid: false,
-    ...(locked ? { locked: true, message: lockedMessage(lockedUntil) } : {}),
-  });
 };
