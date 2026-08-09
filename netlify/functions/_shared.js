@@ -31,6 +31,30 @@ try {
   console.error('web-push VAPID setup failed — push notifications are disabled until this is fixed:', e.message);
 }
 
+// ── Unsubscribe links (self-hosted, not Resend's built-in unsubscribe) ──
+// Every marketing/bulk-campaign email should include unsubscribeUrl(email)
+// somewhere in its footer. The link carries an HMAC token (keyed on
+// UNSUBSCRIBE_SECRET) rather than just the bare email, so the endpoint it
+// points at (unsubscribe.js) can trust a click is genuine without needing
+// the recipient to sign in — anyone who doesn't know the secret can't
+// forge a token to unsubscribe someone else's address. This is
+// deliberately separate from Resend's own hosted unsubscribe flow: we
+// want our own database to be the permanent record of who opted out
+// (survives even if a future Resend API call fails, gets re-imported,
+// etc.), with Resend kept in sync as a mirror — see unsubscribe.js.
+const crypto = require('crypto');
+function unsubscribeToken(email) {
+  return crypto
+    .createHmac('sha256', process.env.UNSUBSCRIBE_SECRET || 'change-me-unsubscribe-secret')
+    .update(String(email).trim().toLowerCase())
+    .digest('hex');
+}
+function unsubscribeUrl(email) {
+  const token = unsubscribeToken(email);
+  const base = process.env.SITE_URL || 'https://yoursite.com';
+  return `${base}/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
+}
+
 // ── Email "From" name ────────────────────────────────────────────
 // FROM_EMAIL may be a bare address ("notes@domain.com") or already have a
 // display name on it ("Pigeon Post <notes@domain.com>"). Either way we only
@@ -1004,5 +1028,7 @@ module.exports = {
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
+  unsubscribeToken,
+  unsubscribeUrl,
   ok, err, preflight
 };
