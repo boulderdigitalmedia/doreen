@@ -73,40 +73,53 @@ exports.handler = async (event) => {
   const slug = ((event.queryStringParameters && event.queryStringParameters.slug) || '').trim();
   if (!slug) return manifestResponse(FALLBACK_MANIFEST);
 
-  // Same status gate as every other public gift read (note_public_read,
-  // note_reply_public_read, etc.) — a cancelled/lapsed gift's page still
-  // works read-only, so its manifest should still resolve too, not just
-  // active ones.
-  const { data: gift } = await sb
-    .from('gifts')
-    .select('slug, display_name')
-    .eq('slug', slug)
-    .in('status', ['active', 'cancelled'])
-    .maybeSingle();
+  // Wrapped so any unexpected failure (DB hiccup, etc.) still returns a
+  // valid, installable manifest instead of a raw 502 — this endpoint is
+  // fetched automatically by the browser/PWA install flow, which has no
+  // way to show or recover from an error the way a user-initiated action
+  // could. Same "always return something installable" philosophy as the
+  // unknown-slug case below, just extended to cover real errors too.
+  try {
+    // Same status gate as every other public gift read (note_public_read,
+    // note_reply_public_read, etc.) — a cancelled/lapsed gift's page still
+    // works read-only, so its manifest should still resolve too, not just
+    // active ones.
+    const { data: gift, error } = await sb
+      .from('gifts')
+      .select('slug, display_name')
+      .eq('slug', slug)
+      .in('status', ['active', 'cancelled'])
+      .maybeSingle();
 
-  // Unknown/deleted/other-account slug — still return *something*
-  // installable rather than erroring, so a stale or bad link doesn't
-  // break the install prompt outright. It just won't be personalized or
-  // deep-linked to a specific gift.
-  if (!gift) return manifestResponse(FALLBACK_MANIFEST);
+    if (error) console.error('gift-manifest query failed for slug', slug, ':', error.message);
 
-  const recipientFirst = (gift.display_name || '').split(/[&,]/)[0].trim();
-  const name      = recipientFirst ? `Notes for ${recipientFirst}` : 'A Note For You';
-  const shortName = recipientFirst || 'A Note For You';
+    // Unknown/deleted/other-account slug (or a query error, per above) —
+    // still return *something* installable rather than erroring, so a
+    // stale or bad link doesn't break the install prompt outright. It
+    // just won't be personalized or deep-linked to a specific gift.
+    if (!gift) return manifestResponse(FALLBACK_MANIFEST);
 
-  return manifestResponse({
-    name:             name,
-    short_name:       shortName,
-    description:      'Daily notes, delivered for someone you care about',
-    start_url:        '/' + gift.slug,
-    scope:            '/' + gift.slug,
-    display:          'standalone',
-    background_color: '#f5f2ec',
-    theme_color:      '#f5f2ec',
-    orientation:      'portrait',
-    icons: [
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-    ],
-  });
+    const recipientFirst = (gift.display_name || '').split(/[&,]/)[0].trim();
+    const name      = recipientFirst ? `Notes for ${recipientFirst}` : 'A Note For You';
+    const shortName = recipientFirst || 'A Note For You';
+
+    return manifestResponse({
+      name:             name,
+      short_name:       shortName,
+      description:      'Daily notes, delivered for someone you care about',
+      start_url:        '/' + gift.slug,
+      scope:            '/' + gift.slug,
+      display:          'standalone',
+      background_color: '#f5f2ec',
+      theme_color:      '#f5f2ec',
+      orientation:      'portrait',
+      icons: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+    });
+  } catch (e) {
+    console.error('gift-manifest crashed for slug', slug, ':', e.message, e.stack);
+    return manifestResponse(FALLBACK_MANIFEST);
+  }
 };
