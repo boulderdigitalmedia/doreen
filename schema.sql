@@ -1266,3 +1266,18 @@ CREATE TABLE IF NOT EXISTS daily_digest_runs (
 ALTER TABLE daily_digest_runs ENABLE ROW LEVEL SECURITY;
 -- No policies — service-role key only (daily-digest.js is the only thing
 -- that ever touches this table), same as admin_login_attempts above.
+
+-- ── WHO IS THIS GIFT FOR? ─────────────────────────────────────────────
+-- Captured once, at gift-creation time, from the "New gift" modal in
+-- account.html (fixed dropdown + free-text "Other"). Purely a marketing/
+-- demographic signal for admin-metrics.js's aggregate breakdown — never
+-- shown to the recipient, never used in any delivery/billing logic.
+-- recipient_relationship holds one of the fixed dropdown keys so
+-- admin-metrics.js can group cleanly; recipient_relationship_other holds
+-- the buyer's own free-text wording when they pick "Other" (kept
+-- separate rather than crammed into the same column so the aggregate
+-- doesn't fragment into a long tail of one-off strings).
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS recipient_relationship TEXT
+  CHECK (recipient_relationship IN
+    ('partner','parent','grandparent','child','sibling','friend','coworker','other'));
+ALTER TABLE gifts ADD COLUMN IF NOT EXISTS recipient_relationship_other TEXT;
