@@ -829,6 +829,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <div class="field">
           <label>Start date</label>
           <input type="date" id="dStartDate" />
+          <div class="link-danger-hint" id="startDateLockHint" style="display:none">🔒 Locked — the first note has already been delivered, so the schedule anchor can't move.</div>
         </div>
         <div class="field">
           <label>Frequency</label>
@@ -1737,6 +1738,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     document.getElementById('dSender').value    = gift.sender_name;
     document.getElementById('dSlug').value      = gift.slug;
     document.getElementById('dStartDate').value = gift.start_date;
+    var startLocked = giftStartLocked(gift);
+    document.getElementById('dStartDate').disabled = startLocked;
+    document.getElementById('startDateLockHint').style.display = startLocked ? 'block' : 'none';
     document.getElementById('dFrequency').value = gift.frequency;
     document.getElementById('dDeliveryTime').value = (gift.delivery_time || '08:00:00').slice(0, 5);
     document.getElementById('dAccessPassword').value = gift.access_password || '';
@@ -1930,6 +1934,28 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   // sent, can't be reordered) if its order_index is behind today's slot.
   var TODAY_NOTE_INDEX = 0;
   function isNoteLocked(note) { return note.order_index < TODAY_NOTE_INDEX; }
+
+  // Has this gift's FIRST delivery moment (start_date + delivery_time,
+  // in the gift's own timezone) already passed? Once it has, start_date
+  // is immutable — enforced for real by a DB trigger
+  // (lock_started_gift_start_date in schema.sql); this client-side twin
+  // only exists to grey out the input and explain why, so the buyer
+  // isn't surprised by a rejected save. Uses Intl to read "now" on the
+  // gift's own clock (sv-SE gives "YYYY-MM-DD HH:MM:SS", which compares
+  // correctly as a plain string), so it agrees with the trigger even
+  // when the buyer's browser is in a different timezone — falling back
+  // to browser-local midnight only if the tz name is one this browser
+  // doesn't know.
+  function giftStartLocked(gift) {
+    if (!gift || !gift.start_date) return false;
+    var firstSend = gift.start_date + ' ' + (gift.delivery_time || '08:00:00').slice(0, 8);
+    try {
+      var nowInGiftTz = new Date().toLocaleString('sv-SE', { timeZone: gift.timezone || 'Pacific/Auckland' });
+      return nowInGiftTz >= firstSend;
+    } catch (e) {
+      return parseYmd(gift.start_date) <= new Date();
+    }
+  }
 
   function parseYmd(dateStr) {
     var parts = String(dateStr).split('-').map(Number);
@@ -2490,7 +2516,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       display_name:        document.getElementById('dName').value.trim(),
       sender_name:         document.getElementById('dSender').value.trim(),
       slug:                document.getElementById('dSlug').value.trim().toLowerCase(),
-      start_date:          document.getElementById('dStartDate').value,
       frequency:           document.getElementById('dFrequency').value,
       delivery_time:       document.getElementById('dDeliveryTime').value + ':00',
       timezone:            document.getElementById('dTimezone').value,
@@ -2498,6 +2523,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       access_password:     accessPasswordRaw || null,
     };
     if (!updates.slug) { showToast('Slug is required'); return; }
+
+    // start_date is immutable once the first note has gone out — a DB
+    // trigger (lock_started_gift_start_date, schema.sql) rejects the
+    // whole UPDATE if it changes. Leave it out of the payload entirely
+    // once locked, so a stale tab (or clock drift right at the send
+    // boundary) can't get an otherwise-fine settings save bounced.
+    if (!giftStartLocked(CURRENT_GIFT)) {
+      updates.start_date = document.getElementById('dStartDate').value;
+    }
 
     var smsEnabled = document.getElementById('dSmsAddon').checked;
     var smsChanged = smsEnabled !== !!CURRENT_GIFT.sms_addon;
@@ -2524,6 +2558,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     if (error) { showToast('Error: ' + error.message); return; }
     Object.assign(CURRENT_GIFT, updates);
     updateSlugPreview();
+
+    // The save itself can flip the lock (start date moved into the past,
+    // or timezone/delivery time changed right around the send boundary) —
+    // re-evaluate so the input greys out without needing a reopen.
+    var nowLocked = giftStartLocked(CURRENT_GIFT);
+    document.getElementById('dStartDate').disabled = nowLocked;
+    document.getElementById('startDateLockHint').style.display = nowLocked ? 'block' : 'none';
 
     if (!smsChanged) {
       showToast('Settings saved ✓');
