@@ -257,8 +257,13 @@
     .btn-ghost:hover { border-color: var(--sage); color: var(--sage); }
 
     /* ── NOTE PREVIEW (three fanned full cards, mirrors the app) ── */
+    /* Sits between the H1 and the intro paragraph (show, then tell) —
+       top margin is small since .hero-title already carries 24px below
+       itself; the bottom margin is what now separates the stack from
+       the paragraph, roughly matching the old 60px gap it used to have
+       above it when it sat at the end of the hero. */
     .hero-card-wrap {
-      margin: 60px auto 0;
+      margin: 8px auto 52px;
       max-width: 470px; width: 100%;
       display: flex; flex-direction: column; align-items: center;
     }
@@ -538,17 +543,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <h1 class="hero-title">
     Tell them why you<br><span class="rot-word" id="rotWord">love</span> them
   </h1>
-  <p class="hero-sub">
-    Send photos, notes and voice notes — for the partner you love, the parents you miss, the grandparents who'd cherish a photo as much as a call, anyone who deserves to know you're thinking of them — and we'll handle the rest. Each note arrives on its own, by push notification, text, or email, so they keep hearing from you long after you hit send.
-  </p>
-  <p class="hero-sub-highlight">
-    That's what makes this such a special gift: arriving daily, weekly, or monthly, right on time.
-  </p>
-  <div class="hero-cta">
-    <a class="btn-primary" href="/signup">Get started →</a>
-    <a class="btn-ghost" href="#how">See how it works</a>
-  </div>
-  <div class="hero-trial-note">🎁 Try it for <strong>30 days for $14</strong> with the Gift Pack, or go all-in with the annual plan for $59.</div>
 
   <div class="hero-card-wrap">
     <div class="hero-stack-wrap" id="heroStackWrap">
@@ -592,6 +586,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <button class="hero-nav-btn" id="heroNextBtn" aria-label="Next note">›</button>
     </div>
   </div>
+
+  <p class="hero-sub">
+    Send photos, notes and voice notes — for the partner you love, the parents you miss, the grandparents who'd cherish a photo as much as a call, anyone who deserves to know you're thinking of them — and we'll handle the rest. Each note arrives on its own, by push notification, text, or email, so they keep hearing from you long after you hit send.
+  </p>
+  <p class="hero-sub-highlight">
+    That's what makes this such a special gift: arriving daily, weekly, or monthly, right on time.
+  </p>
+  <div class="hero-cta">
+    <a class="btn-primary" href="/signup">Get started →</a>
+    <a class="btn-ghost" href="#how">See how it works</a>
+  </div>
+  <div class="hero-trial-note">🎁 Try it for <strong>30 days for $14</strong> with the Gift Pack, or go all-in with the annual plan for $59.</div>
+
 </section>
 
 <!-- HOW IT WORKS -->
