@@ -328,7 +328,13 @@
     .note-num { font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
     .note-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
     .note-thumb-ph { width: 44px; height: 44px; border-radius: 8px; background: var(--sage-pale); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
-    .note-text-preview { flex: 1; min-width: 0; font-size: 16px; color: var(--ink); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    /* Invisible-chrome button around the thumb: padding grows the tap
+       target, the matching negative margin cancels it out of the flex
+       layout so rows don't shift. line-height:0 stops the inline img
+       from adding baseline whitespace inside the button. */
+    .note-thumb-btn { border: none; background: none; padding: 4px; margin: -4px; cursor: pointer; flex-shrink: 0; line-height: 0; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+    .note-thumb-btn:active .note-thumb, .note-thumb-btn:active .note-thumb-ph { opacity: 0.75; }
+    .note-text-preview { flex: 1; min-width: 0; font-size: 16px; color: var(--ink); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
     .note-voice-tag { color: var(--sage); font-weight: 500; }
     .note-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
@@ -357,8 +363,16 @@
       .note-date { font-size: 12px; }
       .note-num { font-size: 12px; }
       .note-thumb, .note-thumb-ph { width: 36px; height: 36px; }
+      /* The visible thumb shrinks to 36px here for space, but the tap
+         target grows: 8px padding on the wrapper button = a 52px hit
+         area, cancelled out of the layout by the negative margin. */
+      .note-thumb-btn { padding: 8px; margin: -8px; }
       .note-actions { gap: 4px; }
-      .note-actions .btn { padding: 6px 8px; font-size: 14px; }
+      /* Taller (not wider) buttons — vertical padding is free since the
+         row just grows, but every horizontal pixel here comes straight
+         out of the text preview's flex space on a 320px screen. */
+      .note-actions .btn { padding: 10px 8px; font-size: 14px; }
+      .note-drag-handle { padding: 8px 6px; margin: -6px -2px; }
     }
 
     /* A note pinned to a specific date (see the edit-note modal's lock
@@ -2051,9 +2065,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   function buildNoteRowHtml(note, locked) {
     var pinned = !locked && !!note.locked_send_date;
 
-    var thumb = note.photo_url
+    // Thumb and text preview are both tap targets for the same edit modal
+    // (it already shows the photo big, with Change photo + reframe, plus
+    // the text) — the thumb is wrapped in a real <button> so it's
+    // keyboard-reachable AND so its padding (cancelled out visually by a
+    // matching negative margin — see .note-thumb-btn) can extend the hit
+    // area well past the visible 36–44px image, which on its own is under
+    // the ~44px minimum comfortable touch size on phones.
+    var thumbInner = note.photo_url
       ? '<img class="note-thumb" src="' + esc(note.photo_url) + '" alt="" style="object-position:' + esc(note.photo_position || '50% 50%') + '" />'
       : '<div class="note-thumb-ph">🌿</div>';
+    var thumb = '<button type="button" class="note-thumb-btn" title="' + (note.photo_url ? 'View or change photo' : 'Add a photo') + '" onclick="openEditNote(\'' + note.id + '\')">' + thumbInner + '</button>';
 
     // Already-sent AND pinned rows get a same-width blank spacer instead
     // of a drag handle, so the row content still lines up rather than
@@ -2113,7 +2135,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         '<div class="note-num">#' + (note.order_index + 1) + '</div>' +
       '</div>' +
       thumb +
-      '<div class="note-text-preview">' + justMovedBadge + pinTag + voiceTag + esc(note.text) + '</div>' +
+      '<div class="note-text-preview" title="Edit this note" onclick="openEditNote(\'' + note.id + '\')">' + justMovedBadge + pinTag + voiceTag + esc(note.text) + '</div>' +
       '<div class="note-actions">' +
         replyBtn +
         '<button class="btn btn-ghost btn-sm" onclick="openEditNote(\'' + note.id + '\')">Edit</button>' +
