@@ -1317,3 +1317,51 @@ ALTER TABLE email_unsubscribes ENABLE ROW LEVEL SECURITY;
 -- so a buyer who buys another gift pack later is eligible for the nudge
 -- again on their new term.
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS upgrade_nudge_sent_at TIMESTAMPTZ;
+
+-- ── START DATE LOCK (once the first note has gone out) ───────────────
+-- gifts.start_date is the calendar date of the FIRST delivery, and
+-- everything downstream treats it as a fixed anchor: _shared.js's
+-- getNoteIndex counts "which note is today's" from it, account.html's
+-- sent/upcoming note locking derives from it, and for the included gift
+-- it's what profiles.term_start_date was anchored to at insert (see
+-- anchor_term_from_gift_start above — set once, ever, and never moved).
+--
+-- Until now nothing actually stopped a buyer from rewriting start_date
+-- AFTER delivery had begun — saveGiftSettings in account.html writes it
+-- straight through the anon client under RLS like any other field.
+-- Moving it mid-stream silently renumbers every already-sent slot
+-- (today's note jumps, notes re-send or get skipped) and, for the
+-- included gift, desyncs delivery from the already-anchored access term.
+--
+-- So: once a gift's first delivery moment has passed — its start_date +
+-- delivery_time, in the gift's own timezone — start_date is immutable.
+-- Enforced here as a BEFORE UPDATE trigger rather than in the client,
+-- because the client writes to Postgres directly (RLS) and a dashboard-
+-- side disabled input is just UX, not enforcement. Editing start_date
+-- remains freely allowed right up until that first send moment, and
+-- updates that don't change start_date (the settings form always sends
+-- the full payload) pass through untouched — the guard is
+-- IS DISTINCT FROM, not "start_date appeared in the SET list."
+--
+-- Applies to every gift (included, add-on, referral) — the slot-
+-- renumbering hazard is per-gift, not specific to the term-anchored one.
+-- Nothing server-side ever legitimately updates start_date after
+-- creation (stripe-webhook.js only ever INSERTs it from checkout
+-- metadata), so the trigger deliberately binds the service role too.
+CREATE OR REPLACE FUNCTION lock_started_gift_start_date()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.start_date IS DISTINCT FROM OLD.start_date
+     AND ((OLD.start_date + OLD.delivery_time) AT TIME ZONE OLD.timezone) <= NOW() THEN
+    RAISE EXCEPTION 'The start date is locked once the first note has been delivered'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_lock_started_gift_start_date ON gifts;
+CREATE TRIGGER trg_lock_started_gift_start_date
+  BEFORE UPDATE OF start_date ON gifts
+  FOR EACH ROW
+  EXECUTE FUNCTION lock_started_gift_start_date();
