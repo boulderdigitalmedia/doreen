@@ -3349,6 +3349,16 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
 
   async function uploadPhoto(file, giftId) {
+    if (!file || !file.size) {
+      // Selected file has no bytes to send — most commonly an iOS/iCloud
+      // photo that hasn't finished downloading from the cloud yet. Catch
+      // this here with a clear message rather than letting it reach
+      // Supabase Storage, which rejects an empty body with an opaque
+      // "No content provided" error.
+      console.error('Photo upload skipped — file has no content:', file && file.name);
+      showToast('That photo looks empty — if it’s an iCloud photo, open it in Photos first so it fully downloads, then try again.');
+      return null;
+    }
     file = await compressImage(file);
     file = await ensureUploadable(file);
     var ext      = file.name.split('.').pop();
