@@ -3366,7 +3366,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var { error } = await sb.storage.from('photos').upload(filename, file, { upsert: true });
     if (error) {
       console.error('Photo upload failed:', error, '— file:', file.name, file.size + ' bytes', file.type);
-      showToast('Photo upload failed: ' + error.message);
+      // Surface the file size + raw error detail right in the toast (not
+      // just the console) so this is diagnosable from a phone with no
+      // dev tools attached.
+      var statusBit = error.statusCode ? (' [' + error.statusCode + ']') : '';
+      showToast('Photo upload failed' + statusBit + ': ' + error.message + ' (file was ' + file.size + ' bytes, ' + (file.type || 'unknown type') + ')');
       return null;
     }
     var { data } = sb.storage.from('photos').getPublicUrl(filename);
