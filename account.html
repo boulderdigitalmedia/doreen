@@ -3327,7 +3327,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         canvas.toBlob(function(b) { resolve(b); }, 'image/jpeg', quality);
       });
 
-      if (!blob || blob.size >= file.size) return file; // didn't actually help — keep the original
+      if (!blob || blob.size === 0 || blob.size >= file.size) return file; // empty (failed) or didn't actually help — keep the original
       var newName = file.name.replace(/\.\w+$/, '') + '.jpg';
       return new File([blob], newName, { type: 'image/jpeg' });
     } catch (e) {
