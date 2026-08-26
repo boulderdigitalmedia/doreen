@@ -3363,7 +3363,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     file = await ensureUploadable(file);
     var ext      = file.name.split('.').pop();
     var filename = USER.id + '/' + giftId + '/' + Date.now() + '.' + ext;
-    var { error } = await sb.storage.from('photos').upload(filename, file, { upsert: true });
+    // Read the file into memory and upload the raw bytes rather than handing
+    // the File/Blob straight to supabase-js's fetch() call. iOS Safari has a
+    // known bug where fetch() silently drops the body of a File/Blob upload
+    // (this shows up especially inside a home-screen PWA) — the client-side
+    // file is completely valid and non-empty, but the server receives zero
+    // bytes and Supabase Storage rejects it with "No content provided",
+    // even though `file.size` above is correct. Uploading an ArrayBuffer
+    // instead avoids Safari's broken streaming-body path entirely.
+    var contentType = file.type || 'application/octet-stream';
+    var fileBuffer  = await file.arrayBuffer();
+    var { error } = await sb.storage.from('photos').upload(filename, fileBuffer, { upsert: true, contentType: contentType });
     if (error) {
       console.error('Photo upload failed:', error, '— file:', file.name, file.size + ' bytes', file.type);
       // Surface the file size + raw error detail right in the toast (not
