@@ -139,6 +139,11 @@
   status = 200
 
 [[redirects]]
+  from   = "/api/request-note"
+  to     = "/.netlify/functions/request-note"
+  status = 200
+
+[[redirects]]
   from   = "/api/gift-manifest"
   to     = "/.netlify/functions/gift-manifest"
   status = 200

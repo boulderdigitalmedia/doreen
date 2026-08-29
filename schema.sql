@@ -1365,3 +1365,13 @@ CREATE TRIGGER trg_lock_started_gift_start_date
   BEFORE UPDATE OF start_date ON gifts
   FOR EACH ROW
   EXECUTE FUNCTION lock_started_gift_start_date();
+
+-- ── NOTE REQUEST ("NUDGE") RATE LIMIT ─────────────────────────────────
+-- Stamped by request-note.js whenever the recipient taps the "ask for a
+-- note" button gift.html shows in place of the card once today's slot
+-- comes up with nothing written yet (see frontNoteMissing()/
+-- updatePendingState() there). Read back on the next tap — from the same
+-- session or a second device/tab — to throttle how often the buyer gets
+-- emailed about it; see NUDGE_COOLDOWN_MS in request-note.js. NULL until
+-- the first nudge is ever sent for this gift.
+ALTER TABLE recipients ADD COLUMN IF NOT EXISTS last_nudge_sent_at TIMESTAMPTZ;

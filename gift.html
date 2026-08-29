@@ -836,6 +836,67 @@
       color: var(--ink-mid);
     }
 
+    /* NOTE-PENDING OVERLAY — today's slot exists but nothing's been
+       written for it yet. Positioned relative to .card-stack (not any
+       single .card), same reasoning as .card-quick-actions-zone below:
+       it needs to sit over whichever physical element currently holds
+       the front role, not one fixed card. z-index 6 sits above both the
+       front card (3) and the quick-actions zone (5) — .card-stack.
+       note-pending hides the latter outright below, so heart/share/reply
+       never end up half-visible under the blur. */
+    .pending-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      background: rgba(245,242,236,0.94);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-radius: 3px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      padding: 32px 24px;
+    }
+
+    .card-stack.note-pending .pending-overlay      { display: flex; }
+    .card-stack.note-pending .card-quick-actions-zone { display: none; }
+
+    .pending-icon { font-size: 31px; }
+
+    .pending-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: calc(19px * var(--text-scale));
+      font-weight: 300;
+      color: var(--ink-mid);
+      max-width: 260px;
+    }
+
+    .nudge-btn {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--sage);
+      border: none;
+      border-radius: 24px;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .nudge-btn:active   { transform: scale(0.96); }
+    .nudge-btn:disabled { opacity: 0.55; cursor: default; }
+
+    .pending-status {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      color: var(--ink-soft);
+      min-height: 16px;
+    }
+
     /* Heart + share, overlaid on the card's top-right corner rather than
        sitting in the row of controls underneath it. Positioned relative to
        .card-stack (not any single .card) and given a higher z-index than
@@ -2263,7 +2324,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <div class="today-ribbon" id="todayRibbon">✦ Today's note <span class="today-ribbon-date" id="todayRibbonDate"></span></div>
     <div class="day-badge" id="dayBadge">Day 1</div>
 
-    <div class="card-stack">
+    <div class="card-stack" id="cardStack">
       <div class="card peek hidden" id="cardLeft" data-role="left">
         <div class="photo-placeholder" id="photoPlaceholderLeft">
           🌿 <span class="photo-hint"></span>
@@ -2352,6 +2413,22 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             </svg>
           </button>
         </div>
+      </div>
+
+      <!-- Shown instead of the photo/quote (and the quick-actions above)
+           when today's slot hasn't been written yet — see
+           frontNoteMissing()/updatePendingState() below. Positioned the
+           same way as .card-quick-actions-zone above: relative to
+           .card-stack itself, not any one of the three rotating .card
+           elements, so it always covers whichever physical card
+           currently holds the front role rather than needing its own
+           copy on all three (same "which element is front changes"
+           problem quick-actions-zone already solves). -->
+      <div class="pending-overlay" id="pendingOverlay">
+        <div class="pending-icon">✍️</div>
+        <div class="pending-text">Today's note hasn't arrived yet.</div>
+        <button type="button" class="nudge-btn" id="nudgeBtn">Ask <span id="nudgeSenderName">them</span> for today's note</button>
+        <div class="pending-status" id="pendingStatus"></div>
       </div>
     </div>
   </div>
@@ -3876,10 +3953,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     document.getElementById('app').style.display = 'flex';
     document.getElementById('senderName').textContent  = gift.sender_name || 'Your Favorite';
+    document.getElementById('nudgeSenderName').textContent = gift.sender_name || 'them';
     document.getElementById('todayRibbonDate').textContent =
       '· ' + new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
 
-    var todayNoteIndex = Math.min(getNoteIndex(gift), notes.length - 1);
+    // trueTodayIndex is the un-clamped, purely date-driven slot ("what
+    // note SHOULD be showing today"); todayNoteIndex clamps that down to
+    // whatever's actually been written so nav/lock/progress logic below
+    // still has a real note to land on. The two disagree exactly when the
+    // buyer has fallen behind and hasn't written anything for today (or
+    // beyond) yet — frontNoteMissing() below is what turns that gap into
+    // the nudge overlay instead of silently re-showing the last real note
+    // as if it were today's.
+    var trueTodayIndex = getNoteIndex(gift);
+    var todayNoteIndex = Math.min(trueTodayIndex, notes.length - 1);
     var currentIndex   = todayNoteIndex;
 
     var cardEl         = document.getElementById('card');
@@ -3954,6 +4041,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var lightboxIndex   = null;
     var dayBadgeEl     = document.getElementById('dayBadge');
     var todayRibbonEl  = document.getElementById('todayRibbon');
+    var cardStackEl    = document.getElementById('cardStack');
+    var nudgeBtnEl        = document.getElementById('nudgeBtn');
+    var pendingStatusEl   = document.getElementById('pendingStatus');
     var lockOverlayEl  = document.getElementById('lockOverlay');
     var lockDateEl     = document.getElementById('lockDate');
     var cardQuoteEl    = document.getElementById('cardQuote');
@@ -4931,9 +5021,78 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       }
     }
 
+    // ── "NO NOTE YET" NUDGE ─────────────────────────────────────
+    // currentIndex can only ever reach todayNoteIndex, never past it (see
+    // goTo's guard below) — so the front card showing nothing is only ever
+    // about *today's* slot, never some older, already-sent one going
+    // missing. When that's the case, the pending-overlay above (see CSS)
+    // replaces the photo/quote with a button letting the recipient ask
+    // the buyer for one, instead of the card just sitting there blank.
+    function frontNoteMissing() {
+      return currentIndex === todayNoteIndex && !notes[trueTodayIndex];
+    }
+
+    // Scoped to this gift AND this specific slot (not just "today"), so a
+    // gift on a weekly/monthly cadence — where trueTodayIndex can stay the
+    // same for several days in a row while the recipient keeps the tab
+    // open — doesn't re-invite a fresh nudge every time updatePendingState
+    // happens to run again before the slot actually changes. A new day
+    // that also means a new slot naturally gets a fresh ask.
+    function nudgeStorageKey() { return 'gift-nudge-sent-' + gift.slug + '-' + trueTodayIndex; }
+
+    function setNudgeUI(state) { // 'idle' | 'sending' | 'sent' | 'error'
+      nudgeBtnEl.style.display = state === 'sent' ? 'none' : 'inline-block';
+      nudgeBtnEl.disabled      = state === 'sending';
+      pendingStatusEl.textContent =
+        state === 'sent'    ? '💌 Sent — they’ll see it soon.' :
+        state === 'sending' ? 'Sending…' :
+        state === 'error'   ? 'Couldn’t send that — try again.' : '';
+    }
+
+    function updatePendingState() {
+      var missing = frontNoteMissing();
+      cardStackEl.classList.toggle('note-pending', missing);
+      if (!missing) return;
+
+      var alreadySent = false;
+      try { alreadySent = !!localStorage.getItem(nudgeStorageKey()); } catch {}
+      setNudgeUI(alreadySent ? 'sent' : 'idle');
+    }
+
+    async function sendNudge() {
+      setNudgeUI('sending');
+      try {
+        var res = await fetch('/api/request-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: gift.slug }),
+        });
+
+        // A 429 means the server already has a recent nudge on record for
+        // this gift (e.g. sent moments ago from another tab/device) —
+        // treated the same as a fresh success here, since either way the
+        // buyer's already been asked and mashing the button again
+        // shouldn't surface that as an error.
+        if (res.ok || res.status === 429) {
+          try { localStorage.setItem(nudgeStorageKey(), '1'); } catch {}
+          setNudgeUI('sent');
+          return;
+        }
+
+        var data = await res.json().catch(function() { return {}; });
+        pendingStatusEl.textContent = data.error || 'Couldn’t send that — try again.';
+        nudgeBtnEl.disabled = false;
+      } catch (e) {
+        setNudgeUI('error');
+      }
+    }
+
+    nudgeBtnEl.addEventListener('click', sendNudge);
+
     function syncControls() {
       updateHeartBtn(currentIndex);
       updateReplyBtn(currentIndex);
+      updatePendingState();
       var isToday = currentIndex === todayNoteIndex;
       todayRibbonEl.style.display = isToday ? 'block' : 'none';
       dayBadgeEl.textContent      = 'Note ' + (currentIndex+1);

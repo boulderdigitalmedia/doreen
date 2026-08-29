@@ -995,6 +995,45 @@ async function sendBuyerReplyNotification(gift, recipient, note, msgBody) {
   }
 }
 
+// ── Recipient-requested note ("nudge") ──────────────────────────────
+// Fired by request-note.js when the recipient taps the "ask for a note"
+// button gift.html shows in place of the card once today's slot comes up
+// with nothing written yet (see frontNoteMissing()/updatePendingState()
+// there). Same trust boundary and same "always the buyer's login email"
+// choice as sendRecipientReplyEmail above — the recipient has no account
+// to check channel prefs against, and it's the buyer being nudged here,
+// not the recipient. request-note.js is what re-verifies the slot is
+// actually empty and rate-limits repeat taps (recipients.
+// last_nudge_sent_at) — this function just sends, unconditionally,
+// whenever it's called.
+async function sendNoteRequestEmail(gift, noteIndex) {
+  try {
+    const { data: userData, error: userErr } = await sb.auth.admin.getUserById(gift.user_id);
+    const buyerEmail = userData && userData.user && userData.user.email;
+    if (userErr || !buyerEmail) {
+      console.error(`Could not find buyer email for note-request nudge, gift ${gift.id}:`, userErr && userErr.message);
+      return;
+    }
+
+    // Deep-links straight to this gift in account.html (see
+    // openDeepLinkedGift there) — as close as the buyer can get to
+    // actually writing today's note in one click.
+    const accountUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/account?gift=${gift.id}`;
+
+    await resend.emails.send({
+      from:    buildFrom('A Note For You'),
+      to:      buyerEmail,
+      subject: `💌 ${gift.display_name} is waiting on today's note`,
+      html: `<div style="font-family:'DM Sans',Arial,sans-serif;color:#2c3a2e;max-width:520px;margin:0 auto;padding:24px;">
+        <p style="font-size:16px;">Note ${noteIndex + 1} for <strong>${gift.display_name}</strong> hasn't been written yet — and they just tapped the card to ask for one.</p>
+        <p><a href="${accountUrl}" style="display:inline-block;background:#7a9e7e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;">Write today's note →</a></p>
+      </div>`,
+    });
+  } catch (err) {
+    console.error(`Failed to send note-request nudge for gift ${gift.id}:`, err.message);
+  }
+}
+
 // ── HTTP helpers ─────────────────────────────────────────────────
 
 const corsHeaders = {
@@ -1025,6 +1064,7 @@ module.exports = {
   sendReengagementEmail,
   sendRecipientReplyEmail,
   sendBuyerReplyNotification,
+  sendNoteRequestEmail,
   buildEmailHtml,
   buildFirstNoteEmailHtml,
   buildFrom,
