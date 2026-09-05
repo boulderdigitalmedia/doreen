@@ -4592,12 +4592,16 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       mainGridEl.classList.toggle('open', isGrid);
     }
 
-    function setMainView(view) {
+    // persist defaults to true — an explicit tap on the card/grid toggle is
+    // a preference. A view forced by a notification deep-link passes false,
+    // so landing on a card once doesn't silently reset someone who prefers
+    // the grid back to card view for every future visit.
+    function setMainView(view, persist) {
       if (view === mainView) return;
       mainView = view;
-      try { localStorage.setItem('gift-main-view', view); } catch {}
+      if (persist !== false) { try { localStorage.setItem('gift-main-view', view); } catch {} }
       applyMainViewUI();
-      if (view === 'grid') renderMainGrid();
+      if (view === 'grid') { renderMainGrid(); scrollGridToCurrent(); }
     }
 
     function buildMainGridItem(idx, note) {
@@ -4623,6 +4627,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       }
 
       item.tabIndex = 0;
+      item.dataset.idx = idx;
 
       if (note.photo_url) {
         var img = document.createElement('img');
@@ -4681,10 +4686,21 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       }
     }
 
+    // The grid runs oldest-first, so on a long-running gift the note the
+    // recipient actually came for sits far below the fold and the grid opens
+    // on notes from weeks ago. Bring the current note into view instead.
+    // Called after a render rather than from inside it, so it stays a
+    // no-op-safe one-liner at each call site.
+    function scrollGridToCurrent() {
+      var el = mainGridEl.querySelector('[data-idx="' + currentIndex + '"]');
+      if (!el || !el.scrollIntoView) return;
+      try { el.scrollIntoView({ block: 'center' }); } catch { el.scrollIntoView(); }
+    }
+
     mainViewCardBtn.addEventListener('click', function() { setMainView('card'); });
     mainViewGridBtn.addEventListener('click', function() { setMainView('grid'); });
     applyMainViewUI();
-    if (mainView === 'grid') renderMainGrid();
+    if (mainView === 'grid') { renderMainGrid(); scrollGridToCurrent(); }
 
     shareBtn.addEventListener('click', function() {
       openPlatformSharePicker(notes[currentIndex]);
@@ -5192,22 +5208,37 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     resetSlots();
     syncControls();
 
-    // Arriving via a reply-notification email's `?note=<order_index>` link
-    // (see sendBuyerReplyNotification in _shared.js) — jump straight to
-    // that note instead of leaving the recipient on today's, and open its
-    // reply thread since that's the whole reason they clicked through.
+    // Arriving from a notification's `?note=<order_index>` link — every
+    // channel now sends one (see noteUrl in sendGiftNotifications, and
+    // sendBuyerReplyNotification, in _shared.js). Two jobs:
+    //
+    //   1. Force card view. mainView is sticky in localStorage, so a
+    //      recipient who last left the app on the photo grid used to be
+    //      dropped at the *top* of that grid — oldest note first, the note
+    //      they were just told about buried somewhere below the fold. Being
+    //      pushed a note and not seeing it is the whole failure. Not
+    //      persisted: their grid preference survives for normal visits.
+    //   2. Jump to that note, and open its reply thread only when the link
+    //      says so (`&reply=1`, set by the reply-notification links) — a
+    //      new-note link should land on the note itself, not on a drawer
+    //      covering it.
+    //
     // Clamped to [0, todayNoteIndex] the same way goTo() already guards
     // navigation, so a stale/tampered link can't point at a locked
     // (not-yet-sent) note. A bare visit with no `note` param is the normal
     // path and this is a no-op for it.
     (function openDeepLinkedNote() {
-      var noteParam = new URLSearchParams(window.location.search).get('note');
+      var params = new URLSearchParams(window.location.search);
+      var noteParam = params.get('note');
       if (noteParam === null) return;
       var targetIdx = parseInt(noteParam, 10);
       if (isNaN(targetIdx)) return;
+
+      setMainView('card', false);
+
       targetIdx = Math.max(0, Math.min(targetIdx, todayNoteIndex));
       if (targetIdx !== currentIndex) goTo(targetIdx);
-      openReplyDrawer();
+      if (params.get('reply') === '1') openReplyDrawer();
     })();
 
     // ── NAVIGATION ─────────────────────────────────────────────
