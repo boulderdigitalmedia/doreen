@@ -183,17 +183,6 @@ async function sendPush(pushSubscription, noteNum, senderName, giftUrl) {
   await webpush.sendNotification(pushSubscription, payload);
 }
 
-// SMS can't render a distinct callout box the way the HTML emails below
-// can (buildSmsBody is one plain-text line) — this is its stand-in for a
-// voice-only note (no typed text — see notes.voice_url in schema.sql),
-// so it isn't left quoting an empty string, or —worse— interpolating
-// `null` literally if text is ever NULL rather than ''.
-function noteQuoteText(note) {
-  if (note.text) return note.text;
-  if (note.voice_url) return '🎤 (a voice note — open the app to listen)';
-  return '';
-}
-
 // The HTML emails, unlike SMS, have room for a proper callout instead of
 // squeezing the voice-note prompt into the quote line — email clients
 // can't play audio inline regardless, so this is deliberately a "go
@@ -223,7 +212,10 @@ function emailCtaLabel(note, defaultLabel) {
 
 // ── Email ────────────────────────────────────────────────────────
 
-function buildEmailHtml(gift, note, noteNum, giftUrl) {
+function buildEmailHtml(gift, note, noteNum, giftUrl, noteUrl) {
+  // noteUrl deep-links to this note in card view; giftUrl is the bare
+  // gift address used for the plain-text "visit anytime" line.
+  noteUrl = noteUrl || giftUrl;
   const photo = note.photo_url
     ? `<img src="${note.photo_url}" alt="" style="width:100%;max-width:560px;border-radius:12px;display:block;margin:0 auto 28px;" />`
     : '';
@@ -262,7 +254,7 @@ function buildEmailHtml(gift, note, noteNum, giftUrl) {
         ${voiceNoteEmailBanner(note)}
         <tr>
           <td style="padding:0 32px 36px;">
-            <a href="${giftUrl}"
+            <a href="${noteUrl}"
                style="display:inline-block;background:#7a9e7e;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;">
               ${emailCtaLabel(note, 'Open the app →')}
             </a>
@@ -333,7 +325,8 @@ function welcomeTourItems(gift, recipient) {
   return items;
 }
 
-function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl) {
+function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl, noteUrl) {
+  noteUrl = noteUrl || giftUrl;
   const senderName = gift.sender_name || 'Your Favorite';
   const photo = note.photo_url
     ? `<img src="${note.photo_url}" alt="" style="width:100%;max-width:496px;border-radius:12px;display:block;margin:0 auto 24px;" />`
@@ -414,7 +407,7 @@ function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl) {
         ${voiceNoteEmailBanner(note)}
         <tr>
           <td style="padding:0 32px 36px;">
-            <a href="${giftUrl}"
+            <a href="${noteUrl}"
                style="display:inline-block;background:#7a9e7e;color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;">
               ${emailCtaLabel(note, 'Open your gift →')}
             </a>
@@ -437,30 +430,28 @@ function buildFirstNoteEmailHtml(gift, note, recipient, giftUrl) {
 
 // ── SMS ──────────────────────────────────────────────────────────
 
-function buildSmsBody(gift, note, noteNum, giftUrl) {
-  // Keep it short — first ~100 chars of note + link. Goes through
-  // noteQuoteText() first — note.text is '' (not null) for photo/voice-only
-  // notes, but .length/.substring() on a bare null would still crash this
-  // send job outright, so this can't just assume a string.
-  const quoteText = noteQuoteText(note);
-  const preview = quoteText.length > 100
-    ? quoteText.substring(0, 97) + '…'
-    : quoteText;
-  return `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'}: "${preview}" — ${giftUrl}`;
+function buildSmsBody(gift, noteUrl) {
+  // Deliberately just a nudge + link, with no note preview and no photo
+  // attached (sendSms below is plain SMS only). The note itself is meant to be
+  // read in the app — quoting it in the SMS spoiled the reveal, and the MMS
+  // photo made carriers render the message as an image link rather than the
+  // notification it's supposed to be. noteUrl deep-links straight to this
+  // note in card view (see openDeepLinkedNote in gift.html).
+  return `💚 A new note from ${gift.sender_name || 'Your Favorite'} is waiting for you — ${noteUrl}`;
 }
 
-async function sendSms(phone, body, mediaUrl) {
+async function sendSms(phone, body) {
   if (!twilioClient) throw new Error('Twilio client is not configured (see startup error in function logs)');
-  const payload = {
+  // Plain SMS only. This used to accept a mediaUrl and attach the note's
+  // photo, which Twilio auto-upgrades to MMS — carriers then surfaced it as
+  // a media link instead of a plain notification, and it leaked the photo
+  // before the recipient had opened the note. Everything goes through the
+  // link now.
+  await twilioClient.messages.create({
     body,
     from: process.env.TWILIO_PHONE_NUMBER,
     to:   phone,
-  };
-  // Attaching mediaUrl turns this into an MMS (Twilio auto-detects based on
-  // presence of media). The photo is already a public Supabase Storage URL,
-  // so Twilio can fetch it directly — no extra upload/signing needed.
-  if (mediaUrl) payload.mediaUrl = [mediaUrl];
-  await twilioClient.messages.create(payload);
+  });
 }
 
 // ── Low-notes alert (to the buyer, not the recipient) ─────────────
@@ -837,12 +828,18 @@ async function sendGiftNotifications(gift, force = false) {
 
   const noteNum = noteIndex + 1;
   const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}`;
+  // Every notification links here rather than at the bare gift URL: the
+  // `note` param makes gift.html jump to this specific note *and* force card
+  // view, so a recipient who last left the app on the photo grid still lands
+  // on the note they were just told about instead of the top of the grid.
+  // giftUrl itself stays param-free for the "visit anytime" footer line.
+  const noteUrl = `${giftUrl}?note=${noteIndex}`;
   const results = {};
 
   // Push
   if (recipient.channels.includes('push') && recipient.push_subscription) {
     try {
-      await sendPush(recipient.push_subscription, noteNum, gift.sender_name, giftUrl);
+      await sendPush(recipient.push_subscription, noteNum, gift.sender_name, noteUrl);
       results.push = 'sent';
     } catch (err) {
       if (err.statusCode === 410 || err.statusCode === 404) {
@@ -869,8 +866,8 @@ async function sendGiftNotifications(gift, force = false) {
           ? `💚 ${gift.sender_name || 'Your Favorite'} set up something special for you`
           : `💚 Note ${noteNum} from ${gift.sender_name || 'Your Favorite'} is waiting for you`,
         html: isFirstNote
-          ? buildFirstNoteEmailHtml(gift, note, recipient, giftUrl)
-          : buildEmailHtml(gift, note, noteNum, giftUrl)
+          ? buildFirstNoteEmailHtml(gift, note, recipient, giftUrl, noteUrl)
+          : buildEmailHtml(gift, note, noteNum, giftUrl, noteUrl)
       });
       results.email = 'sent';
     } catch (err) {
@@ -881,8 +878,7 @@ async function sendGiftNotifications(gift, force = false) {
   // SMS (gated: buyer must have sms_addon enabled, recipient must have chosen SMS + provided phone)
   if (recipient.channels.includes('sms') && gift.sms_addon && recipient.phone) {
     try {
-      const body = buildSmsBody(gift, note, noteNum, giftUrl);
-      await sendSms(recipient.phone, body, note.photo_url || null);
+      await sendSms(recipient.phone, buildSmsBody(gift, noteUrl));
       results.sms = 'sent';
     } catch (err) {
       results.sms = `error: ${err.message}`;
@@ -947,7 +943,7 @@ async function sendBuyerReplyNotification(gift, recipient, note, msgBody) {
   // its reply thread) instead of whatever gift.html would show by default
   // — see startApp()'s `?note=` handling there. Used for all three channels
   // below since they all point through the same giftUrl.
-  const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}?note=${note.order_index}`;
+  const giftUrl = `${process.env.SITE_URL || 'https://yoursite.com'}/${gift.slug}?note=${note.order_index}&reply=1`;
   const preview = msgBody.length > 100 ? msgBody.substring(0, 97) + '…' : msgBody;
 
   if (recipient.channels.includes('push') && recipient.push_subscription) {
