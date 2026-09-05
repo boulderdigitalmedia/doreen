@@ -4426,6 +4426,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     // email notification can fire in the same request — see that file.
 
     var REPLY_CACHE = {};        // note id -> array of rows, refreshed on open/send
+    var REPLY_FETCHED = {};      // note id -> true once openReplyDrawer has pulled the full thread
     var replyDrawerNoteId = null; // which note the open drawer is currently showing
 
     // Without this, REPLY_CACHE only ever got populated by actually
@@ -4445,8 +4446,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         .select('id, note_id')
         .eq('gift_id', gift.id);
       if (error || !data) return;
+      // This resolves whenever it resolves, which can be *after* someone has
+      // already opened a thread (or sent a reply). Pushing onto those arrays
+      // would double-count them on the badge, so skip any note whose full
+      // thread is already in hand and only fill in the ones still untouched.
+      var counts = {};
       data.forEach(function(r) {
-        (REPLY_CACHE[r.note_id] = REPLY_CACHE[r.note_id] || []).push(r);
+        (counts[r.note_id] = counts[r.note_id] || []).push(r);
+      });
+      Object.keys(counts).forEach(function(noteId) {
+        if (REPLY_FETCHED[noteId]) return;
+        REPLY_CACHE[noteId] = counts[noteId];
       });
       updateReplyBtn(currentIndex);
     })();
@@ -4503,6 +4513,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       }
 
       REPLY_CACHE[note.id] = data || [];
+      REPLY_FETCHED[note.id] = true;
       renderReplyList(REPLY_CACHE[note.id]);
       updateReplyBtn(currentIndex);
     }
@@ -4534,6 +4545,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         }
 
         (REPLY_CACHE[replyDrawerNoteId] = REPLY_CACHE[replyDrawerNoteId] || []).push(data.reply);
+        REPLY_FETCHED[replyDrawerNoteId] = true; // don't let a late preloadReplyCounts overwrite this
         renderReplyList(REPLY_CACHE[replyDrawerNoteId]);
         updateReplyBtn(currentIndex);
         replyComposeInput.value = '';
@@ -5168,6 +5180,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       if (Math.abs(dir) === 1) rotateSlots(dir > 0 ? 1 : -1);
       else resetSlots();
       syncControls();
+
+      // Belt and braces alongside cardSwipeBlocked(): if the note ever
+      // changes while the reply drawer is open, re-point the drawer at the
+      // note now on screen rather than leaving a stale thread (and a stale
+      // replyDrawerNoteId, which would file the next reply against a note
+      // the recipient can no longer see) behind the overlay.
+      if (replyDrawer.classList.contains('open')) openReplyDrawer();
     }
 
     resetSlots();
@@ -5208,13 +5227,22 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     // Swiping the card advances/goes back a note, same gesture recipients
     // already use in the photo lightbox. Skipped while another overlay
-    // (lightbox, favourites drawer, push prompt, settings) is open, both
-    // because a swipe there means something else and so this doesn't
-    // double-fire alongside e.g. the lightbox's own swipe handler.
+    // (lightbox, favourites drawer, reply drawer, push prompt, settings)
+    // is open, both because a swipe there means something else and so this
+    // doesn't double-fire alongside e.g. the lightbox's own swipe handler.
+    //
+    // The reply drawer matters most here: threads are per-note, so a stray
+    // horizontal drag while it was open (scrolling the message list at a
+    // slight angle is enough to clear the 44px threshold) used to slide the
+    // card underneath to a different note without the drawer noticing. The
+    // thread on screen still belonged to the old note, replyDrawerNoteId
+    // still pointed at it, and reopening the drawer on the note now showing
+    // came up empty — which reads as "I replied and my reply vanished".
     function cardSwipeBlocked() {
       return mainView === 'grid' ||
              photoLightbox.classList.contains('open') ||
              favDrawer.classList.contains('open') ||
+             replyDrawer.classList.contains('open') ||
              document.getElementById('pushOverlay').classList.contains('open') ||
              document.getElementById('shareOverlay').classList.contains('open') ||
              document.getElementById('platformShareOverlay').classList.contains('open') ||
