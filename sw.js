@@ -1,4 +1,4 @@
-const CACHE = 'love-notes-v4';
+const CACHE = 'love-notes-v5';
 const STATIC = ['manifest.json'];
 
 // On install — only cache static assets, NOT index.html
@@ -89,13 +89,21 @@ self.addEventListener('push', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const targetUrl  = e.notification.data.url || '/';
-  const targetPath = new URL(targetUrl, self.location.origin).pathname;
+  // Compare pathname *and* query string, not just the path. Push URLs now
+  // carry ?note=<order_index> (see noteUrl in _shared.js), which is what
+  // tells gift.html to force card view and jump to the note just delivered.
+  // Matching on pathname alone meant a PWA already sitting on this gift —
+  // very often on the photo grid, on some older note — counted as "already
+  // there" and was only focused, never navigated, so tapping the push left
+  // the recipient exactly where they were with no sign of the new note.
+  const targetKey = (u) => { const p = new URL(u, self.location.origin); return p.pathname + p.search; };
+  const targetPath = targetKey(targetUrl);
 
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          const alreadyThere = new URL(client.url).pathname === targetPath;
+          const alreadyThere = targetKey(client.url) === targetPath;
           if (!alreadyThere && 'navigate' in client) {
             // Navigate the existing window to the right gift, then focus it.
             return client.navigate(targetUrl).then(navigated => (navigated || client).focus());
